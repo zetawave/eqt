@@ -1,0 +1,37 @@
+[
+  {
+    "repository": "Qwen/Qwen3.6-35B-A3B",
+    "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+    "license": "apache-2.0",
+    "safetensors_files": 26,
+    "safetensors_total_bytes": 71903776776
+  },
+  {
+    "repository": "Tiiny/SmallThinker-21BA3B-Instruct",
+    "revision": "9df52edc2f65774203a1a74f8a48960ec1f5b1da",
+    "license": "apache-2.0",
+    "safetensors_files": 9,
+    "safetensors_total_bytes": 43014482576
+  },
+  {
+    "repository": "google/gemma-4-26B-A4B-it",
+    "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
+    "license": "apache-2.0",
+    "safetensors_files": 2,
+    "safetensors_total_bytes": 51612009916
+  },
+  {
+    "repository": "Qwen/Qwen3-Coder-Next",
+    "revision": "a7fbcb5c0e12d62a448eaa0e260346bf5dcc0feb",
+    "license": "apache-2.0",
+    "safetensors_files": 40,
+    "safetensors_total_bytes": 159358031480
+  },
+  {
+    "repository": "Qwen/Qwen3.8-Flash-Next",
+    "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+    "license": "other",
+    "safetensors_files": 131,
+    "safetensors_total_bytes": 360000192888
+  }
+]

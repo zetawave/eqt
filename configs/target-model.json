@@ -1,0 +1,17 @@
+{
+  "repository": "unsloth/Qwen3.6-35B-A3B-GGUF",
+  "revision": "a483e9e6cbd595906af30beda3187c2663a1118c",
+  "license": "apache-2.0",
+  "purpose": "Candidate only; dynamic quantization requires quality evaluation. Full weights not acquired.",
+  "files": [
+    {
+      "name": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+      "size_bytes": 22134528992,
+      "sha256": "ac0e2c1189e055faa36eff361580e79c5bd6f8e76bffb4ce547f167d53e31a61",
+      "header": {
+        "size_bytes": 16777216,
+        "sha256": "86677084165b0487864953d7a5fcbbcd40e69005c8764503541935b46624d8e2"
+      }
+    }
+  ]
+}

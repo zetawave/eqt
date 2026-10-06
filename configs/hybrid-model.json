@@ -1,0 +1,9 @@
+{
+  "repository": "unsloth/Qwen3.5-0.8B-GGUF",
+  "revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+  "license": "apache-2.0",
+  "purpose": "Hybrid recurrent-state fixture only; not the principal MoE quality target",
+  "files": [
+    {"name": "Qwen3.5-0.8B-Q8_0.gguf", "size_bytes": 811843840, "sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c"}
+  ]
+}
