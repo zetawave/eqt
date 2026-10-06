@@ -1,0 +1,1598 @@
+{
+  "schema_version": 1,
+  "kind": "expert_read_plan",
+  "layers": 40,
+  "experts_per_layer": 256,
+  "selected_per_layer": 8,
+  "routed_payload_bytes": 19568525312,
+  "all_miss_payload_bytes_per_token": 611516416,
+  "all_miss_independent_4k_read_bytes_per_token": 615448576,
+  "independent_reads_per_token": 960,
+  "expert_offset_formula": "first_expert_offset_bytes + expert_id * expert_stride_bytes",
+  "alignment_bytes": 4096,
+  "layer_plans": [
+    {
+      "layer": 0,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.0.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 1180930528,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.0.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 1335144928,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.0.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 995267040,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 1,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.1.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 1709241568,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.1.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 1863455968,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.1.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 1523578080,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 2,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.2.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 2237552608,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.2.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 2391767008,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.2.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 2051889120,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 3,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.3.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 2768093920,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.3.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 2922308320,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.3.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 2582430432,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 4,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.4.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 3286835936,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.4.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 3441050336,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.4.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 3101172448,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 5,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.5.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 3815146976,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.5.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 3969361376,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.5.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 3629483488,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 6,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.6.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 4343458016,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.6.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 4497672416,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.6.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 4157794528,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 7,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.7.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 4873999328,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.7.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 5028213728,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.7.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 4688335840,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 8,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.8.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 5392741344,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.8.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 5546955744,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.8.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 5207077856,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 9,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.9.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 5921052384,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.9.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 6075266784,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.9.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 5735388896,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 10,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.10.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 6449363424,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.10.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 6603577824,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.10.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 6263699936,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 11,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.11.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 6979904736,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.11.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 7134119136,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.11.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 6794241248,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 12,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.12.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 7498646752,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.12.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 7652861152,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.12.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 7312983264,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 13,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.13.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 8026957792,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.13.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 8181172192,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.13.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 7841294304,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 14,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.14.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 8555268832,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.14.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 8709483232,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.14.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 8369605344,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 15,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.15.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 9085810144,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.15.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 9240024544,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.15.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 8900146656,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 16,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.16.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 9604552160,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.16.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 9758766560,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.16.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 9418888672,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 17,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.17.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 10132863200,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.17.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 10287077600,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.17.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 9947199712,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 18,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.18.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 10661174240,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.18.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 10815388640,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.18.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 10475510752,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 19,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.19.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 11191715552,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.19.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 11345929952,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.19.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 11006052064,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 20,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.20.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 11710457568,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.20.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 11864671968,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.20.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 11524794080,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 21,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.21.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 12238768608,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.21.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 12392983008,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.21.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 12053105120,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 22,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.22.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 12767079648,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.22.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 12921294048,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.22.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 12581416160,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 23,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.23.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 13297620960,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.23.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 13451835360,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.23.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 13111957472,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 24,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.24.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 13816362976,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.24.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 13970577376,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.24.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 13630699488,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 25,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.25.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 14344674016,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.25.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 14498888416,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.25.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 14159010528,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 26,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.26.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 14872985056,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.26.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 15027199456,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.26.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 14687321568,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 27,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.27.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 15403526368,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.27.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 15557740768,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.27.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 15217862880,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 28,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.28.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 15922268384,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.28.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 16076482784,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.28.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 15736604896,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 29,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.29.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 16450579424,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.29.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 16604793824,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.29.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 16264915936,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 30,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.30.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 16978890464,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.30.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 17133104864,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.30.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 16793226976,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 31,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.31.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 17509431776,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.31.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 17663646176,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.31.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 17323768288,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 32,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.32.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 18028173792,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.32.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 18182388192,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.32.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 17842510304,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 33,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.33.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 18556484832,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.33.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 18710699232,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.33.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 18370821344,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 34,
+      "bytes_per_complete_expert": 2039808,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.34.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 19120447456,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.34.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 19274661856,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.34.ffn_down_exps.weight",
+          "quantization": "Q6_K",
+          "first_expert_offset_bytes": 18899132384,
+          "expert_stride_bytes": 860160,
+          "payload_bytes": 220200960,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 864256
+        }
+      ]
+    },
+    {
+      "layer": 35,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.35.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 19650988768,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.35.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 19805203168,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.35.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 19465325280,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 36,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.36.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 20169730784,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.36.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 20323945184,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.36.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 19984067296,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 37,
+      "bytes_per_complete_expert": 1900544,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.37.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 20698041824,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.37.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 20852256224,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.37.ffn_down_exps.weight",
+          "quantization": "Q5_K",
+          "first_expert_offset_bytes": 20512378336,
+          "expert_stride_bytes": 720896,
+          "payload_bytes": 184549376,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 724992
+        }
+      ]
+    },
+    {
+      "layer": 38,
+      "bytes_per_complete_expert": 2039808,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.38.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 21262004448,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.38.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 21416218848,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.38.ffn_down_exps.weight",
+          "quantization": "Q6_K",
+          "first_expert_offset_bytes": 21040689376,
+          "expert_stride_bytes": 860160,
+          "payload_bytes": 220200960,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 864256
+        }
+      ]
+    },
+    {
+      "layer": 39,
+      "bytes_per_complete_expert": 2039808,
+      "banks": [
+        {
+          "component": "gate",
+          "tensor_name": "blk.39.ffn_gate_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 21828197344,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "up",
+          "tensor_name": "blk.39.ffn_up_exps.weight",
+          "quantization": "Q4_K",
+          "first_expert_offset_bytes": 21982411744,
+          "expert_stride_bytes": 589824,
+          "payload_bytes": 150994944,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 593920
+        },
+        {
+          "component": "down",
+          "tensor_name": "blk.39.ffn_down_exps.weight",
+          "quantization": "Q6_K",
+          "first_expert_offset_bytes": 21606882272,
+          "expert_stride_bytes": 860160,
+          "payload_bytes": 220200960,
+          "tensor_padding_bytes": 0,
+          "aligned_tail_overrun_bytes": 0,
+          "independent_aligned_read_bytes": 864256
+        }
+      ]
+    }
+  ],
+  "scope": "Header-derived byte ranges only; no weights, routing trace, cache, inference or I/O measured. Independent reads assume no coalescing or reuse; 4 KiB is a planning alignment, not a probed filesystem contract.",
+  "provenance": {
+    "manifest": {
+      "repository": "unsloth/Qwen3.6-35B-A3B-GGUF",
+      "revision": "a483e9e6cbd595906af30beda3187c2663a1118c",
+      "license": "apache-2.0",
+      "purpose": "Candidate only; dynamic quantization requires quality evaluation. Full weights not acquired.",
+      "files": [
+        {
+          "name": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+          "size_bytes": 22134528992,
+          "sha256": "ac0e2c1189e055faa36eff361580e79c5bd6f8e76bffb4ce547f167d53e31a61",
+          "header": {
+            "size_bytes": 16777216,
+            "sha256": "86677084165b0487864953d7a5fcbbcd40e69005c8764503541935b46624d8e2"
+          }
+        }
+      ]
+    },
+    "header_sha256": "86677084165b0487864953d7a5fcbbcd40e69005c8764503541935b46624d8e2",
+    "header_bytes": 16777216,
+    "full_artifact_hash_verified": false
+  }
+}

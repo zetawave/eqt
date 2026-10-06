@@ -1,0 +1,35 @@
+{
+  "target": "android",
+  "model_sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+  "binary_sha256": "20375ecaf50ebc8c72366f6223c0c1eea0037dcab1641e018cb0893590f4e502",
+  "source_sha256": "a35c71ce22d932fc7c6598a28931d8797372656df253ad19e5df40d51e504de4",
+  "tolerance_absolute": 0.002,
+  "outcomes": [
+    {
+      "mmap": true,
+      "batch": 128,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "mmap": false,
+      "batch": 128,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "mmap": true,
+      "batch": 16,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "case": "context_overflow",
+      "passed": true
+    }
+  ],
+  "scope": "Qwen3-0.6B-Q8_0.gguf: mapped/allocated and prefill chunk equivalence; not expert streaming"
+}

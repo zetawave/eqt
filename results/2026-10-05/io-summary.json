@@ -1,0 +1,44 @@
+{
+  "scope": "Short CLI read-only proxy in /data/local/tmp, after the resident soak; not app storage or full model throughput",
+  "read_size_bytes": 2097152,
+  "reads_per_run": 128,
+  "order": [
+    "buffered",
+    "direct",
+    "direct",
+    "buffered",
+    "buffered",
+    "direct"
+  ],
+  "groups": {
+    "buffered": {
+      "bytes_per_second_min": 2950111164.6068673,
+      "bytes_per_second_median": 2958934411.9657083,
+      "bytes_per_second_max": 3529590921.8499784,
+      "physical_read_bytes": [
+        0,
+        0,
+        0
+      ]
+    },
+    "direct": {
+      "bytes_per_second_min": 625629280.9304487,
+      "bytes_per_second_median": 865167948.2852607,
+      "bytes_per_second_max": 959315829.1277918,
+      "physical_read_bytes": [
+        268701696,
+        268435456,
+        268435456
+      ]
+    }
+  },
+  "target_arithmetic_only": {
+    "all_miss_expert_bytes_per_token": 611516416,
+    "required_expert_bytes_per_second_at_5_tps": 3057582080,
+    "required_hit_fraction_using_observed_direct_range_and_ignoring_compute": [
+      0.6862501793810252,
+      0.7953843054540506
+    ],
+    "warning": "Conditional byte-budget calculation; artifact layout, app filesystem, cache locality, shared weights, compute and prefill still need measurement."
+  }
+}

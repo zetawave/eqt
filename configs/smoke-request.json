@@ -1,0 +1,12 @@
+{
+  "load": {"context": 2048, "batch": 128, "threads": 4, "memory_budget_mib": 2048, "mmap": true},
+  "messages": [
+    {"role": "system", "content": "You are a concise assistant. Follow the requested language."},
+    {"role": "user", "content": "Rispondi in italiano: che differenza c'è tra RAM e memoria di archiviazione? Usa due frasi."}
+  ],
+  "max_tokens": 96,
+  "temperature": 0.0,
+  "seed": 42,
+  "thinking": false,
+  "ignore_eos": false
+}

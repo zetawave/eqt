@@ -1,0 +1,113 @@
+{
+  "target": "host",
+  "model_sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c",
+  "binary_sha256": "810360c03a79f9870c13c289f0e3dc94fa602d290c80f5587129b7e976ed378e",
+  "source_sha256": "2d7d017451b64090df9b0a96eca4bb793f2859aaaee22002f091fca00ff2baea",
+  "lifecycle_binary_sha256": "8a55ea5f5c6fa8615f4f8180290ca129d3439b4b97d047ca1d927f95591b586b",
+  "lifecycle": {
+    "configuration": {
+      "backend": "cpu",
+      "architecture": "qwen35",
+      "model_file_bytes": 811843840,
+      "model_tensor_bytes": 800881920,
+      "file_type": "7",
+      "context": 2048,
+      "batch": 128,
+      "threads": 4,
+      "memory_budget_mib": 2048,
+      "memory_budget_kind": "admission_only",
+      "mmap": true,
+      "expert_cache_bytes": null,
+      "mtp": false,
+      "steering": false,
+      "load_ms": 557.6492,
+      "eqt_revision": "37f0ef262f3fce8703f4c33221261fd62ba702ff-dirty",
+      "compiler": "MSVC-19.33.31630.0",
+      "llama_revision": "6c59c40076c00eab49754dc955d7652d93f9e125",
+      "system_info": "CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | REPACK = 1 | ",
+      "memory_after_load": {
+        "rss_bytes": null,
+        "peak_rss_bytes": null,
+        "pss_bytes": null,
+        "minor_faults": null,
+        "major_faults": null,
+        "storage_read_bytes": null
+      }
+    },
+    "tolerance_absolute": 0.002,
+    "outcomes": [
+      {
+        "case": "repeat_request",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "new_chat_after_conversation",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "conversation_prefix_replay",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "recovery_after_decode_cancel",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "recovery_after_pre_cancel",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "seeded_sampling_repeat",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "reload",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      }
+    ],
+    "scope": "State reset, full-prefix replay, cancellation recovery and reload; no prefix cache or rollback"
+  },
+  "tolerance_absolute": 0.002,
+  "outcomes": [
+    {
+      "mmap": true,
+      "batch": 128,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "mmap": false,
+      "batch": 128,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "mmap": true,
+      "batch": 16,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "case": "context_overflow",
+      "passed": true
+    }
+  ],
+  "scope": "Qwen3.5-0.8B-Q8_0.gguf: mapped/allocated, prefill chunks and state reset; not expert streaming"
+}

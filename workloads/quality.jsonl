@@ -1,0 +1,6 @@
+{"id":"it-two-sentences","category":"italian-instructions","prompt":"Spiega la differenza tra RAM e archiviazione in esattamente due frasi, senza elenchi.","rubric":"Two sentences; volatile working memory versus persistent storage; natural Italian."}
+{"id":"it-json","category":"format","prompt":"Restituisci solo un oggetto JSON con chiavi capitale e paese: Roma, Italia.","rubric":"Valid JSON, no extra prose, correct values."}
+{"id":"arithmetic","category":"reasoning","prompt":"Un biglietto costa 17 euro. Compro tre biglietti e pago con 100 euro. Quanto resto ricevo?","rubric":"49 euros with correct arithmetic."}
+{"id":"code-empty","category":"coding","prompt":"Write a Python function mean(values) that returns None for an empty list and the arithmetic mean otherwise. Include two assertions.","rubric":"Correct function; no division by zero; useful assertions."}
+{"id":"unicode","category":"italian-unicode","prompt":"Ripeti esattamente: perché, città, caffè, già, 🧠.","rubric":"Exact Unicode round-trip and no added prose."}
+{"id":"follow-context","category":"conversation","messages":[{"role":"user","content":"La parola segreta è lampone. Ricordala per il prossimo messaggio."},{"role":"assistant","content":"Va bene."},{"role":"user","content":"Qual è la parola segreta? Rispondi con una sola parola."}],"rubric":"lampone only; verify complete-prefix replay."}

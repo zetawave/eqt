@@ -1,0 +1,15 @@
+/third_party/llama.cpp/
+/build/
+/models/
+/.cache/
+**/.gradle/
+**/build/
+**/.cxx/
+**/__pycache__/
+/android/local.properties
+/results/local/
+/results/**/*.log
+/results/**/*.raw.json
+*.gguf
+*.safetensors
+*.part

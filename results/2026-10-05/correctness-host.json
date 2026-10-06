@@ -1,0 +1,34 @@
+{
+  "target": "host",
+  "model_sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+  "binary_sha256": "810360c03a79f9870c13c289f0e3dc94fa602d290c80f5587129b7e976ed378e",
+  "tolerance_absolute": 0.002,
+  "outcomes": [
+    {
+      "mmap": true,
+      "batch": 128,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "mmap": false,
+      "batch": 128,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "mmap": true,
+      "batch": 16,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "case": "context_overflow",
+      "passed": true
+    }
+  ],
+  "scope": "Qwen3-0.6B-Q8_0.gguf: mapped/allocated and prefill chunk equivalence; not expert streaming"
+}
