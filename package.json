@@ -1,0 +1,10 @@
+{
+  "name": "eqt",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Equity — research inference engine. Website scripts and manual GitHub Pages deployment.",
+  "scripts": {
+    "start": "python -m http.server 8377 --directory website",
+    "deploy": "node scripts/deploy-website.mjs"
+  }
+}
