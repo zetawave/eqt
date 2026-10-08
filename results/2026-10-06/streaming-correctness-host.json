@@ -1,0 +1,681 @@
+{
+  "target": "host",
+  "source_sha256": "4393c60b5394d067ce790a9bd5950c211a014db16bdfa67bdac3092badbd6801",
+  "cpu_variant": null,
+  "criterion": "bitwise first-token logits and identical greedy token IDs versus resident, same chunk",
+  "fixtures": [
+    {
+      "model": "models/eqt-tiny-qwen35moe.gguf",
+      "model_sha256": "95931cd046c2d65f1b0d99495759ae69361d9414702bb8b907cc6d975b3384e6",
+      "binary_sha256": "2ae99dabc2a977ac351075478a29ff0ebc0270840d39c1fbd3841df89239e583",
+      "outcomes": [
+        {
+          "case": "evict_every_layer_io1",
+          "load": {
+            "expert_cache_mib": 1,
+            "io_threads": 1
+          },
+          "batch": 128,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 192,
+            "demanded_experts": 806,
+            "hits": 182,
+            "prefetch_hits": 0,
+            "inflight_prefetch_hits": 0,
+            "misses": 624,
+            "demand_read_bytes": 74121216,
+            "prefetch_read_bytes": 0,
+            "prefetch_issued": 0,
+            "prefetch_wasted": 0,
+            "predicted": 0,
+            "predicted_correct": 0,
+            "evictions": 616,
+            "overflow_events": 192,
+            "io_wait_ms": 52.32239999999999,
+            "predict_ms": 0.0,
+            "resident_bytes": 950272,
+            "peak_resident_bytes": 2019328
+          },
+          "layer_quotas": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "passed": true
+        },
+        {
+          "case": "evict_every_layer_io4_chunk16",
+          "load": {
+            "expert_cache_mib": 1,
+            "io_threads": 4
+          },
+          "batch": 16,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 216,
+            "demanded_experts": 973,
+            "hits": 204,
+            "prefetch_hits": 0,
+            "inflight_prefetch_hits": 0,
+            "misses": 769,
+            "demand_read_bytes": 91344896,
+            "prefetch_read_bytes": 0,
+            "prefetch_issued": 0,
+            "prefetch_wasted": 0,
+            "predicted": 0,
+            "predicted_correct": 0,
+            "evictions": 761,
+            "overflow_events": 216,
+            "io_wait_ms": 52.103099999999976,
+            "predict_ms": 0.0,
+            "resident_bytes": 950272,
+            "peak_resident_bytes": 2732032
+          },
+          "layer_quotas": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "passed": true
+        },
+        {
+          "case": "fully_cached",
+          "load": {
+            "expert_cache_mib": 64,
+            "io_threads": 4
+          },
+          "batch": 128,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 192,
+            "demanded_experts": 806,
+            "hits": 736,
+            "prefetch_hits": 0,
+            "inflight_prefetch_hits": 0,
+            "misses": 70,
+            "demand_read_bytes": 8314880,
+            "prefetch_read_bytes": 0,
+            "prefetch_issued": 0,
+            "prefetch_wasted": 0,
+            "predicted": 0,
+            "predicted_correct": 0,
+            "evictions": 0,
+            "overflow_events": 0,
+            "io_wait_ms": 6.112199999999975,
+            "predict_ms": 0.0,
+            "resident_bytes": 8314880,
+            "peak_resident_bytes": 8314880
+          },
+          "layer_quotas": [
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16
+          ],
+          "passed": true
+        },
+        {
+          "case": "prefetch_lookahead",
+          "load": {
+            "expert_cache_mib": 2,
+            "io_threads": 2,
+            "prefetch": true
+          },
+          "batch": 128,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 192,
+            "demanded_experts": 806,
+            "hits": 322,
+            "prefetch_hits": 277,
+            "inflight_prefetch_hits": 0,
+            "misses": 484,
+            "demand_read_bytes": 57491456,
+            "prefetch_read_bytes": 38248448,
+            "prefetch_issued": 322,
+            "prefetch_wasted": 45,
+            "predicted": 644,
+            "predicted_correct": 575,
+            "evictions": 790,
+            "overflow_events": 192,
+            "io_wait_ms": 30.937499999999996,
+            "predict_ms": 0.8010000000000003,
+            "resident_bytes": 1900544,
+            "peak_resident_bytes": 2375680
+          },
+          "layer_quotas": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "passed": true
+        },
+        {
+          "case": "nonuniform_layer_weights",
+          "load": {
+            "expert_cache_mib": 2,
+            "io_threads": 2,
+            "expert_layer_weights": [
+              4,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              4
+            ]
+          },
+          "batch": 128,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 192,
+            "demanded_experts": 806,
+            "hits": 317,
+            "prefetch_hits": 0,
+            "inflight_prefetch_hits": 0,
+            "misses": 489,
+            "demand_read_bytes": 58085376,
+            "prefetch_read_bytes": 0,
+            "prefetch_issued": 0,
+            "prefetch_wasted": 0,
+            "predicted": 0,
+            "predicted_correct": 0,
+            "evictions": 474,
+            "overflow_events": 145,
+            "io_wait_ms": 34.62470000000001,
+            "predict_ms": 0.0,
+            "resident_bytes": 1781760,
+            "peak_resident_bytes": 2494464
+          },
+          "layer_quotas": [
+            5,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            5
+          ],
+          "passed": true
+        }
+      ],
+      "lifecycle": {
+        "configuration": {
+          "backend": "cpu",
+          "architecture": "qwen35moe",
+          "model_file_bytes": 133312416,
+          "model_tensor_bytes": 0,
+          "file_type": "15",
+          "context": 2048,
+          "batch": 128,
+          "threads": 4,
+          "memory_budget_mib": 2048,
+          "memory_budget_kind": "admission_only",
+          "mmap": true,
+          "expert_cache_bytes": 950272,
+          "expert_streaming": {
+            "policy": "layer_partitioned_lru",
+            "routing": "exact_top_k",
+            "requested_budget_bytes": 1048576,
+            "effective_budget_bytes": 950272,
+            "budget_kind": "routed_expert_pages; prefill batches may transiently exceed one layer quota",
+            "layer_quotas": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "layer_weights": "uniform",
+            "routed_bytes": 15204352,
+            "entry_bytes_min": 118784,
+            "entry_bytes_max": 118784,
+            "experts_used": 4,
+            "io_threads": 2,
+            "direct_io": false,
+            "prefetch": "router_lookahead_1",
+            "prefetch_layers": 8,
+            "simd": "scalar",
+            "trace": false
+          },
+          "cpu_variant": "static",
+          "cpu_features": null,
+          "mtp": false,
+          "steering": false,
+          "load_ms": 545.3111,
+          "eqt_revision": "5cd7a1a2c624e5eb7bb333aea4766706ff31b6a3-dirty",
+          "compiler": "MSVC-19.33.31630.0",
+          "llama_revision": "6c59c40076c00eab49754dc955d7652d93f9e125",
+          "system_info": "CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | REPACK = 1 | ",
+          "memory_after_load": {
+            "rss_bytes": null,
+            "peak_rss_bytes": null,
+            "pss_bytes": null,
+            "minor_faults": null,
+            "major_faults": null,
+            "storage_read_bytes": null
+          }
+        },
+        "tolerance_absolute": 0.002,
+        "outcomes": [
+          {
+            "case": "repeat_request",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "new_chat_after_conversation",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "conversation_prefix_replay",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "recovery_after_decode_cancel",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "recovery_after_pre_cancel",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "seeded_sampling_repeat",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "reload",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          }
+        ],
+        "scope": "State reset, full-prefix replay, cancellation recovery and reload; no prefix cache or rollback"
+      },
+      "rejects_cache_options_without_streaming": true
+    },
+    {
+      "model": "models/eqt-tiny-qwen35moe-ff96.gguf",
+      "model_sha256": "cf679adb9e19203928c8f393a2e4684876c94a4ac5fd59441f732e1ffccd91d6",
+      "binary_sha256": "2ae99dabc2a977ac351075478a29ff0ebc0270840d39c1fbd3841df89239e583",
+      "outcomes": [
+        {
+          "case": "evict_every_layer_io1",
+          "load": {
+            "expert_cache_mib": 1,
+            "io_threads": 1
+          },
+          "batch": 128,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 192,
+            "demanded_experts": 864,
+            "hits": 89,
+            "prefetch_hits": 0,
+            "inflight_prefetch_hits": 0,
+            "misses": 775,
+            "demand_read_bytes": 41664000,
+            "prefetch_read_bytes": 0,
+            "prefetch_issued": 0,
+            "prefetch_wasted": 0,
+            "predicted": 0,
+            "predicted_correct": 0,
+            "evictions": 759,
+            "overflow_events": 192,
+            "io_wait_ms": 31.783099999999983,
+            "predict_ms": 0.0,
+            "resident_bytes": 983040,
+            "peak_resident_bytes": 1843200
+          },
+          "layer_quotas": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "passed": true
+        },
+        {
+          "case": "evict_every_layer_io4_chunk16",
+          "load": {
+            "expert_cache_mib": 1,
+            "io_threads": 4
+          },
+          "batch": 16,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 216,
+            "demanded_experts": 1188,
+            "hits": 141,
+            "prefetch_hits": 0,
+            "inflight_prefetch_hits": 0,
+            "misses": 1047,
+            "demand_read_bytes": 56286720,
+            "prefetch_read_bytes": 0,
+            "prefetch_issued": 0,
+            "prefetch_wasted": 0,
+            "predicted": 0,
+            "predicted_correct": 0,
+            "evictions": 1031,
+            "overflow_events": 216,
+            "io_wait_ms": 42.930799999999984,
+            "predict_ms": 0.0,
+            "resident_bytes": 983040,
+            "peak_resident_bytes": 1843200
+          },
+          "layer_quotas": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          "passed": true
+        },
+        {
+          "case": "fully_cached",
+          "load": {
+            "expert_cache_mib": 64,
+            "io_threads": 4
+          },
+          "batch": 128,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 192,
+            "demanded_experts": 864,
+            "hits": 736,
+            "prefetch_hits": 0,
+            "inflight_prefetch_hits": 0,
+            "misses": 128,
+            "demand_read_bytes": 6881280,
+            "prefetch_read_bytes": 0,
+            "prefetch_issued": 0,
+            "prefetch_wasted": 0,
+            "predicted": 0,
+            "predicted_correct": 0,
+            "evictions": 0,
+            "overflow_events": 0,
+            "io_wait_ms": 5.494399999999979,
+            "predict_ms": 0.0,
+            "resident_bytes": 7864320,
+            "peak_resident_bytes": 7864320
+          },
+          "layer_quotas": [
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16
+          ],
+          "passed": true
+        },
+        {
+          "case": "prefetch_lookahead",
+          "load": {
+            "expert_cache_mib": 2,
+            "io_threads": 2,
+            "prefetch": true
+          },
+          "batch": 128,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 192,
+            "demanded_experts": 864,
+            "hits": 528,
+            "prefetch_hits": 463,
+            "inflight_prefetch_hits": 0,
+            "misses": 336,
+            "demand_read_bytes": 18063360,
+            "prefetch_read_bytes": 29137920,
+            "prefetch_issued": 542,
+            "prefetch_wasted": 79,
+            "predicted": 644,
+            "predicted_correct": 557,
+            "evictions": 846,
+            "overflow_events": 79,
+            "io_wait_ms": 11.051499999999994,
+            "predict_ms": 0.7957999999999995,
+            "resident_bytes": 1966080,
+            "peak_resident_bytes": 2703360
+          },
+          "layer_quotas": [
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ],
+          "passed": true
+        },
+        {
+          "case": "nonuniform_layer_weights",
+          "load": {
+            "expert_cache_mib": 2,
+            "io_threads": 2,
+            "expert_layer_weights": [
+              4,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              4
+            ]
+          },
+          "batch": 128,
+          "bitwise_logits": true,
+          "max_abs_logit_delta": 0.0,
+          "token_ids_equal": true,
+          "expert_cache": {
+            "ensure_calls": 192,
+            "demanded_experts": 864,
+            "hits": 176,
+            "prefetch_hits": 0,
+            "inflight_prefetch_hits": 0,
+            "misses": 688,
+            "demand_read_bytes": 36986880,
+            "prefetch_read_bytes": 0,
+            "prefetch_issued": 0,
+            "prefetch_wasted": 0,
+            "predicted": 0,
+            "predicted_correct": 0,
+            "evictions": 658,
+            "overflow_events": 146,
+            "io_wait_ms": 32.0463,
+            "predict_ms": 0.0,
+            "resident_bytes": 1843200,
+            "peak_resident_bytes": 2273280
+          },
+          "layer_quotas": [
+            9,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            9
+          ],
+          "passed": true
+        }
+      ],
+      "lifecycle": {
+        "configuration": {
+          "backend": "cpu",
+          "architecture": "qwen35moe",
+          "model_file_bytes": 124989344,
+          "model_tensor_bytes": 0,
+          "file_type": "15",
+          "context": 2048,
+          "batch": 128,
+          "threads": 4,
+          "memory_budget_mib": 2048,
+          "memory_budget_kind": "admission_only",
+          "mmap": true,
+          "expert_cache_bytes": 983040,
+          "expert_streaming": {
+            "policy": "layer_partitioned_lru",
+            "routing": "exact_top_k",
+            "requested_budget_bytes": 1048576,
+            "effective_budget_bytes": 983040,
+            "budget_kind": "routed_expert_pages; prefill batches may transiently exceed one layer quota",
+            "layer_quotas": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "layer_weights": "uniform",
+            "routed_bytes": 6881280,
+            "entry_bytes_min": 61440,
+            "entry_bytes_max": 61440,
+            "experts_used": 4,
+            "io_threads": 2,
+            "direct_io": false,
+            "prefetch": "router_lookahead_1",
+            "prefetch_layers": 8,
+            "simd": "scalar",
+            "trace": false
+          },
+          "cpu_variant": "static",
+          "cpu_features": null,
+          "mtp": false,
+          "steering": false,
+          "load_ms": 618.0247,
+          "eqt_revision": "5cd7a1a2c624e5eb7bb333aea4766706ff31b6a3-dirty",
+          "compiler": "MSVC-19.33.31630.0",
+          "llama_revision": "6c59c40076c00eab49754dc955d7652d93f9e125",
+          "system_info": "CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | REPACK = 1 | ",
+          "memory_after_load": {
+            "rss_bytes": null,
+            "peak_rss_bytes": null,
+            "pss_bytes": null,
+            "minor_faults": null,
+            "major_faults": null,
+            "storage_read_bytes": null
+          }
+        },
+        "tolerance_absolute": 0.002,
+        "outcomes": [
+          {
+            "case": "repeat_request",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "new_chat_after_conversation",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "conversation_prefix_replay",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "recovery_after_decode_cancel",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "recovery_after_pre_cancel",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "seeded_sampling_repeat",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          },
+          {
+            "case": "reload",
+            "max_abs_logit_delta": 0.0,
+            "token_ids_equal": true,
+            "passed": true
+          }
+        ],
+        "scope": "State reset, full-prefix replay, cancellation recovery and reload; no prefix cache or rollback"
+      },
+      "rejects_cache_options_without_streaming": true
+    }
+  ],
+  "scope": "Random-weight fixtures with the target's qwen35moe graph, tokenizer and routed quant types. Exactness of the streamed path only; no routing locality, speed or quality evidence."
+}

@@ -1,0 +1,15 @@
+<!-- Adaptive icon foreground: the mark inside the 66dp safe zone of a 108dp canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M54,22a32,32 0,1 1,0 64a32,32 0,1 1,0 -64z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="31" android:startY="31" android:endX="77" android:endY="77">
+                <item android:offset="0" android:color="#FF2DD4BF" />
+                <item android:offset="1" android:color="#FF8B5CF6" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#FFF8FAFC" android:pathData="M39.5,46.5h29a4.25,4.25 0,0 1,0 8.5h-29a4.25,4.25 0,0 1,0 -8.5z" />
+    <path android:fillColor="#E6F8FAFC" android:pathData="M39.5,59.5h21a4.25,4.25 0,0 1,0 8.5h-21a4.25,4.25 0,0 1,0 -8.5z" />
+</vector>

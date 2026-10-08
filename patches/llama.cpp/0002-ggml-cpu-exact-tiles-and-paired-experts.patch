@@ -1,0 +1,811 @@
+diff --git a/ggml/include/ggml-cpu.h b/ggml/include/ggml-cpu.h
+index dc6453c..1d335bd 100644
+--- a/ggml/include/ggml-cpu.h
++++ b/ggml/include/ggml-cpu.h
+@@ -138,6 +138,12 @@ extern "C" {
+ 
+     GGML_BACKEND_API void ggml_backend_cpu_set_use_ref(ggml_backend_t backend_cpu, bool use_ref);
+ 
++    // Address of expert matrix `expert` of a MUL_MAT_ID weight, for weights whose experts live outside the
++    // tensor's own buffer (an external expert cache); NULL means src0->data + expert * nb[2]. Called from
++    // compute threads: it must be thread-safe and must not change while a graph computes. One per process.
++    typedef const void * (*ggml_cpu_expert_address_t)(const struct ggml_tensor * weights, int64_t expert, void * user);
++    GGML_BACKEND_API void ggml_cpu_set_expert_address(ggml_cpu_expert_address_t fn, void * user);
++
+     GGML_BACKEND_API ggml_backend_reg_t ggml_backend_cpu_reg(void);
+ 
+     GGML_BACKEND_API void ggml_cpu_fp32_to_fp32(const float *,       float *, int64_t);
+diff --git a/ggml/src/ggml-cpu/arch/arm/quants.c b/ggml/src/ggml-cpu/arch/arm/quants.c
+index cfbbf66..720c652 100644
+--- a/ggml/src/ggml-cpu/arch/arm/quants.c
++++ b/ggml/src/ggml-cpu/arch/arm/quants.c
+@@ -2863,9 +2863,27 @@ void ggml_vec_dot_q4_K_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const voi
+ #endif
+ }
+ 
++#if defined(GGML_CPU_EXACT_TILES)
++static inline int32_t tile_dot32(int8x16_t w0, int8x16_t w1, int8x16_t a0, int8x16_t a1) {
++    return vaddvq_s32(ggml_vdotq_s32(ggml_vdotq_s32(vdupq_n_s32(0), w0, a0), w1, a1));
++}
++
++// Output layout of the 2x2 tile, as consumed by ggml_compute_forward_mul_mat: s[c*bs + r] = row r . column c.
++static inline void tile_store(float * GGML_RESTRICT s, size_t bs, const float sum[2][2], float factor) {
++    s[0]      = factor * sum[0][0];
++    s[1]      = factor * sum[1][0];
++    s[bs]     = factor * sum[0][1];
++    s[bs + 1] = factor * sum[1][1];
++}
++#endif
++
+ void ggml_vec_dot_q5_K_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy,  size_t by, int nrc) {
+     assert(n % QK_K == 0);
++#if defined(GGML_CPU_EXACT_TILES)
++    assert(nrc == 1 || nrc == 2);
++#else
+     assert(nrc == 1);
++#endif
+     UNUSED(nrc);
+     UNUSED(bx);
+     UNUSED(by);
+@@ -2882,6 +2900,72 @@ void ggml_vec_dot_q5_K_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const voi
+ 
+     uint32_t utmp[4];
+ 
++#if defined(GGML_CPU_EXACT_TILES)
++    if (nrc == 2) {
++        // Integer partial sums are exact, so only the per-block float expression must match the
++        // single-column kernel for bitwise-identical outputs.
++        const block_q5_K * GGML_RESTRICT xr[2] = { x, (const block_q5_K *)((const char *)vx + bx) };
++        const block_q8_K * GGML_RESTRICT yc[2] = { y, (const block_q8_K *)((const char *)vy + by) };
++        const uint8x16_t m4b = vdupq_n_u8(0xf);
++        const uint8x16_t mone = vdupq_n_u8(1);
++        const uint8x16_t mtwo = vdupq_n_u8(2);
++        float sumf[2][2] = {{0}};
++        for (int i = 0; i < nb; ++i) {
++            uint32_t scales32[2][4];
++            int32_t sumi_mins[2][2];
++            int16x8_t q8sums[2];
++            for (int c = 0; c < 2; ++c) {
++                q8sums[c] = vpaddq_s16(vld1q_s16(yc[c][i].bsums), vld1q_s16(yc[c][i].bsums + 8));
++            }
++            for (int r = 0; r < 2; ++r) {
++                uint32_t * u = scales32[r];
++                memcpy(u, xr[r][i].scales, 12);
++                u[3] = ((u[2] >> 4) & kmask2) | (((u[1] >> 6) & kmask3) << 4);
++                const uint32_t uaux = u[1] & kmask1;
++                u[1] = (u[2] & kmask2) | (((u[0] >> 6) & kmask3) << 4);
++                u[2] = uaux;
++                u[0] &= kmask1;
++                const int16x8_t mins = vreinterpretq_s16_u16(vmovl_u8(vld1_u8((const uint8_t *)u + 8)));
++                for (int c = 0; c < 2; ++c) {
++                    sumi_mins[r][c] = vaddvq_s32(vaddq_s32(vmull_s16(vget_low_s16 (q8sums[c]), vget_low_s16 (mins)),
++                                                           vmull_s16(vget_high_s16(q8sums[c]), vget_high_s16(mins))));
++                }
++            }
++            ggml_uint8x16x2_t qhbits[2] = { ggml_vld1q_u8_x2(xr[0][i].qh), ggml_vld1q_u8_x2(xr[1][i].qh) };
++            int32_t sumi[2][2] = {{0}};
++            for (int j = 0; j < QK_K/64; ++j) {
++                const ggml_int8x16x4_t a[2] = { ggml_vld1q_s8_x4(yc[0][i].qs + 64*j), ggml_vld1q_s8_x4(yc[1][i].qs + 64*j) };
++                for (int r = 0; r < 2; ++r) {
++                    const ggml_uint8x16x2_t q5bits = ggml_vld1q_u8_x2(xr[r][i].qs + 32*j);
++                    const uint8x16_t h0 = vshlq_n_u8(vandq_u8(mone, qhbits[r].val[0]), 4);
++                    const uint8x16_t h1 = vshlq_n_u8(vandq_u8(mone, qhbits[r].val[1]), 4);
++                    const uint8x16_t h2 = vshlq_n_u8(vandq_u8(mtwo, qhbits[r].val[0]), 3);
++                    const uint8x16_t h3 = vshlq_n_u8(vandq_u8(mtwo, qhbits[r].val[1]), 3);
++                    qhbits[r].val[0] = vshrq_n_u8(qhbits[r].val[0], 2);
++                    qhbits[r].val[1] = vshrq_n_u8(qhbits[r].val[1], 2);
++                    const int8x16_t w0 = vreinterpretq_s8_u8(vorrq_u8(vandq_u8(q5bits.val[0], m4b), h0));
++                    const int8x16_t w1 = vreinterpretq_s8_u8(vorrq_u8(vandq_u8(q5bits.val[1], m4b), h1));
++                    const int8x16_t w2 = vreinterpretq_s8_u8(vorrq_u8(vshrq_n_u8(q5bits.val[0], 4), h2));
++                    const int8x16_t w3 = vreinterpretq_s8_u8(vorrq_u8(vshrq_n_u8(q5bits.val[1], 4), h3));
++                    const uint8_t * scales = (const uint8_t *)scales32[r] + 2*j;
++                    for (int c = 0; c < 2; ++c) {
++                        sumi[r][c] += tile_dot32(w0, w1, a[c].val[0], a[c].val[1]) * scales[0];
++                        sumi[r][c] += tile_dot32(w2, w3, a[c].val[2], a[c].val[3]) * scales[1];
++                    }
++                }
++            }
++            for (int r = 0; r < 2; ++r) {
++                for (int c = 0; c < 2; ++c) {
++                    const float d    = yc[c][i].d * GGML_CPU_FP16_TO_FP32(xr[r][i].d);
++                    const float dmin = yc[c][i].d * GGML_CPU_FP16_TO_FP32(xr[r][i].dmin);
++                    sumf[r][c] += d * sumi[r][c] - dmin * sumi_mins[r][c];
++                }
++            }
++        }
++        tile_store(s, bs, sumf, 1.0f);
++        return;
++    }
++#endif
+ 
+ #ifdef __ARM_NEON
+     const uint8x16_t m4b = vdupq_n_u8(0xf);
+@@ -3628,9 +3712,65 @@ static const int8_t keven_signs_q2xs[1024] = {
+ };
+ #endif
+ 
++#if defined(GGML_CPU_EXACT_TILES)
++// One step of the IQ2_XXS/IQ3_XXS 2x2 tile over 64 weights (two 32-weight groups g = 0, 1). w[r] holds row
++// r's decoded signed weights, scale[r][g] its group scales, a[c] column c's int8 activations. sum[g][r][c]
++// receives exactly the products the single-column kernel adds to its sumf1 (g = 0) and sumf2 (g = 1).
++static inline void tile_accumulate64(const int8x16_t w[2][4], const float scale[2][2], const ggml_int8x16x4_t a[2],
++                                     float sum[2][2][2]) {
++    for (int r = 0; r < 2; ++r) {
++        for (int c = 0; c < 2; ++c) {
++            sum[0][r][c] += tile_dot32(w[r][0], w[r][1], a[c].val[0], a[c].val[1]) * scale[r][0];
++            sum[1][r][c] += tile_dot32(w[r][2], w[r][3], a[c].val[2], a[c].val[3]) * scale[r][1];
++        }
++    }
++}
++
++static inline void iq2_xxs_decode64(const uint16_t * GGML_RESTRICT q2, int8x16_t w[4], float scale[2]) {
++    const uint64_t * signs64 = (const uint64_t *)keven_signs_q2xs;
++    uint32_t aux32[4];
++    const uint8_t * aux8 = (const uint8_t *)aux32;
++    memcpy(aux32, q2, 4*sizeof(uint32_t));
++    w[0] = vmulq_s8(vcombine_s8(vld1_s8((const void *)(iq2xxs_grid + aux8[ 0])), vld1_s8((const void *)(iq2xxs_grid + aux8[ 1]))),
++                    vcombine_s8(vld1_s8((const void *)(signs64 + ((aux32[1] >>  0) & 127))), vld1_s8((const void *)(signs64 + ((aux32[1] >>  7) & 127)))));
++    w[1] = vmulq_s8(vcombine_s8(vld1_s8((const void *)(iq2xxs_grid + aux8[ 2])), vld1_s8((const void *)(iq2xxs_grid + aux8[ 3]))),
++                    vcombine_s8(vld1_s8((const void *)(signs64 + ((aux32[1] >> 14) & 127))), vld1_s8((const void *)(signs64 + ((aux32[1] >> 21) & 127)))));
++    w[2] = vmulq_s8(vcombine_s8(vld1_s8((const void *)(iq2xxs_grid + aux8[ 8])), vld1_s8((const void *)(iq2xxs_grid + aux8[ 9]))),
++                    vcombine_s8(vld1_s8((const void *)(signs64 + ((aux32[3] >>  0) & 127))), vld1_s8((const void *)(signs64 + ((aux32[3] >>  7) & 127)))));
++    w[3] = vmulq_s8(vcombine_s8(vld1_s8((const void *)(iq2xxs_grid + aux8[10])), vld1_s8((const void *)(iq2xxs_grid + aux8[11]))),
++                    vcombine_s8(vld1_s8((const void *)(signs64 + ((aux32[3] >> 14) & 127))), vld1_s8((const void *)(signs64 + ((aux32[3] >> 21) & 127)))));
++    scale[0] = 0.5f + (aux32[1] >> 28);
++    scale[1] = 0.5f + (aux32[3] >> 28);
++}
++
++static inline void iq3_xxs_decode64(const uint8_t * GGML_RESTRICT q3, const uint8_t * GGML_RESTRICT gas, int8x16_t w[4], float scale[2]) {
++    const uint64_t * signs64 = (const uint64_t *)keven_signs_q2xs;
++    uint32_t aux32[2];
++    memcpy(aux32, gas, 2*sizeof(uint32_t));
++    const uint32x4_t grid0 = ggml_vld1q_u32(iq3xxs_grid[q3[ 0]], iq3xxs_grid[q3[ 1]], iq3xxs_grid[q3[ 2]], iq3xxs_grid[q3[ 3]]);
++    const uint32x4_t grid1 = ggml_vld1q_u32(iq3xxs_grid[q3[ 4]], iq3xxs_grid[q3[ 5]], iq3xxs_grid[q3[ 6]], iq3xxs_grid[q3[ 7]]);
++    const uint32x4_t grid2 = ggml_vld1q_u32(iq3xxs_grid[q3[ 8]], iq3xxs_grid[q3[ 9]], iq3xxs_grid[q3[10]], iq3xxs_grid[q3[11]]);
++    const uint32x4_t grid3 = ggml_vld1q_u32(iq3xxs_grid[q3[12]], iq3xxs_grid[q3[13]], iq3xxs_grid[q3[14]], iq3xxs_grid[q3[15]]);
++    w[0] = vmulq_s8(vcombine_s8(vld1_s8((const void *)(signs64 + ((aux32[0] >>  0) & 127))), vld1_s8((const void *)(signs64 + ((aux32[0] >>  7) & 127)))),
++                    vreinterpretq_s8_u32(grid0));
++    w[1] = vmulq_s8(vcombine_s8(vld1_s8((const void *)(signs64 + ((aux32[0] >> 14) & 127))), vld1_s8((const void *)(signs64 + ((aux32[0] >> 21) & 127)))),
++                    vreinterpretq_s8_u32(grid1));
++    w[2] = vmulq_s8(vcombine_s8(vld1_s8((const void *)(signs64 + ((aux32[1] >>  0) & 127))), vld1_s8((const void *)(signs64 + ((aux32[1] >>  7) & 127)))),
++                    vreinterpretq_s8_u32(grid2));
++    w[3] = vmulq_s8(vcombine_s8(vld1_s8((const void *)(signs64 + ((aux32[1] >> 14) & 127))), vld1_s8((const void *)(signs64 + ((aux32[1] >> 21) & 127)))),
++                    vreinterpretq_s8_u32(grid3));
++    scale[0] = 0.5f + (aux32[0] >> 28);
++    scale[1] = 0.5f + (aux32[1] >> 28);
++}
++#endif
++
+ void ggml_vec_dot_iq2_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
+     assert(n % QK_K == 0);
++#if defined(GGML_CPU_EXACT_TILES)
++    assert(nrc == 1 || nrc == 2);
++#else
+     assert(nrc == 1);
++#endif
+     UNUSED(nrc);
+     UNUSED(bx);
+     UNUSED(by);
+@@ -3641,6 +3781,33 @@ void ggml_vec_dot_iq2_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const
+ 
+     const int nb = n / QK_K;
+ 
++#if defined(GGML_CPU_EXACT_TILES)
++    if (nrc == 2) {
++        const block_iq2_xxs * GGML_RESTRICT xr[2] = { x, (const block_iq2_xxs *)((const char *)vx + bx) };
++        const block_q8_K    * GGML_RESTRICT yc[2] = { y, (const block_q8_K    *)((const char *)vy + by) };
++        float sumf[2][2] = {{0}};
++        for (int i = 0; i < nb; ++i) {
++            float group_sum[2][2][2] = {{{0}}};
++            for (int ib32 = 0; ib32 < QK_K/32; ib32 += 2) {
++                const ggml_int8x16x4_t a[2] = { ggml_vld1q_s8_x4(yc[0][i].qs + 32*ib32), ggml_vld1q_s8_x4(yc[1][i].qs + 32*ib32) };
++                int8x16_t w[2][4];
++                float scale[2][2];
++                iq2_xxs_decode64(xr[0][i].qs + 4*ib32, w[0], scale[0]);
++                iq2_xxs_decode64(xr[1][i].qs + 4*ib32, w[1], scale[1]);
++                tile_accumulate64(w, scale, a, group_sum);
++            }
++            for (int r = 0; r < 2; ++r) {
++                for (int c = 0; c < 2; ++c) {
++                    const float d = GGML_CPU_FP16_TO_FP32(xr[r][i].d) * yc[c][i].d;
++                    sumf[r][c] += d*(group_sum[0][r][c] + group_sum[1][r][c]);
++                }
++            }
++        }
++        tile_store(s, bs, sumf, 0.25f);
++        return;
++    }
++#endif
++
+ #if defined(__ARM_NEON)
+ 
+     const uint64_t * signs64 = (const uint64_t *)keven_signs_q2xs;
+@@ -3863,7 +4030,11 @@ void ggml_vec_dot_iq2_s_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
+ 
+ void ggml_vec_dot_iq3_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
+     assert(n % QK_K == 0);
++#if defined(GGML_CPU_EXACT_TILES)
++    assert(nrc == 1 || nrc == 2);
++#else
+     assert(nrc == 1);
++#endif
+     UNUSED(nrc);
+     UNUSED(bx);
+     UNUSED(by);
+@@ -3874,6 +4045,34 @@ void ggml_vec_dot_iq3_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const
+ 
+     const int nb = n / QK_K;
+ 
++#if defined(GGML_CPU_EXACT_TILES)
++    if (nrc == 2) {
++        const block_iq3_xxs * GGML_RESTRICT xr[2] = { x, (const block_iq3_xxs *)((const char *)vx + bx) };
++        const block_q8_K    * GGML_RESTRICT yc[2] = { y, (const block_q8_K    *)((const char *)vy + by) };
++        float sumf[2][2] = {{0}};
++        for (int i = 0; i < nb; ++i) {
++            float group_sum[2][2][2] = {{{0}}};
++            for (int ib32 = 0; ib32 < QK_K/32; ib32 += 2) {
++                const ggml_int8x16x4_t a[2] = { ggml_vld1q_s8_x4(yc[0][i].qs + 32*ib32), ggml_vld1q_s8_x4(yc[1][i].qs + 32*ib32) };
++                int8x16_t w[2][4];
++                float scale[2][2];
++                for (int r = 0; r < 2; ++r) {
++                    iq3_xxs_decode64(xr[r][i].qs + 8*ib32, xr[r][i].qs + QK_K/4 + 4*ib32, w[r], scale[r]);
++                }
++                tile_accumulate64(w, scale, a, group_sum);
++            }
++            for (int r = 0; r < 2; ++r) {
++                for (int c = 0; c < 2; ++c) {
++                    const float d = GGML_CPU_FP16_TO_FP32(xr[r][i].d) * yc[c][i].d;
++                    sumf[r][c] += d*(group_sum[0][r][c] + group_sum[1][r][c]);
++                }
++            }
++        }
++        tile_store(s, bs, sumf, 0.5f);
++        return;
++    }
++#endif
++
+ #if defined(__ARM_NEON)
+ 
+     const uint64_t * signs64 = (const uint64_t *)keven_signs_q2xs;
+diff --git a/ggml/src/ggml-cpu/ggml-cpu-impl.h b/ggml/src/ggml-cpu/ggml-cpu-impl.h
+index 5dd9ec8..fc88ab0 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu-impl.h
++++ b/ggml/src/ggml-cpu/ggml-cpu-impl.h
+@@ -29,6 +29,15 @@ struct ggml_compute_params {
+     bool use_ref;
+ };
+ 
++// Dotprod 2x2 tiles (two weight rows x two activation columns) for Q5_K, IQ2_XXS and IQ3_XXS. Each weight
++// block is decoded once for both columns and every output keeps the single-column accumulation order, so
++// tiled results are bitwise identical to nrc == 1 calls.
++#if defined(__aarch64__) && defined(__ARM_FEATURE_DOTPROD)
++#define GGML_CPU_EXACT_TILES 1
++#endif
++
++// Expert matrix `expert` of a MUL_MAT_ID weight, through ggml_cpu_set_expert_address when one is installed.
++const char * ggml_cpu_expert_data(const struct ggml_tensor * weights, int64_t expert);
+ 
+ #if defined(_MSC_VER)
+ 
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+index 7c274c0..a11513a 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -322,7 +322,11 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
+         .from_float               = quantize_row_q5_K,
+         .vec_dot                  = ggml_vec_dot_q5_K_q8_K,
+         .vec_dot_type             = GGML_TYPE_Q8_K,
++#if defined (GGML_CPU_EXACT_TILES)
++        .nrows                    = 2,
++#else
+         .nrows                    = 1,
++#endif
+     },
+     [GGML_TYPE_Q6_K] = {
+         .from_float               = quantize_row_q6_K,
+@@ -338,7 +342,11 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
+         .from_float               = NULL,
+         .vec_dot                  = ggml_vec_dot_iq2_xxs_q8_K,
+         .vec_dot_type             = GGML_TYPE_Q8_K,
++#if defined (GGML_CPU_EXACT_TILES)
++        .nrows                    = 2,
++#else
+         .nrows                    = 1,
++#endif
+     },
+     [GGML_TYPE_IQ2_XS] = {
+         .from_float               = NULL,
+@@ -351,7 +359,11 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
+         //.from_float               = quantize_row_iq3_xxs,
+         .vec_dot                  = ggml_vec_dot_iq3_xxs_q8_K,
+         .vec_dot_type             = GGML_TYPE_Q8_K,
++#if defined (GGML_CPU_EXACT_TILES)
++        .nrows                    = 2,
++#else
+         .nrows                    = 1,
++#endif
+     },
+     [GGML_TYPE_IQ3_S] = {
+         //.from_float               = quantize_row_iq3_s,
+@@ -1210,8 +1222,11 @@ static void ggml_compute_forward_mul_mat_one_chunk(
+     float tmp[32];
+ 
+     for (int64_t iir1 = ir1_start; iir1 < ir1_end; iir1 += blck_1) {
++        const int64_t ir1_block_end = MIN(iir1 + blck_1, ir1_end);
+         for (int64_t iir0 = ir0_start; iir0 < ir0_end; iir0 += blck_0) {
+-            for (int64_t ir1 = iir1; ir1 < iir1 + blck_1 && ir1 < ir1_end; ir1 += num_rows_per_vec_dot) {
++            const int64_t ir0_block_end = MIN(iir0 + blck_0, ir0_end);
++            int64_t ncols = 1;
++            for (int64_t ir1 = iir1; ir1 < ir1_block_end; ir1 += ncols) {
+                 const int64_t i13 = (ir1 / (ne12 * ne1));
+                 const int64_t i12 = (ir1 - i13 * ne12 * ne1) / ne1;
+                 const int64_t i11 = (ir1 - i13 * ne12 * ne1 - i12 * ne1);
+@@ -1240,12 +1255,23 @@ static void ggml_compute_forward_mul_mat_one_chunk(
+                 //    vec_dot(ne00, &dst_col[ir0], src0_row + ir0*nb01, src1_col);
+                 //}
+ 
+-                for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ir0 += num_rows_per_vec_dot) {
+-                    vec_dot(ne00, &tmp[ir0 - iir0], (num_rows_per_vec_dot > 1 ? 16 : 0), src0_row + ir0 * nb01, (num_rows_per_vec_dot > 1 ? nb01 : 0), src1_col, (num_rows_per_vec_dot > 1 ? src1_col_stride : 0), num_rows_per_vec_dot);
++                // A 2x2 kernel call covers two adjacent columns of the same src1 matrix and two rows; odd column
++                // counts, odd row counts and slice boundaries fall back to single dot products at the edges.
++                ncols = num_rows_per_vec_dot > 1 && ir1 + 1 < ir1_block_end && i11 + 1 < ne11 ? 2 : 1;
++                int64_t ir0 = iir0;
++                if (ncols == 2) {
++                    for (; ir0 + 1 < ir0_block_end; ir0 += 2) {
++                        vec_dot(ne00, &tmp[ir0 - iir0], 16, src0_row + ir0 * nb01, nb01, src1_col, src1_col_stride, 2);
++                    }
++                }
++                for (; ir0 < ir0_block_end; ++ir0) {
++                    for (int64_t cn = 0; cn < ncols; ++cn) {
++                        vec_dot(ne00, &tmp[ir0 - iir0 + cn * 16], 0, src0_row + ir0 * nb01, 0, src1_col + cn * src1_col_stride, 0, 1);
++                    }
+                 }
+ 
+-                for (int cn = 0; cn < num_rows_per_vec_dot; ++cn) {
+-                    memcpy(&dst_col[iir0 + cn * nb1 / nb0], tmp + (cn * 16), (MIN(iir0 + blck_0, ir0_end) - iir0) * sizeof(float));
++                for (int64_t cn = 0; cn < ncols; ++cn) {
++                    memcpy(&dst_col[iir0 + cn * nb1 / nb0], tmp + (cn * 16), (ir0_block_end - iir0) * sizeof(float));
+                 }
+             }
+         }
+@@ -1453,15 +1479,9 @@ UseGgmlGemm2:;
+         const int64_t ir1_start = dr1 * ith1;
+         const int64_t ir1_end = MIN(ir1_start + dr1, nr1);
+ 
+-        // dot kernels can handle 1 row and col at a time, but mmla kernels can process 2 rows and cols
+-        int64_t num_rows_per_vec_dot = vec_dot_num_rows;
+-
+-        // these checks are needed to avoid crossing dim1 boundaries
+-        // can be optimized, but the logic would become more complicated, so keeping it like this for simplicity
+-        if ((nr0 % 2 != 0) || (ne11 % 2 != 0) || ((ir0_end - ir0_start) % 2 != 0) || ((ir1_end - ir1_start) % 2 != 0)) {
+-            num_rows_per_vec_dot = 1;
+-        }
+-        ggml_compute_forward_mul_mat_one_chunk(params, dst, src0->type, num_rows_per_vec_dot, ir0_start, ir0_end, ir1_start, ir1_end);
++        // dot kernels can handle 1 row and col at a time, but mmla and tile kernels can process 2 rows and cols;
++        // the chunk handles odd edges and dim1 boundaries itself
++        ggml_compute_forward_mul_mat_one_chunk(params, dst, src0->type, vec_dot_num_rows, ir0_start, ir0_end, ir1_start, ir1_end);
+ 
+         if (nth >= nchunk0 * nchunk1) {
+             break;
+@@ -1503,44 +1523,88 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
+     ggml_vec_dot_t    const vec_dot      = type_traits_cpu[type].vec_dot;
+     enum ggml_type    const vec_dot_type = type_traits_cpu[type].vec_dot_type;
+ 
++    const int64_t num_rows_per_vec_dot = type_traits_cpu[type].nrows;
++
+     const int64_t blck_0 = 16;
+     const int64_t blck_1 = 16;
+ 
+-    float tmp[16];
++    float tmp[32];
+ 
+     for (int64_t iir1 = ir1_start; iir1 < ir1_end; iir1 += blck_1) {
++        const int64_t ir1_block_end = MIN(iir1 + blck_1, ir1_end);
+         for (int64_t iir0 = ir0_start; iir0 < ir0_end; iir0 += blck_0) {
+-            for (int64_t ir1 = iir1; ir1 < iir1 + blck_1 && ir1 < ir1_end; ++ir1) {
+-                const int64_t _i12 = ir1; // logical row index for this expert
+-
+-                struct mmid_row_mapping row_mapping = MMID_MATRIX_ROW(cur_a, _i12);
+-                const int id       = row_mapping.i1; // selected expert index
+-
+-                const int64_t  i11 = id % ne11;
+-                const int64_t  i12 = row_mapping.i2; // row index in src1
++            const int64_t ir0_block_end = MIN(iir0 + blck_0, ir0_end);
++            int64_t ncols = 1;
++            for (int64_t ir1 = iir1; ir1 < ir1_block_end; ir1 += ncols) {
++                // Two tokens routed to this expert share one 2x2 kernel call, so the expert's weight blocks
++                // are decoded once for both (speculative verification and prompt batches).
++                const char * src1_col[2];
++                float * dst_col[2];
++                ncols = num_rows_per_vec_dot > 1 && ir1 + 1 < ir1_block_end ? 2 : 1;
++                for (int64_t cn = 0; cn < ncols; ++cn) {
++                    const int64_t _i12 = ir1 + cn; // logical row index for this expert
++
++                    struct mmid_row_mapping row_mapping = MMID_MATRIX_ROW(cur_a, _i12);
++                    const int id       = row_mapping.i1; // selected expert index
++
++                    const int64_t  i11 = id % ne11;
++                    const int64_t  i12 = row_mapping.i2; // row index in src1
++
++                    const int64_t  i1 = id;  // selected expert index
++                    const int64_t  i2 = i12; // row
++
++                    // desc: when src1 is not a contiguous memory block we have to calculate the offset using the strides
++                    //       if it is, then we have either copied the data to params->wdata and made it contiguous or we are using
++                    //       the original src1 data pointer, so we should index using the indices directly
++                    // TODO: this is a bit of a hack, we should probably have a better way to handle this
++                    src1_col[cn] = (const char *) wdata +
++                        (src1_cont || src1->type != vec_dot_type
++                        ? (i11      + i12*ne11)*row_size
++                        : (i11*nb11 + i12*nb12));
++
++                    dst_col[cn] = (float *) ((char *) dst->data + (i1*nb1 + i2*nb2));
++                }
++                // the kernels take the second column as an unsigned byte offset from the first
++                if (ncols == 2 && src1_col[1] <= src1_col[0]) {
++                    ncols = 1;
++                }
+ 
+-                const int64_t  i1 = id;  // selected expert index
+-                const int64_t  i2 = i12; // row
++                int64_t ir0 = iir0;
++                if (ncols == 2) {
++                    for (; ir0 + 1 < ir0_block_end; ir0 += 2) {
++                        vec_dot(ne00, &tmp[ir0 - iir0], 16, src0_cur + ir0*nb01, nb01, src1_col[0], (size_t) (src1_col[1] - src1_col[0]), 2);
++                    }
++                }
++                for (; ir0 < ir0_block_end; ++ir0) {
++                    for (int64_t cn = 0; cn < ncols; ++cn) {
++                        vec_dot(ne00, &tmp[ir0 - iir0 + cn*16], 0, src0_cur + ir0*nb01, 0, src1_col[cn], 0, 1);
++                    }
++                }
+ 
+-                // desc: when src1 is not a contiguous memory block we have to calculate the offset using the strides
+-                //       if it is, then we have either copied the data to params->wdata and made it contiguous or we are using
+-                //       the original src1 data pointer, so we should index using the indices directly
+-                // TODO: this is a bit of a hack, we should probably have a better way to handle this
+-                const char * src1_col = (const char *) wdata +
+-                    (src1_cont || src1->type != vec_dot_type
+-                    ? (i11      + i12*ne11)*row_size
+-                    : (i11*nb11 + i12*nb12));
++                for (int64_t cn = 0; cn < ncols; ++cn) {
++                    memcpy(&dst_col[cn][iir0], tmp + cn*16, (ir0_block_end - iir0)*sizeof(float));
++                }
++            }
++        }
++    }
++}
+ 
+-                float * dst_col = (float *) ((char *) dst->data + (i1*nb1 + i2*nb2));
++static ggml_cpu_expert_address_t expert_address_fn   = NULL;
++static void *                    expert_address_user = NULL;
+ 
+-                for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
+-                    vec_dot(ne00, &tmp[ir0 - iir0], 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
+-                }
++void ggml_cpu_set_expert_address(ggml_cpu_expert_address_t fn, void * user) {
++    expert_address_fn   = fn;
++    expert_address_user = user;
++}
+ 
+-                memcpy(&dst_col[iir0], tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
+-            }
++const char * ggml_cpu_expert_data(const struct ggml_tensor * weights, int64_t expert) {
++    if (expert_address_fn) {
++        const void * data = expert_address_fn(weights, expert, expert_address_user);
++        if (data) {
++            return (const char *) data;
+         }
+     }
++    return (const char *) weights->data + expert * weights->nb[2];
+ }
+ 
+ static void * incr_ptr_aligned(void ** p, size_t size, size_t align) {
+@@ -1680,7 +1744,7 @@ static void ggml_compute_forward_mul_mat_id(
+             continue;
+         }
+ 
+-        const char * src0_cur = (const char *) src0->data + cur_a * nb02;
++        const char * src0_cur = ggml_cpu_expert_data(src0, cur_a);
+         const void * wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;
+         const size_t row_size = ggml_row_size(vec_dot_type, ne10);
+ 
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
+index 81ff5d7..912413e 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.cpp
++++ b/ggml/src/ggml-cpu/ggml-cpu.cpp
+@@ -690,6 +690,9 @@ static void * ggml_backend_cpu_get_proc_address(ggml_backend_reg_t reg, const ch
+     if (strcmp(name, "ggml_backend_cpu_set_threadpool") == 0) {
+         return (void *)ggml_backend_cpu_set_threadpool;
+     }
++    if (strcmp(name, "ggml_cpu_set_expert_address") == 0) {
++        return (void *)ggml_cpu_set_expert_address;
++    }
+ 
+     return NULL;
+ 
+diff --git a/ggml/src/ggml-cpu/simd-gemm.h b/ggml/src/ggml-cpu/simd-gemm.h
+index 4b9396d..6d9c1ce 100644
+--- a/ggml/src/ggml-cpu/simd-gemm.h
++++ b/ggml/src/ggml-cpu/simd-gemm.h
+@@ -4,8 +4,91 @@
+ 
+ #include "simd-mappings.h"
+ 
++#if defined(__aarch64__)
++// AArch64, including SVE builds: every AArch64 core has 128-bit NEON, and sizeless SVE vectors cannot form the
++// accumulator arrays of the generic kernel, which left SVE builds on the scalar fallback. Fixed NEON registers:
++// 4x4 vector accumulators + 4 B vectors + 1 broadcast = 21 of 32. Each C element accumulates over k in order, as
++// in the generic SIMD kernel.
++#include <arm_neon.h>
++
++static constexpr int GEMM_RM = 4;
++static constexpr int GEMM_RN = 4;
++
++template <int RM, int RN>
++static inline void simd_gemm_ukernel(
++    float       * GGML_RESTRICT C,
++    const float * GGML_RESTRICT A,
++    const float * GGML_RESTRICT B,
++    int K, int N)
++{
++    float32x4_t acc[RM][RN];
++    for (int i = 0; i < RM; i++) {
++        for (int r = 0; r < RN; r++) {
++            acc[i][r] = vld1q_f32(C + i * N + r * 4);
++        }
++    }
++    for (int kk = 0; kk < K; kk++) {
++        float32x4_t b[RN];
++        for (int r = 0; r < RN; r++) {
++            b[r] = vld1q_f32(B + kk * N + r * 4);
++        }
++        for (int i = 0; i < RM; i++) {
++            const float32x4_t a = vdupq_n_f32(A[i * K + kk]);
++            for (int r = 0; r < RN; r++) {
++                acc[i][r] = vfmaq_f32(acc[i][r], b[r], a);
++            }
++        }
++    }
++    for (int i = 0; i < RM; i++) {
++        for (int r = 0; r < RN; r++) {
++            vst1q_f32(C + i * N + r * 4, acc[i][r]);
++        }
++    }
++}
++
++template <int RM>
++static inline void simd_gemm_rows(
++    float       * GGML_RESTRICT C,
++    const float * GGML_RESTRICT A,
++    const float * GGML_RESTRICT B,
++    int K, int N)
++{
++    int jj = 0;
++    for (; jj + GEMM_RN * 4 <= N; jj += GEMM_RN * 4) {
++        simd_gemm_ukernel<RM, GEMM_RN>(C + jj, A, B + jj, K, N);
++    }
++    for (; jj + 4 <= N; jj += 4) {
++        simd_gemm_ukernel<RM, 1>(C + jj, A, B + jj, K, N);
++    }
++    for (; jj < N; jj++) {
++        for (int i = 0; i < RM; i++) {
++            float a = C[i * N + jj];
++            for (int kk = 0; kk < K; kk++) {
++                a += A[i * K + kk] * B[kk * N + jj];
++            }
++            C[i * N + jj] = a;
++        }
++    }
++}
++
++// C[M x N] += A[M x K] * B[K x N]
++static void simd_gemm(
++    float       * GGML_RESTRICT C,
++    const float * GGML_RESTRICT A,
++    const float * GGML_RESTRICT B,
++    int M, int K, int N)
++{
++    int ii = 0;
++    for (; ii + GEMM_RM <= M; ii += GEMM_RM) {
++        simd_gemm_rows<GEMM_RM>(C + ii * N, A + ii * K, B, K, N);
++    }
++    for (; ii < M; ii++) {
++        simd_gemm_rows<1>(C + ii * N, A + ii * K, B, K, N);
++    }
++}
++
+ // TODO: add support for sizeless vector types
+-#if defined(GGML_SIMD) && !defined(__ARM_FEATURE_SVE) && !defined(__riscv_v_intrinsic)
++#elif defined(GGML_SIMD) && !defined(__ARM_FEATURE_SVE) && !defined(__riscv_v_intrinsic)
+ 
+ // TODO: untested on avx512
+ // These are in units of GGML_F32_EPR
+diff --git a/ggml/src/ggml-cpu/tiled/tiled-kernel.cpp b/ggml/src/ggml-cpu/tiled/tiled-kernel.cpp
+index bffa737..136542c 100644
+--- a/ggml/src/ggml-cpu/tiled/tiled-kernel.cpp
++++ b/ggml/src/ggml-cpu/tiled/tiled-kernel.cpp
+@@ -6,6 +6,10 @@
+ 
+ #include <cstring>
+ 
++#if defined(__aarch64__) && defined(__ARM_FEATURE_MATMUL_INT8)
++#include <arm_neon.h>
++#endif
++
+ #if defined(__AVX512VNNI__) || defined(__AVX2__) || defined(__AVX__)
+ #include <immintrin.h>
+ #endif
+@@ -80,6 +84,135 @@ static void tiled_run_microtile_scalar(const tiled_tile_src0 & src0, const tiled
+     }
+ }
+ 
++#if defined(__aarch64__) && defined(__ARM_FEATURE_MATMUL_INT8)
++// AArch64 i8mm kernel. USMMLA multiplies a 2x8 block of unsigned src0 codes by an 8x2 block of signed src1 codes
++// into a 2x2 int32 block [r0.c0, r0.c1, r1.c0, r1.c1], so each 16-byte operand holds 8 codes of two rows (or two
++// columns). The 16 columns are interleaved in pairs, with their per-subblock code sums, once per microtile; every
++// row pair then streams them. Per-subblock sums, the BIAS correction and the scale/min products stay exact in
++// int32 for every instantiated format (worst case q6_K, |sum| < 2^29); floats are formed once per 256-K slab,
++// where the scalar reference rounds once per subblock, so results differ from it only in float rounding.
++template <int SUBBLK, bool HAS_MIN, int BIAS, int NK>
++static void tiled_run_microtile_i8mm(const tiled_tile_src0 & src0, const tiled_tile_src1 & src1,
++                                     int i0, int j0, int num_k, int slab, float * buf, int buf_stride) {
++    constexpr int NB = TILED_TILE_K / SUBBLK;
++    constexpr int NS = SUBBLK / 16;
++    constexpr int CHUNKS = SUBBLK / 8; // 8-code chunks per subblock, consumed in zipped pairs
++
++    const int nkr  = (NK > 0) ? NK : num_k;
++    const int seff = (NK > 0) ? 0 : slab;
++    const int qk_stride = nkr * TILED_TILE_K;
++    const int qk_off = seff * TILED_TILE_K;
++    const int nb_stride = NB * nkr;
++    const int nb_off = seff * NB;
++    const int bs_stride = (nkr == 1) ? TILED_TILE_ROWS : TILED_MICRO;
++    const int bs_off = seff * TILED_MICRO;
++
++    const auto zip_lo = [](uint8x16_t a, uint8x16_t b) {
++        return vreinterpretq_u8_u64(vzip1q_u64(vreinterpretq_u64_u8(a), vreinterpretq_u64_u8(b)));
++    };
++    const auto zip_hi = [](uint8x16_t a, uint8x16_t b) {
++        return vreinterpretq_u8_u64(vzip2q_u64(vreinterpretq_u64_u8(a), vreinterpretq_u64_u8(b)));
++    };
++
++    alignas(16) int8_t column_pairs[NB][TILED_MICRO / 2][2 * SUBBLK];
++    int32x4_t column_sums[NB][TILED_MICRO / 2];
++    for (int s = 0; s < NB; s++) {
++        for (int jp = 0; jp < TILED_MICRO / 2; jp++) {
++            const int c0 = j0 + 2 * jp;
++            const int8_t * b0 = &src1.q[c0 * qk_stride + qk_off + s * SUBBLK];
++            const int8_t * b1 = b0 + qk_stride;
++            for (int c = 0; c < CHUNKS; c += 2) {
++                const uint8x16_t y0 = vreinterpretq_u8_s8(vld1q_s8(b0 + 8 * c));
++                const uint8x16_t y1 = vreinterpretq_u8_s8(vld1q_s8(b1 + 8 * c));
++                vst1q_u8(reinterpret_cast<uint8_t *>(&column_pairs[s][jp][16 * c]), zip_lo(y0, y1));
++                vst1q_u8(reinterpret_cast<uint8_t *>(&column_pairs[s][jp][16 * (c + 1)]), zip_hi(y0, y1));
++            }
++            int32_t bsum0 = 0, bsum1 = 0;
++            for (int u = 0; u < NS; u++) {
++                bsum0 += src1.bsums[(bs_off + s * NS + u) * bs_stride + c0];
++                bsum1 += src1.bsums[(bs_off + s * NS + u) * bs_stride + c0 + 1];
++            }
++            const int32x4_t sums = {bsum0, bsum1, bsum0, bsum1};
++            column_sums[s][jp] = sums;
++        }
++    }
++
++    for (int ip = 0; ip < TILED_MICRO; ip += 2) {
++        const int r0 = i0 + ip;
++        const int r1 = r0 + 1;
++        int32x4_t total[TILED_MICRO / 2];
++        int32x4_t mins[TILED_MICRO / 2];
++        for (int jp = 0; jp < TILED_MICRO / 2; jp++) {
++            total[jp] = vdupq_n_s32(0);
++            mins[jp] = vdupq_n_s32(0);
++        }
++        for (int s = 0; s < NB; s++) {
++            const uint8_t * a0 = &src0.q[r0 * qk_stride + qk_off + s * SUBBLK];
++            const uint8_t * a1 = &src0.q[r1 * qk_stride + qk_off + s * SUBBLK];
++            uint8x16_t a[CHUNKS];
++            for (int c = 0; c < CHUNKS; c += 2) {
++                const uint8x16_t x0 = vld1q_u8(a0 + 8 * c);
++                const uint8x16_t x1 = vld1q_u8(a1 + 8 * c);
++                a[c] = zip_lo(x0, x1);
++                a[c + 1] = zip_hi(x0, x1);
++            }
++            const int32_t s0 = src0.scales[r0 * nb_stride + nb_off + s];
++            const int32_t s1 = src0.scales[r1 * nb_stride + nb_off + s];
++            const int32x4_t scale = {s0, s0, s1, s1};
++            int32x4_t min_scale = vdupq_n_s32(0);
++            if constexpr (HAS_MIN) {
++                const int32_t m0 = src0.mins[r0 * nb_stride + nb_off + s];
++                const int32_t m1 = src0.mins[r1 * nb_stride + nb_off + s];
++                const int32x4_t row_mins = {m0, m0, m1, m1};
++                min_scale = row_mins;
++            }
++            for (int jp = 0; jp < TILED_MICRO / 2; jp++) {
++                const int8_t * pair = column_pairs[s][jp];
++                int32x4_t raw = vdupq_n_s32(0);
++                for (int c = 0; c < CHUNKS; c++) {
++                    raw = vusmmlaq_s32(raw, a[c], vld1q_s8(pair + 16 * c));
++                }
++                const int32x4_t bsum = column_sums[s][jp];
++                int32x4_t corr = raw;
++                if constexpr (BIAS != 0) {
++                    corr = vmlsq_n_s32(raw, bsum, BIAS);
++                }
++                total[jp] = vmlaq_s32(total[jp], corr, scale);
++                if constexpr (HAS_MIN) {
++                    mins[jp] = vmlaq_s32(mins[jp], min_scale, bsum);
++                }
++            }
++        }
++        const float d0 = src0.d[seff * TILED_MICRO + r0];
++        const float d1 = src0.d[seff * TILED_MICRO + r1];
++        const float32x4_t d = {d0, d0, d1, d1};
++        float32x4_t dmin = vdupq_n_f32(0.0f);
++        if constexpr (HAS_MIN) {
++            const float m0 = src0.dmin[seff * TILED_MICRO + r0];
++            const float m1 = src0.dmin[seff * TILED_MICRO + r1];
++            const float32x4_t row_dmin = {m0, m0, m1, m1};
++            dmin = row_dmin;
++        }
++        for (int jp = 0; jp < TILED_MICRO / 2; jp++) {
++            const int c0 = j0 + 2 * jp;
++            float32x4_t value = vmulq_f32(d, vcvtq_f32_s32(total[jp]));
++            if constexpr (HAS_MIN) {
++                value = vmlsq_f32(value, dmin, vcvtq_f32_s32(mins[jp]));
++            }
++            const float e0 = src1.d[seff * TILED_MICRO + c0];
++            const float e1 = src1.d[seff * TILED_MICRO + c0 + 1];
++            const float32x4_t column_d = {e0, e1, e0, e1};
++            value = vmulq_f32(value, column_d);
++            float * out0 = &buf[r0 * buf_stride + c0];
++            float * out1 = &buf[r1 * buf_stride + c0];
++            vst1_f32(out0, vadd_f32(vld1_f32(out0), vget_low_f32(value)));
++            vst1_f32(out1, vadd_f32(vld1_f32(out1), vget_high_f32(value)));
++        }
++    }
++}
++#endif
++
++
+ #if defined(__AVX512VNNI__) && defined(__AVX512VL__) && defined(__AVX512DQ__)
+ 
+ 
+@@ -529,6 +662,12 @@ void tiled_run_microtile(const tiled_tile_src0 & src0, const tiled_tile_src1 & s
+     } else {
+         tiled_run_microtile_avx<SUBBLK, HAS_MIN, BIAS, 0>(src0, src1, i0, j0, num_k, slab, buf, buf_stride);
+     }
++#elif defined(__aarch64__) && defined(__ARM_FEATURE_MATMUL_INT8)
++    if (standard) {
++        tiled_run_microtile_i8mm<SUBBLK, HAS_MIN, BIAS, 1>(src0, src1, i0, j0, num_k, slab, buf, buf_stride);
++    } else {
++        tiled_run_microtile_i8mm<SUBBLK, HAS_MIN, BIAS, 0>(src0, src1, i0, j0, num_k, slab, buf, buf_stride);
++    }
+ #else
+     if (standard) {
+         tiled_run_microtile_scalar<SUBBLK, HAS_MIN, BIAS, 1>(src0, src1, i0, j0, num_k, slab, buf, buf_stride);
+diff --git a/ggml/src/ggml-cpu/tiled/tiled.cpp b/ggml/src/ggml-cpu/tiled/tiled.cpp
+index 77e1a99..fca44f8 100644
+--- a/ggml/src/ggml-cpu/tiled/tiled.cpp
++++ b/ggml/src/ggml-cpu/tiled/tiled.cpp
+@@ -594,7 +594,8 @@ static bool ggml_tiled_matmul_forced(void) {
+ // hard constraints shared by the MUL_MAT and MUL_MAT_ID entries; the src0 type gate is the
+ // entries' type switch
+ 
+-#if !defined(__AVX512VNNI__) && !defined(__AVX2__) && !defined(__AVX__)
++#if !defined(__AVX512VNNI__) && !defined(__AVX2__) && !defined(__AVX__) && \
++    !(defined(__aarch64__) && defined(__ARM_FEATURE_MATMUL_INT8))
+ static bool ggml_tiled_supported(const struct ggml_tensor * src0,
+                                  const struct ggml_tensor * src1) {
+     UNUSED(src0);
+@@ -856,7 +857,8 @@ static void ggml_compute_forward_mul_mat_id_tiled_one_expert(
+     const size_t nbw1 = (src1->type == vec_dot_type) ? nb11 : ggml_row_size(vec_dot_type, ne10);
+     const void * wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;
+ 
+-    const char * src0_cur = (const char *) src0->data + cur_a * nb02;
++    const char * src0_cur = ggml_cpu_expert_data(src0, cur_a);
++    GGML_UNUSED(nb02);
+ 
+     // this thread's workspace
+     tiled_ws * ws = (tiled_ws *) (scratch + (size_t) ith * ggml_tiled_ws_size());

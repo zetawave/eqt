@@ -1,0 +1,9 @@
+{
+  "returncode": 0,
+  "output": {
+    "implementation": "neon",
+    "failures": 0,
+    "router_gemv_us": 47.6,
+    "checksum": 23.168
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "reference": "host x86-64 AVX2 build, batch 1 (F16 values converted and accumulated in F32)",
+  "model": "Qwen3-0.6B-Q8_0",
+  "prompt": "configs/smoke-request.json",
+  "rows": [
+    {
+      "variant": "host-x86-avx2",
+      "batch": 1,
+      "max_abs_delta_vs_host": 0.0,
+      "rms_delta_vs_host": 0.0,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "host-x86-avx2",
+      "batch": 128,
+      "max_abs_delta_vs_host": 0.0,
+      "rms_delta_vs_host": 0.0,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.0_1",
+      "batch": 1,
+      "max_abs_delta_vs_host": 0.48566436767578125,
+      "rms_delta_vs_host": 0.103298424550956,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.0_1",
+      "batch": 16,
+      "max_abs_delta_vs_host": 0.48566436767578125,
+      "rms_delta_vs_host": 0.103298424550956,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.0_1",
+      "batch": 128,
+      "max_abs_delta_vs_host": 0.48566436767578125,
+      "rms_delta_vs_host": 0.103298424550956,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.2_1",
+      "batch": 1,
+      "max_abs_delta_vs_host": 0.5277457237243652,
+      "rms_delta_vs_host": 0.11072407013984942,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.2_1",
+      "batch": 16,
+      "max_abs_delta_vs_host": 0.5277457237243652,
+      "rms_delta_vs_host": 0.11072407013984942,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.2_1",
+      "batch": 128,
+      "max_abs_delta_vs_host": 0.5277457237243652,
+      "rms_delta_vs_host": 0.11072407013984942,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.2_2",
+      "batch": 1,
+      "max_abs_delta_vs_host": 0.6194860935211182,
+      "rms_delta_vs_host": 0.11446746509362928,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.2_2",
+      "batch": 16,
+      "max_abs_delta_vs_host": 0.6194860935211182,
+      "rms_delta_vs_host": 0.11446746509362928,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.2_2",
+      "batch": 128,
+      "max_abs_delta_vs_host": 0.6194860935211182,
+      "rms_delta_vs_host": 0.11446746509362928,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.6_1",
+      "batch": 1,
+      "max_abs_delta_vs_host": 0.6194860935211182,
+      "rms_delta_vs_host": 0.11446746509362928,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.6_1",
+      "batch": 16,
+      "max_abs_delta_vs_host": 0.6572664976119995,
+      "rms_delta_vs_host": 0.1453945848492652,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv8.6_1",
+      "batch": 128,
+      "max_abs_delta_vs_host": 0.6194860935211182,
+      "rms_delta_vs_host": 0.11446746509362928,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv9.0_1",
+      "batch": 1,
+      "max_abs_delta_vs_host": 0.5207023620605469,
+      "rms_delta_vs_host": 0.10599287513852391,
+      "tokens_equal_host": false
+    },
+    {
+      "variant": "android_armv9.0_1",
+      "batch": 16,
+      "max_abs_delta_vs_host": 0.8257741928100586,
+      "rms_delta_vs_host": 0.18217213483630265,
+      "tokens_equal_host": true
+    },
+    {
+      "variant": "android_armv9.0_1",
+      "batch": 128,
+      "max_abs_delta_vs_host": 0.5207023620605469,
+      "rms_delta_vs_host": 0.10599287513852391,
+      "tokens_equal_host": false
+    }
+  ]
+}

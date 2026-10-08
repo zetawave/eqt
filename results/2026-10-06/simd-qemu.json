@@ -1,0 +1,18 @@
+{
+  "kind": "neon_kernel_check",
+  "binary": "build/android/bin/eqt-simd-test (NDK 28.2, static, aarch64)",
+  "environment": "Docker Desktop linux/arm64 user-mode QEMU (-cpu max) on x86-64 host",
+  "output": {
+    "implementation": "neon",
+    "failures": 0,
+    "router_gemv_us": 3998.9,
+    "checksum": 23.168
+  },
+  "host_scalar_reference": {
+    "implementation": "scalar",
+    "failures": 0,
+    "router_gemv_us": 455.9,
+    "checksum": 23.168
+  },
+  "scope": "Numerical correctness of Equity NEON kernels under emulation only. Emulated timing is meaningless; no Exynos measurement."
+}

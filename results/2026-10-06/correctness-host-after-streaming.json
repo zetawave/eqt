@@ -1,0 +1,127 @@
+{
+  "target": "host",
+  "model_sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+  "binary_sha256": "db10b09f5976b32e61d9c302816da0dd939a27460b48340171cac342cc739877",
+  "lifecycle_binary_sha256": "276f57f75a85540b61e5de93df193bf84e804c107bf7d358731d0844730f7dce",
+  "source_sha256": "216302a8fa976458b055a5ecdd884857b3a2f043598c839529f4e81046b869f5",
+  "cpu_variant": "static",
+  "threadpool": {
+    "persistent": true,
+    "poll": 50,
+    "cpu_mask": null
+  },
+  "lifecycle": {
+    "configuration": {
+      "backend": "cpu",
+      "architecture": "qwen3",
+      "model_file_bytes": 639446688,
+      "model_tensor_bytes": 633495552,
+      "file_type": "7",
+      "context": 2048,
+      "batch": 128,
+      "threads": 4,
+      "memory_budget_mib": 2048,
+      "memory_budget_kind": "admission_only",
+      "mmap": true,
+      "expert_cache_bytes": null,
+      "expert_streaming": null,
+      "threadpool": {
+        "persistent": true,
+        "poll": 50,
+        "cpu_mask": null
+      },
+      "cpu_variant": "static",
+      "cpu_features": null,
+      "mtp": false,
+      "steering": false,
+      "load_ms": 483.442,
+      "eqt_revision": "5cd7a1a2c624e5eb7bb333aea4766706ff31b6a3-dirty",
+      "compiler": "MSVC-19.33.31630.0",
+      "llama_revision": "6c59c40076c00eab49754dc955d7652d93f9e125",
+      "system_info": "CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | REPACK = 1 | ",
+      "memory_after_load": {
+        "rss_bytes": null,
+        "peak_rss_bytes": null,
+        "pss_bytes": null,
+        "minor_faults": null,
+        "major_faults": null,
+        "storage_read_bytes": null
+      }
+    },
+    "tolerance_absolute": 0.002,
+    "outcomes": [
+      {
+        "case": "repeat_request",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "new_chat_after_conversation",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "conversation_prefix_replay",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "recovery_after_decode_cancel",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "recovery_after_pre_cancel",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "seeded_sampling_repeat",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      },
+      {
+        "case": "reload",
+        "max_abs_logit_delta": 0.0,
+        "token_ids_equal": true,
+        "passed": true
+      }
+    ],
+    "scope": "State reset, full-prefix replay, cancellation recovery and reload; no prefix cache or rollback"
+  },
+  "tolerance_absolute": 0.002,
+  "outcomes": [
+    {
+      "mmap": true,
+      "batch": 128,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "mmap": false,
+      "batch": 128,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "mmap": true,
+      "batch": 16,
+      "max_abs_logit_delta": 0.0,
+      "token_ids_equal": true,
+      "passed": true
+    },
+    {
+      "case": "context_overflow",
+      "passed": true
+    }
+  ],
+  "scope": "Qwen3-0.6B-Q8_0.gguf: mapped/allocated, prefill chunks and state reset; not expert streaming"
+}

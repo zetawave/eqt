@@ -1,0 +1,15 @@
+<!-- Equity mark: an equals sign (equal access) on a teal-to-violet disc. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+    <path android:pathData="M48,4a44,44 0,1 1,0 88a44,44 0,1 1,0 -88z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="12" android:startY="12" android:endX="84" android:endY="84">
+                <item android:offset="0" android:color="#FF2DD4BF" />
+                <item android:offset="1" android:color="#FF8B5CF6" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#FFF8FAFC" android:pathData="M27,34h42a6,6 0,0 1,0 12h-42a6,6 0,0 1,0 -12z" />
+    <path android:fillColor="#E6F8FAFC" android:pathData="M27,52h30a6,6 0,0 1,0 12h-30a6,6 0,0 1,0 -12z" />
+</vector>

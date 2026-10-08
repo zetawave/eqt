@@ -1,0 +1,205 @@
+{
+ "device": "Galaxy S24+ (SM-S926B, Exynos 2400)",
+ "cpu_variant": "android_armv9.0_1",
+ "tool": "eqt-kernel-bench 4 (interleaved batch widths, DRAM regime: 16 distinct matrices)",
+ "note": "batch_bitwise_equal compares batched MUL_MAT / MUL_MAT_ID outputs with one-column products",
+ "threads": 4,
+ "shape": [
+  2048,
+  4096
+ ],
+ "results": [
+  {
+   "type": "q8_0",
+   "tokens": 1,
+   "us": 254.0,
+   "ratio_vs_1": 1.0,
+   "weight_gb_s": 35.1,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "q8_0",
+   "tokens": 2,
+   "us": 300.5,
+   "ratio_vs_1": 1.18,
+   "weight_gb_s": 29.7,
+   "batch_bitwise_equal": false
+  },
+  {
+   "type": "q8_0",
+   "tokens": 3,
+   "us": 382.7,
+   "ratio_vs_1": 1.51,
+   "weight_gb_s": 23.3,
+   "batch_bitwise_equal": false
+  },
+  {
+   "type": "q8_0",
+   "tokens": 4,
+   "us": 442.3,
+   "ratio_vs_1": 1.74,
+   "weight_gb_s": 20.2,
+   "batch_bitwise_equal": false
+  },
+  {
+   "type": "q4_K",
+   "tokens": 1,
+   "us": 177.5,
+   "ratio_vs_1": 1.0,
+   "weight_gb_s": 26.6,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "q4_K",
+   "tokens": 2,
+   "us": 212.3,
+   "ratio_vs_1": 1.2,
+   "weight_gb_s": 22.2,
+   "batch_bitwise_equal": false
+  },
+  {
+   "type": "q4_K",
+   "tokens": 3,
+   "us": 350.9,
+   "ratio_vs_1": 1.98,
+   "weight_gb_s": 13.4,
+   "batch_bitwise_equal": false
+  },
+  {
+   "type": "q4_K",
+   "tokens": 4,
+   "us": 382.7,
+   "ratio_vs_1": 2.16,
+   "weight_gb_s": 12.3,
+   "batch_bitwise_equal": false
+  },
+  {
+   "type": "q5_K",
+   "tokens": 1,
+   "us": 192.8,
+   "ratio_vs_1": 1.0,
+   "weight_gb_s": 29.9,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "q5_K",
+   "tokens": 2,
+   "us": 257.6,
+   "ratio_vs_1": 1.34,
+   "weight_gb_s": 22.4,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "q5_K",
+   "tokens": 3,
+   "us": 395.0,
+   "ratio_vs_1": 2.05,
+   "weight_gb_s": 14.6,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "q5_K",
+   "tokens": 4,
+   "us": 467.2,
+   "ratio_vs_1": 2.42,
+   "weight_gb_s": 12.3,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "q6_K",
+   "tokens": 1,
+   "us": 244.8,
+   "ratio_vs_1": 1.0,
+   "weight_gb_s": 28.1,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "q6_K",
+   "tokens": 2,
+   "us": 304.9,
+   "ratio_vs_1": 1.25,
+   "weight_gb_s": 22.6,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "q6_K",
+   "tokens": 3,
+   "us": 492.4,
+   "ratio_vs_1": 2.01,
+   "weight_gb_s": 14.0,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "q6_K",
+   "tokens": 4,
+   "us": 612.5,
+   "ratio_vs_1": 2.5,
+   "weight_gb_s": 11.2,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "iq2_xxs",
+   "tokens": 1,
+   "us": 226.4,
+   "ratio_vs_1": 1.0,
+   "weight_gb_s": 9.6,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "iq2_xxs",
+   "tokens": 2,
+   "us": 289.9,
+   "ratio_vs_1": 1.28,
+   "weight_gb_s": 7.5,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "iq2_xxs",
+   "tokens": 3,
+   "us": 498.6,
+   "ratio_vs_1": 2.2,
+   "weight_gb_s": 4.3,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "iq2_xxs",
+   "tokens": 4,
+   "us": 562.5,
+   "ratio_vs_1": 2.48,
+   "weight_gb_s": 3.8,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "iq3_xxs",
+   "tokens": 1,
+   "us": 333.5,
+   "ratio_vs_1": 1.0,
+   "weight_gb_s": 9.6,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "iq3_xxs",
+   "tokens": 2,
+   "us": 383.2,
+   "ratio_vs_1": 1.15,
+   "weight_gb_s": 8.4,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "iq3_xxs",
+   "tokens": 3,
+   "us": 916.9,
+   "ratio_vs_1": 2.75,
+   "weight_gb_s": 3.5,
+   "batch_bitwise_equal": true
+  },
+  {
+   "type": "iq3_xxs",
+   "tokens": 4,
+   "us": 953.5,
+   "ratio_vs_1": 2.86,
+   "weight_gb_s": 3.4,
+   "batch_bitwise_equal": true
+  }
+ ]
+}

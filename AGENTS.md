@@ -1,6 +1,6 @@
 # Equity engineering rules
 
-Read PROMPT_INIZIALE.md and docs/progress.md before substantial changes. Chat in Italian; write code, comments, documentation and UI text in English.
+Read docs/progress.md before substantial changes. Chat in Italian; write code, comments, documentation and UI text in English.
 
 - Preserve existing work. Implement small, executable increments; never label a scaffold as inference.
 - Use C++20/NDK/CMake for the shared engine, Kotlin for Android and Python/PowerShell for offline tools.

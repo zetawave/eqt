@@ -1,0 +1,33 @@
+{
+  "kind": "threadpool_ab",
+  "environment": "Windows host, i7-11370H, MSVC Release, 4 threads; not a phone result",
+  "method": "3 alternating pairs, 64 forced tokens, greedy; persistent pool vs GGML disposable per-graph pool",
+  "runs": {
+    "qwen3-0.6b-q8_0 resident": {
+      "persistent_tok_s": [
+        26.4,
+        26.9,
+        26.3
+      ],
+      "disposable_tok_s": [
+        25.9,
+        25.9,
+        24.7
+      ]
+    },
+    "eqt-tiny-qwen35moe streamed 2 MiB": {
+      "persistent_tok_s": [
+        169.4,
+        164.0,
+        166.8
+      ],
+      "disposable_tok_s": [
+        155.3,
+        148.2,
+        150.8
+      ]
+    }
+  },
+  "token_ids_identical": true,
+  "scope": "Host x86 indication only (+2% resident, +11% streamed medians). Thread creation cost on Android/Exynos must be measured separately."
+}

@@ -1,0 +1,268 @@
+{
+ "arms": {
+  "tiled_b512": {
+   "io_threads": 16,
+   "direct_io": true,
+   "prefetch": true,
+   "expert_cache_mib": 2048,
+   "memory_budget_mib": 6144,
+   "coalesce_kib": 2048,
+   "coalesce_gap": 1,
+   "prefill_prefetch_mib": 512,
+   "batch": 512,
+   "tiled_mm": true
+  },
+  "tiled_b2048": {
+   "io_threads": 16,
+   "direct_io": true,
+   "prefetch": true,
+   "expert_cache_mib": 2048,
+   "memory_budget_mib": 6144,
+   "coalesce_kib": 2048,
+   "coalesce_gap": 1,
+   "prefill_prefetch_mib": 512,
+   "batch": 2048,
+   "tiled_mm": true
+  },
+  "vec_b512": {
+   "io_threads": 16,
+   "direct_io": true,
+   "prefetch": true,
+   "expert_cache_mib": 2048,
+   "memory_budget_mib": 6144,
+   "coalesce_kib": 2048,
+   "coalesce_gap": 1,
+   "prefill_prefetch_mib": 512,
+   "batch": 512,
+   "tiled_mm": false
+  }
+ },
+ "base_request": {
+  "load": {
+   "context": 6144,
+   "batch": 128,
+   "threads": 4,
+   "memory_budget_mib": 4096,
+   "mmap": false,
+   "expert_streaming": true,
+   "expert_cache_mib": 1024,
+   "io_threads": 16,
+   "direct_io": true,
+   "prefetch": false
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are a concise assistant. Follow the requested language and format exactly."
+   },
+   {
+    "role": "user",
+    "content": "Archivio delle schede di magazzino:\n\nScheda 0001: il magazzino di Palermo registra 81 casse dell'articolo S-8402 il 17 ottobre.\nScheda 0002: il magazzino di Firenze registra 33 casse dell'articolo T-8794 il 21 ottobre.\nScheda 0003: il magazzino di Verona registra 33 casse dell'articolo L-8316 il 10 marzo.\nScheda 0004: il magazzino di Bergamo registra 78 casse dell'articolo K-7490 il 15 novembre.\nScheda 0005: il magazzino di Udine registra 88 casse dell'articolo M-1245 il 27 settembre.\nScheda 0006: il magazzino di Bergamo registra 17 casse dell'articolo K-4116 il 8 ottobre.\nScheda 0007: il magazzino di Ancona registra 69 casse dell'articolo Q-8217 il 19 aprile.\nScheda 0008: il magazzino di Perugia registra 39 casse dell'articolo P-9188 il 1 novembre.\nScheda 0009: il magazzino di Bergamo registra 68 casse dell'articolo P-7664 il 18 febbraio.\nScheda 0010: il magazzino di Trieste registra 42 casse dell'articolo Q-4762 il 17 maggio.\nScheda 0011: il magazzino di Ancona registra 18 casse dell'articolo V-2768 il 13 febbraio.\nScheda 0012: il magazzino di Livorno registra 59 casse dell'articolo L-1276 il 28 novembre.\nScheda 0013: il magazzino di Ancona registra 37 casse dell'articolo N-1857 il 16 luglio.\nScheda 0014: il magazzino di Trieste registra 60 casse dell'articolo R-2196 il 19 novembre.\nScheda 0015: il magazzino di Firenze registra 96 casse dell'articolo P-6519 il 3 maggio.\nScheda 0016: il magazzino di Messina registra 11 casse dell'articolo R-2933 il 5 aprile.\nScheda 0017: il magazzino di Trieste registra 22 casse dell'articolo K-1981 il 15 agosto.\nScheda 0018: il magazzino di Catania registra 97 casse dell'articolo T-4086 il 15 settembre.\nScheda 0019: il magazzino di Firenze registra 26 casse dell'articolo R-7287 il 4 luglio.\nScheda 0020: il magazzino di Padova registra 37 casse dell'articolo K-5420 il 28 ottobre.\nScheda 0021: il magazzino di Livorno registra 12 casse dell'articolo N-4068 il 13 ottobre.\nScheda 0022: il magazzino di Siena registra 83 casse dell'articolo L-1689 il 5 aprile.\nScheda 0023: il magazzino di Palermo registra 43 casse dell'articolo K-6389 il 27 maggio.\nScheda 0024: il magazzino di Napoli registra 19 casse dell'articolo L-2476 il 7 ottobre.\nScheda 0025: il magazzino di Siena registra 41 casse dell'articolo K-7040 il 12 ottobre.\nScheda 0026: il magazzino di Palermo registra 26 casse dell'articolo V-8925 il 27 ottobre.\nScheda 0027: il magazzino di Cagliari registra 59 casse dell'articolo M-3525 il 10 aprile.\nScheda 0028: il magazzino di Salerno registra 41 casse dell'articolo N-3596 il 24 novembre.\nScheda 0029: il magazzino di Pisa registra 35 casse dell'articolo R-8905 il 20 febbraio.\nScheda 0030: il magazzino di Padova registra 16 casse dell'articolo L-2786 il 2 settembre.\nScheda 0031: il magazzino di Lecce registra 40 casse dell'articolo R-5210 il 14 ottobre.\nScheda 0032: il magazzino di Parma registra 47 casse dell'articolo T-3874 il 24 febbraio.\nScheda 0033: il magazzino di Cagliari registra 39 casse dell'articolo S-2214 il 9 aprile.\nScheda 0034: il magazzino di Firenze registra 12 casse dell'articolo L-5410 il 14 agosto.\nScheda 0035: il magazzino di Genova registra 17 casse dell'articolo K-3887 il 10 giugno.\nScheda 0036: il magazzino di Perugia registra 83 casse dell'articolo M-2510 il 12 marzo.\nScheda 0037: il magazzino di Palermo registra 52 casse dell'articolo T-3299 il 19 gennaio.\nScheda 0038: il magazzino di Ancona registra 70 casse dell'articolo Q-6108 il 2 gennaio.\nScheda 0039: il magazzino di Salerno registra 91 casse dell'articolo L-8900 il 3 dicembre.\nScheda 0040: il magazzino di Livorno registra 50 casse dell'articolo M-2186 il 3 agosto.\nScheda 0041: il magazzino di Pisa registra 57 casse dell'articolo K-3122 il 26 giugno.\nScheda 0042: il magazzino di Modena registra 20 casse dell'articolo S-2272 il 28 luglio.\nScheda 0043: il magazzino di Verona registra 13 casse dell'articolo S-1238 il 20 novembre.\nScheda 0044: il magazzino di Napoli registra 58 casse dell'articolo V-1203 il 20 febbraio.\nScheda 0045: il magazzino di Bergamo registra 21 casse dell'articolo L-5214 il 14 dicembre.\nScheda 0046: il magazzino di Messina registra 59 casse dell'articolo V-8499 il 15 agosto.\nScheda 0047: il magazzino di Pisa registra 20 casse dell'articolo T-9430 il 1 maggio.\nScheda 0048: il magazzino di Salerno registra 21 casse dell'articolo S-1365 il 8 dicembre.\nScheda 0049: il magazzino di Bologna registra 73 casse dell'articolo V-8967 il 9 gennaio.\nScheda 0050: il magazzino di Modena registra 48 casse dell'articolo M-4318 il 17 marzo.\nScheda 0051: il magazzino di Venezia registra 53 casse dell'articolo S-9164 il 8 giugno.\nScheda 0052: il magazzino di Napoli registra 95 casse dell'articolo P-4252 il 21 luglio.\nScheda 0053: il magazzino di Verona registra 35 casse dell'articolo N-7298 il 8 ottobre.\nScheda 0054: il magazzino di Messina registra 36 casse dell'articolo M-3204 il 16 giugno.\nScheda 0055: il magazzino di Bari registra 18 casse dell'articolo P-3771 il 4 agosto.\nScheda 0056: il magazzino di Parma registra 45 casse dell'articolo N-7782 il 13 novembre.\nScheda 0057: il magazzino di Perugia registra 73 casse dell'articolo Q-8413 il 11 febbraio.\nScheda 0058: il magazzino di Bari registra 45 casse dell'articolo V-1679 il 22 dicembre.\nScheda 0059: il magazzino di Lecce registra 83 casse dell'articolo Q-6063 il 21 ottobre.\nScheda speciale: il codice di accesso del laboratorio di Trento \u00e8 3704-ALFA.\nScheda 0060: il magazzino di Ancona registra 92 casse dell'articolo M-7638 il 15 aprile.\nScheda 0061: il magazzino di Ancona registra 44 casse dell'articolo N-3308 il 26 gennaio.\nScheda 0062: il magazzino di Siena registra 24 casse dell'articolo S-2786 il 21 settembre.\nScheda 0063: il magazzino di Siena registra 91 casse dell'articolo Q-2277 il 22 aprile.\nScheda 0064: il magazzino di Firenze registra 70 casse dell'articolo P-3927 il 23 gennaio.\nScheda 0065: il magazzino di Venezia registra 70 casse dell'articolo T-1592 il 6 aprile.\nScheda 0066: il magazzino di Lecce registra 54 casse dell'articolo T-9526 il 17 ottobre.\nScheda 0067: il magazzino di Venezia registra 30 casse dell'articolo R-4668 il 3 luglio.\nScheda 0068: il magazzino di Udine registra 59 casse dell'articolo M-8381 il 15 aprile.\nScheda 0069: il magazzino di Siena registra 10 casse dell'articolo R-9235 il 26 giugno.\nScheda 0070: il magazzino di Palermo registra 51 casse dell'articolo N-2621 il 24 novembre.\nScheda 0071: il magazzino di Trieste registra 25 casse dell'articolo N-4969 il 13 febbraio.\nScheda 0072: il magazzino di Livorno registra 78 casse dell'articolo Q-5290 il 23 gennaio.\nScheda 0073: il magazzino di Modena registra 74 casse dell'articolo L-1608 il 15 giugno.\nScheda 0074: il magazzino di Pisa registra 63 casse dell'articolo P-8986 il 1 aprile.\nScheda 0075: il magazzino di Verona registra 18 casse dell'articolo R-1575 il 6 settembre.\nScheda 0076: il magazzino di Messina registra 97 casse dell'articolo M-8709 il 5 settembre.\nScheda 0077: il magazzino di Udine registra 76 casse dell'articolo S-9070 il 19 dicembre.\nScheda 0078: il magazzino di Bergamo registra 38 casse dell'articolo S-9628 il 18 maggio.\nScheda 0079: il magazzino di Udine registra 81 casse dell'articolo M-9565 il 17 settembre.\nScheda 0080: il magazzino di Lecce registra 49 casse dell'articolo R-4411 il 10 marzo.\nScheda 0081: il magazzino di Pisa registra 77 casse dell'articolo P-9153 il 7 luglio.\nScheda 0082: il magazzino di Pisa registra 24 casse dell'articolo T-1080 il 20 luglio.\nScheda 0083: il magazzino di Ancona registra 78 casse dell'articolo K-9454 il 13 settembre.\nScheda 0084: il magazzino di Verona registra 82 casse dell'articolo L-9045 il 3 dicembre.\nScheda 0085: il magazzino di Catania registra 18 casse dell'articolo T-8519 il 14 luglio.\nScheda 0086: il magazzino di Lecce registra 41 casse dell'articolo S-9077 il 5 giugno.\nScheda 0087: il magazzino di Padova registra 70 casse dell'articolo T-6197 il 4 aprile.\nScheda 0088: il magazzino di Padova registra 89 casse dell'articolo K-5263 il 5 dicembre.\nScheda 0089: il magazzino di Venezia registra 12 casse dell'articolo K-4180 il 5 aprile.\nScheda 0090: il magazzino di Ancona registra 97 casse dell'articolo P-6276 il 24 giugno.\nScheda 0091: il magazzino di Genova registra 89 casse dell'articolo S-2718 il 16 dicembre.\nScheda 0092: il magazzino di Ravenna registra 25 casse dell'articolo T-5105 il 23 aprile.\nScheda 0093: il magazzino di Trieste registra 77 casse dell'articolo R-1380 il 13 novembre.\nScheda 0094: il magazzino di Padova registra 77 casse dell'articolo V-3616 il 18 aprile.\nScheda 0095: il magazzino di Siena registra 78 casse dell'articolo N-9677 il 7 settembre.\nScheda 0096: il magazzino di Salerno registra 85 casse dell'articolo M-4811 il 24 novembre.\nScheda 0097: il magazzino di Verona registra 54 casse dell'articolo M-6175 il 20 giugno.\nScheda 0098: il magazzino di Firenze registra 37 casse dell'articolo N-2586 il 5 aprile.\nScheda 0099: il magazzino di Cagliari registra 21 casse dell'articolo P-7355 il 4 luglio.\nScheda 0100: il magazzino di Padova registra 79 casse dell'articolo M-4287 il 13 novembre.\nScheda 0101: il magazzino di Torino registra 12 casse dell'articolo L-4292 il 19 novembre.\nScheda 0102: il magazzino di Modena registra 56 casse dell'articolo L-9285 il 21 giugno.\nScheda 0103: il magazzino di Perugia registra 97 casse dell'articolo N-2155 il 16 febbraio.\nScheda 0104: il magazzino di Ancona registra 14 casse dell'articolo T-9434 il 19 agosto.\nScheda 0105: il magazzino di Cagliari registra 34 casse dell'articolo M-2883 il 7 marzo.\nScheda 0106: il magazzino di Catania registra 46 casse dell'articolo L-2014 il 5 novembre.\nScheda 0107: il magazzino di Palermo registra 19 casse dell'articolo L-6354 il 13 agosto.\nScheda 0108: il magazzino di Padova registra 75 casse dell'articolo Q-8046 il 7 ottobre.\nScheda 0109: il magazzino di Modena registra 11 casse dell'articolo K-4281 il 6 luglio.\nScheda 0110: il magazzino di Palermo registra 56 casse dell'articolo Q-7640 il 7 ottobre.\n\nQual \u00e8 il codice di accesso del laboratorio di Trento? Rispondi solo con il codice."
+   }
+  ],
+  "max_tokens": 16,
+  "temperature": 0,
+  "seed": 42,
+  "thinking": false,
+  "ignore_eos": true
+ },
+ "rows": [
+  {
+   "arm": "tiled_b512",
+   "repetition": 0,
+   "load": {
+    "io_threads": 16,
+    "direct_io": true,
+    "prefetch": true,
+    "expert_cache_mib": 2048,
+    "memory_budget_mib": 6144,
+    "coalesce_kib": 2048,
+    "coalesce_gap": 1,
+    "prefill_prefetch_mib": 512,
+    "batch": 512,
+    "tiled_mm": true
+   },
+   "thermal_before": "0",
+   "thermal_after": "1",
+   "celsius_before": {
+    "SKIN": 37.0,
+    "AP": 39.3
+   },
+   "decode_process_cpu": {
+    "user_ms": 14786.77600000007,
+    "system_ms": 3629.3410000000003,
+    "minor_faults": 519961.0,
+    "major_faults": 21.0,
+    "voluntary_switches": 40755.0,
+    "involuntary_switches": 1270.0
+   },
+   "tokens": [
+    18,
+    22,
+    15,
+    19,
+    12,
+    939,
+    3505,
+    248046,
+    198,
+    248044,
+    248045,
+    248045,
+    248045,
+    248045,
+    248045,
+    248045
+   ],
+   "load_ms": 2700.950742,
+   "prefill_ms": 335579.465039,
+   "decode_ms": 4126.506758,
+   "decode_tokens_per_second": 3.8773715731789427,
+   "p50_ms": 282.143398,
+   "p95_ms": 354.650313,
+   "decode_io_wait_ms": 1118.1310970000013,
+   "io_wait_ms": 1664.4824650000003,
+   "decode_misses": 773,
+   "decode_demanded": 4800,
+   "decode_read_bytes": 741654528,
+   "demand_read_bytes": 1666777088,
+   "physical_read_bytes": 65408442368,
+   "peak_resident_bytes": 2600271872,
+   "rss_bytes": 3920584704,
+   "peak_rss_bytes": 4829405184,
+   "speculative": null
+  },
+  {
+   "arm": "tiled_b2048",
+   "repetition": 0,
+   "load": {
+    "io_threads": 16,
+    "direct_io": true,
+    "prefetch": true,
+    "expert_cache_mib": 2048,
+    "memory_budget_mib": 6144,
+    "coalesce_kib": 2048,
+    "coalesce_gap": 1,
+    "prefill_prefetch_mib": 512,
+    "batch": 2048,
+    "tiled_mm": true
+   },
+   "thermal_before": "0",
+   "thermal_after": "1",
+   "celsius_before": {
+    "SKIN": 37.0,
+    "AP": 39.8
+   },
+   "decode_process_cpu": {
+    "user_ms": 15027.56100000022,
+    "system_ms": 4207.225999999999,
+    "minor_faults": 528437.0,
+    "major_faults": 25805.0,
+    "voluntary_switches": 42554.0,
+    "involuntary_switches": 3101.0
+   },
+   "tokens": [
+    18,
+    22,
+    15,
+    19,
+    12,
+    939,
+    3505,
+    248046,
+    198,
+    248044,
+    248045,
+    248045,
+    248045,
+    248045,
+    248045,
+    248045
+   ],
+   "load_ms": 2466.368672,
+   "prefill_ms": 309763.625977,
+   "decode_ms": 4292.270977,
+   "decode_tokens_per_second": 3.7276304515105174,
+   "p50_ms": 287.030273,
+   "p95_ms": 440.814961,
+   "decode_io_wait_ms": 1155.0182850000026,
+   "io_wait_ms": 1326.167111000002,
+   "decode_misses": 748,
+   "decode_demanded": 4800,
+   "decode_read_bytes": 718856192,
+   "demand_read_bytes": 1058947072,
+   "physical_read_bytes": 19688325120,
+   "peak_resident_bytes": 2600271872,
+   "rss_bytes": 4071747584,
+   "peak_rss_bytes": 5110427648,
+   "speculative": null
+  },
+  {
+   "arm": "vec_b512",
+   "repetition": 0,
+   "load": {
+    "io_threads": 16,
+    "direct_io": true,
+    "prefetch": true,
+    "expert_cache_mib": 2048,
+    "memory_budget_mib": 6144,
+    "coalesce_kib": 2048,
+    "coalesce_gap": 1,
+    "prefill_prefetch_mib": 512,
+    "batch": 512,
+    "tiled_mm": false
+   },
+   "thermal_before": "0",
+   "thermal_after": "2",
+   "celsius_before": {
+    "SKIN": 36.9,
+    "AP": 39.4
+   },
+   "decode_process_cpu": {
+    "user_ms": 14315.354999999981,
+    "system_ms": 3835.8129999999946,
+    "minor_faults": 509005.0,
+    "major_faults": 23.0,
+    "voluntary_switches": 40551.0,
+    "involuntary_switches": 1432.0
+   },
+   "tokens": [
+    18,
+    22,
+    15,
+    19,
+    12,
+    939,
+    3505,
+    248046,
+    198,
+    248044,
+    248045,
+    248045,
+    248045,
+    248045,
+    248045,
+    248045
+   ],
+   "load_ms": 2609.738477,
+   "prefill_ms": 453658.322031,
+   "decode_ms": 4076.499453,
+   "decode_tokens_per_second": 3.9249361331877997,
+   "p50_ms": 277.601914,
+   "p95_ms": 354.072305,
+   "decode_io_wait_ms": 1058.9431620000012,
+   "io_wait_ms": 1616.5608910000024,
+   "decode_misses": 720,
+   "decode_demanded": 4800,
+   "decode_read_bytes": 689872896,
+   "demand_read_bytes": 1614995456,
+   "physical_read_bytes": 65366777856,
+   "peak_resident_bytes": 2600271872,
+   "rss_bytes": 3949051904,
+   "peak_rss_bytes": 4830724096,
+   "speculative": null
+  }
+ ],
+ "identical_token_sequences": true,
+ "page_cache": "uncontrolled; buffered arms can hit page cache"
+}

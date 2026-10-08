@@ -1,53 +1,84 @@
+<p align="center"><img src="docs/figures/logo.svg" width="96" alt="Equity logo"></p>
+
 # Equity (eqt)
 
-An offline Android inference research engine targeting Galaxy S24+ / Exynos 2400. The goal is useful inference with a capable model larger than available RAM; **5 sustained tokens/s is an experimental target, not a promise**.
+**Equity runs language models that do not fit in a phone's RAM — on the phone, offline, at usable speed.**
 
-## Current status
+It is a research inference engine specialised in one model family, the **Qwen3.5/3.6 hybrid-attention mixture-of-experts models**, on one first device, a stock **Samsung Galaxy S24+ (Exynos 2400, 10.9 GiB visible RAM)**. No root, no cloud, no account, no telemetry. Weights stay on the phone's storage and the engine reads only the experts each token needs.
 
-- A shared C++20 CPU engine and native benchmark CLI run real Qwen inference on the stock Galaxy.
-- A 15-minute Qwen3-0.6B Q8 repeated-request run completed 53 requests / 13,568 tokens: weighted decode **19.19 tokens/s**, range 17.94–20.29, peak RSS about 885 MiB. This is a small resident fixture, not the 35B or beyond-RAM performance.
-- The Kotlin app builds and runs real chat on the Galaxy. Native instrumentation passes reload, cancellation and recovery checks.
-- Qwen3.6-35B-A3B is the main research candidate. Its pinned mixed Q4 GGUF is 22,134,528,992 bytes. Only its metadata prefix has been acquired; target inference, a bounded expert cache and streaming are not implemented yet.
-- Dense and hybrid fixtures pass host numerical/state checks. Target expert byte ranges are now validated from the header; storage tests and next steps are recorded in [progress](docs/progress.md).
-- M0 research is documented. The small-model M1 vertical path works; the principal checkpoint and M2–M4 remain pending. See [progress](docs/progress.md), [decisions](docs/decisions.md), [research](docs/research.md) and [benchmark protocol](docs/benchmarking.md).
+## What is true today
+
+All numbers are measured on the Galaxy and recorded in [`results/`](results/).
+
+- **A model twice the phone's RAM runs.** Qwen3.6-35B-A3B (UD-Q4_K_M, 22.7 GB) and its 2.7-bit UD-IQ2_M build (11.9 GB) stream on a stock phone with a peak RSS of about 4.7 GiB. Routing is exact: streamed inference is bitwise identical to resident inference on the verification fixtures.
+- **Over 5 tokens/s in short runs.** UD-IQ2_M decodes at 5.5 tokens/s on average (5.8 at best) over 64 tokens on a cool phone.
+- **About 3.5 tokens/s sustained.** Over 10 minutes on battery, the phone's stock thermal management settles decode at about 3.5 tokens/s, at about 1.07 J per token.
+- **Quality held on a first check.** On a 27-item, automatically checked set (Italian, instructions, reasoning, code, knowledge, long context), UD-IQ2_M and UD-Q4_K_M both score 26/27, and the 2.7-bit build is about 33% faster. The set is small, so UD-Q4_K_M stays the reference.
+- **Long context works.** Context is limited only by the model (262,144 tokens). A 7,857-token needle-in-a-haystack prompt is answered correctly, and a 3,803-token prompt prefills in 164 s, down from 522 s.
+- **Optimizations are exact.** Every speedup is either bitwise exact or differs only in float rounding (at most 3.4·10⁻⁷ relative), and is A/B-tested with identical output tokens. The 5 tokens/s *sustained* goal is an experimental target, not a promise; quality and context are never traded for speed.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/decode-progress-dark.svg">
+  <img alt="Decode tokens per second for Qwen3.6-35B-A3B on the Galaxy across optimization steps, from 2.52 to 5.54" src="docs/figures/decode-progress-light.svg">
+</picture>
+
+| Prompt processing, UD-IQ2_M | Before | Now |
+|---|---|---|
+| 52-token chat prompt | 5.78 s | 3.95 s |
+| 3,803-token prompt | 521.6 s | 164.4 s |
+
+## How it works
+
+- **Shared weights stay resident; experts stream.** About 1.7–2.4 GiB of attention and shared weights stay in RAM. Routed experts, 9–19 GB, are read with direct I/O into a bounded cache of reusable, page-aligned slots. GGML's expert matrix product finds each expert's slot through a hook added by Equity. Reloads take no page faults.
+- **Prediction and overlap.** A lookahead router prefetches the next layer's experts while the current layer computes. Prompt batches read adjacent experts in single coalesced reads and load whole layers ahead.
+- **Kernels for this CPU.**
+  - Decode and speculative verification use exact 2×2 dotprod tiles.
+  - Prompts use GGML's tiled GEMM, enabled on ARM with Equity's own i8mm microkernel.
+  - Attention uses a NEON GEMM where GGML's SVE builds fell back to scalar code.
+  - The right ISA variant is picked at runtime.
+- **Stock Android only.** No root, no thermal overrides; model acquisition is an explicit step.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/models-dark.svg">
+  <img alt="Model file size versus process peak RSS against the phone's RAM" src="docs/figures/models-light.svg">
+</picture>
+
+## Documents
+
+| | |
+|---|---|
+| [Progress and next steps](docs/progress.md) | Session log, current state, the plan to resume from |
+| [Decisions](docs/decisions.md) | Every design choice with its measurements, including negative results |
+| [Benchmark protocol](docs/benchmarking.md) | How speed, quality and energy are measured |
+| [Research ledger](docs/research.md) | Literature, hypotheses and how they were tested |
+| [Third-party notices](THIRD_PARTY_NOTICES.md) | Licenses of dependencies and fonts |
 
 ## Build and run
 
-Windows prerequisites: Git, Python 3.12, Android SDK 36, NDK `28.2.13676358`, SDK CMake `3.22.1`, JDK 17+ (tested with 21), `ANDROID_HOME`, and ADB on PATH. Host build additionally needs Visual Studio 2022 C++ tools. Dependencies are pinned in `dependencies.json`; Gradle wrapper uses 8.13.
+Prerequisites (Windows): Git, Python 3.12, Android SDK 36, NDK `28.2.13676358`, SDK CMake `3.22.1`, JDK 17+, `ANDROID_HOME`, and ADB on PATH. Dependencies are pinned in `dependencies.json`, and `scripts/bootstrap.ps1` checks llama.cpp against its recorded patches.
 
 ```powershell
-./scripts/bootstrap.ps1
-python tools/acquire_model.py configs/smoke-model.json
-./scripts/build.ps1 -Target Android -Jobs 2
-python tools/device.py
-python tools/benchmark.py --target android --repetitions 3
-./android/gradlew.bat -p android assembleDebug assembleDebugAndroidTest
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+# App: build and install over (wireless) ADB; models live in the app's private storage
+./scripts/android-app.ps1 -Variant Debug -Install -Serial <ip:port>
+
+# Native engine and CLI tools
+./scripts/build.ps1 -Target Android
+python tools/verify_streaming.py --target android --direct-io   # bitwise streamed-vs-resident checks
+python tools/eval_quality.py run --target android --model <device path> --output <file>
+python tools/sustained_run.py --model <device path> --load '{...}' --output <file>
 ```
 
-Acquire weights explicitly; build and inference do not download models. App runtime has no Internet permission, analytics, account requirement or cloud inference. Model acquisition requires Internet; inference is offline. App backup is disabled.
+Inference is offline. Acquiring weights is an explicit operation (`tools/acquire_model.py`, or the app's resumable download). Builds never download models.
 
-Use **Open GGUF** to select a local seekable file. For a reproducible debug fixture, run the CLI once as above, then install and run the instrumentation APK. It explicitly copies the verified fixture from `/data/local/tmp/eqt` into app-private storage using test-only shell access:
+## Acknowledgements
 
-```powershell
-adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb shell am instrument -w org.equity.app.test/org.equity.app.NativeSmokeTest
-adb shell am start -W -n org.equity.app/.MainActivity
-```
+Equity builds on [llama.cpp and GGML](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and contributors, pinned with two recorded patches. The streaming design was informed by [DwarfStar/ds4](https://github.com/antirez/ds4) by antirez and by published work on expert offloading. Model weights belong to their publishers under their own licenses. Development is AI-assisted; every claim is tied to a measurement record.
 
-Tap **Staged model**, then **Send**. Production selection needs neither ADB nor test privileges. The picker attempts direct descriptor access without copying weights; providers whose descriptors cannot be reopened are rejected. Actual system-picker selection is still unverified; the private-file descriptor path passed instrumentation. ADB-created external files were not readable by this app on the tested firmware, so pushing into Android/data alone is insufficient. A single GGUF is supported; pipes, split models and multimodal input are unsupported. Hashing reads the entire model and warms filesystem caches. Debug staging makes one explicit additional ~610 MiB fixture copy, not a copy of arbitrary imported models.
+## License & Commercial Licensing
 
-CPU, mmap, context, threads and the resident admission budget are reported after load. The budget is a conservative file-size admission check with workspace reserve, **not an enforced RSS limit**. Expert-cache controls are absent until there is a real bounded cache. Stop cancels native CPU execution; each subsequent request rebuilds the prefix. Leaving the activity cancels ongoing work. Conversations live in process memory; export is explicit.
+This project is dual-licensed:
 
-```powershell
-./scripts/build.ps1 -Target Host -Jobs 2
-python tools/benchmark.py --target host --repetitions 3
-python tools/verify_runtime.py --target host
-python tools/acquire_model.py configs/hybrid-model.json
-python tools/verify_runtime.py --target host --model models/Qwen3.5-0.8B-Q8_0.gguf
-python -m unittest discover -s tools -p 'test_*.py'
-```
+1. **Open Source (AGPLv3):** Free for personal use, education, and open-source projects. Under the **GNU AGPLv3**, any modified version or service integrating this software must also release its source code publicly under the same AGPLv3 license.
+2. **Commercial License:** If you wish to use this software in proprietary/closed-source products, SaaS platforms without releasing your source code, or require custom enterprise terms, you must purchase a commercial license.
 
-Results default to ignored `results/local/`. Only public workloads and small selected records belong in Git. The app's export contains generated text; review before sharing. Full model weights and build artifacts remain ignored.
-
-Code license and weight conditions are separate. See [third-party notices](THIRD_PARTY_NOTICES.md). No license is inferred from a model's name; use the pinned artifact's license.
+For commercial licensing requests, contact: **z3tawave@gmail.com**

@@ -1,0 +1,15 @@
+{
+ "prompt_tokens": 588,
+ "first_logits_bitwise_equal": true,
+ "prefill_ms_scalar_gemm": 25751.474101,
+ "prefill_ms_neon_gemm": 22698.022226,
+ "token_ids": [
+  [
+   21
+  ],
+  [
+   21
+  ]
+ ],
+ "note": "Same v9.0 (SVE) build before/after the AArch64 NEON path in simd-gemm.h; flash-attention tiles use simd_gemm"
+}

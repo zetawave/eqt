@@ -1,0 +1,2 @@
+# Patch hashes in dependencies.json are computed over LF bytes.
+*.patch text eol=lf

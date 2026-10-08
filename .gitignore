@@ -13,3 +13,7 @@
 *.gguf
 *.safetensors
 *.part
+/android/keystore.properties
+/android/keystore/
+*.jks
+*.keystore

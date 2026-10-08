@@ -1,0 +1,17 @@
+{
+  "repository": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF",
+  "revision": "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
+  "license": "apache-2.0",
+  "purpose": "Asymmetric quantization candidate: routed experts mostly IQ2_XXS/IQ3_XXS (9.4 GiB), attention and shared expert Q5_K/Q6_K, MTP block included. Quality must be evaluated against the UD-Q4_K_M reference answers.",
+  "files": [
+    {
+      "name": "Qwen3.6-35B-A3B-UD-IQ2_M.gguf",
+      "size_bytes": 11882969376,
+      "sha256": "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
+      "header": {
+        "size_bytes": 16777216,
+        "sha256": "8fbdc2e2bd037e482a80c9c57366771e327f60355946556d901e0982a5f9e2d3"
+      }
+    }
+  ]
+}

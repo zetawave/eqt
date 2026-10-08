@@ -1,0 +1,8 @@
+{"id":"cal-it-chat","category":"italian-chat","prompt":"Ciao! Mi consigli tre modi per organizzare meglio la mia settimana lavorativa? Rispondi in modo pratico."}
+{"id":"cal-it-explain","category":"italian-explanation","prompt":"Spiega in italiano come funziona la fotosintesi a uno studente delle medie, con un esempio quotidiano."}
+{"id":"cal-en-summary","category":"english","prompt":"Summarize the main trade-offs between electric cars and hybrid cars for a family that drives 60 km per day."}
+{"id":"cal-code-python","category":"coding","prompt":"Write a Python function that merges two sorted lists into one sorted list without using sort(). Explain its complexity briefly."}
+{"id":"cal-code-cpp","category":"coding","prompt":"In C++, write a small RAII wrapper for a POSIX file descriptor that is movable but not copyable."}
+{"id":"cal-math","category":"reasoning","prompt":"Un treno parte alle 9:40 e viaggia a 120 km/h per 210 km, poi a 90 km/h per 45 km. A che ora arriva? Mostra i passaggi."}
+{"id":"cal-it-letter","category":"italian-writing","prompt":"Scrivi una breve email formale al condominio per segnalare un guasto all'ascensore."}
+{"id":"cal-json","category":"format","prompt":"Return only a JSON array with three objects describing fruits, each with name, color and average weight in grams."}

@@ -1,0 +1,117 @@
+{
+ "model": "/data/local/tmp/eqt/mtp/Qwen3.6-35B-A3B-UD-IQ2_M.gguf",
+ "load": {
+  "context": 2656,
+  "batch": 512,
+  "threads": 4,
+  "memory_budget_mib": 6656,
+  "mmap": false,
+  "expert_streaming": true,
+  "expert_cache_mib": 2048,
+  "io_threads": 16,
+  "direct_io": true,
+  "prefetch": true,
+  "coalesce_kib": 2048,
+  "coalesce_gap": 1,
+  "prefill_prefetch_mib": 512,
+  "tiled_mm": true,
+  "expert_slots": true
+ },
+ "tokens": 2400,
+ "decode_tokens_per_second": 3.6961270667713095,
+ "tokens_per_second_by_minute": [
+  4.55,
+  3.96,
+  3.98,
+  3.67,
+  3.57,
+  3.53,
+  3.51,
+  3.49,
+  3.43,
+  3.48
+ ],
+ "prefill_ms": 3744.271953,
+ "decode_ms": 649328.325743,
+ "wall_seconds": 656.905999999959,
+ "idle_watts": 3.552727997471453,
+ "run_joules": 4890.3784019999985,
+ "net_joules": 2556.570064093162,
+ "net_joules_per_token": 1.065237526705484,
+ "battery_level": [
+  86,
+  79
+ ],
+ "thermal": [
+  "0",
+  "4"
+ ],
+ "celsius": [
+  {
+   "AP": 39.4,
+   "BAT": 36.9,
+   "CP": 38.9,
+   "PA": 38.9,
+   "SKIN": 36.7,
+   "SUBBAT": 0.0,
+   "USB": 35.3
+  },
+  {
+   "AP": 60.3,
+   "BAT": 47.4,
+   "CP": 57.1,
+   "PA": 56.4,
+   "SKIN": 47.3,
+   "SUBBAT": 0.0,
+   "USB": 38.8
+  }
+ ],
+ "expert_cache": {
+  "ensure_calls": 96000,
+  "demanded_experts": 771678,
+  "hits": 596607,
+  "prefetch_hits": 192210,
+  "inflight_prefetch_hits": 3317,
+  "misses": 171754,
+  "demand_read_bytes": 163458170880,
+  "prefetch_read_bytes": 282355499008,
+  "prefetch_issued": 296201,
+  "prefetch_wasted": 99515,
+  "predicted": 748488,
+  "predicted_correct": 480946,
+  "evictions": 465744,
+  "overflow_events": 157,
+  "io_wait_ms": 198668.05159599736,
+  "decode_demanded_experts": 767680,
+  "decode_misses": 171595,
+  "decode_read_bytes": 165416939520,
+  "decode_io_wait_ms": 197296.66030699754,
+  "predict_ms": 14331.84102400011,
+  "evict_ms": 129.4009960004042,
+  "slot_cold_reuses": 6,
+  "slot_arena_committed_bytes": 3014361088,
+  "read_jobs": 1375578,
+  "coalesced_reads": 10731,
+  "bridged_experts": 300,
+  "resident_bytes": 2137378816,
+  "peak_resident_bytes": 2632613888
+ },
+ "decode_process_cpu": {
+  "user_ms": 2375437.351,
+  "system_ms": 229697.092,
+  "minor_faults": 2288.0,
+  "major_faults": 10038.0,
+  "voluntary_switches": 3783732.0,
+  "involuntary_switches": 230849.0
+ },
+ "memory_after": {
+  "rss_bytes": 3967320064,
+  "peak_rss_bytes": 5019881472,
+  "pss_bytes": 3967690752,
+  "minor_faults": 1241116,
+  "major_faults": 10046,
+  "storage_read_bytes": 452171673600
+ },
+ "text_head": "La RAM è una memoria volatile utilizzata per l'elaborazione temporanea dei dati mentre il sistema è attivo, garantendo velocità di accesso immediata. Al contrario, la memoria di archiviazione è non volatile e serve a conservare permanentemente file e programmi anche quando il dispositivo è spento.<|im_end|>\n<|endoftext|><|im_start|><|im_start|><|im_start|><|im_start|><|im_start|>user\n<|im_end|>\n<|",
+ "energy_scope": "whole phone, idle baseline subtracted; battery service charge counter"
+}
