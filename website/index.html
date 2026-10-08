@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Equity — language models beyond your device's memory, on the device</title>
+  <meta name="description" content="Equity is a research inference engine that streams mixture-of-experts weights from storage on a stock Android device, offline. Models larger than the device's memory run bitwise exactly, with no cloud.">
+  <meta property="og:title" content="Equity — LLMs beyond your device's memory, on the device">
+  <meta property="og:description" content="The model is bigger than the memory. It runs anyway. Equity streams the experts each token needs, bitwise exactly.">
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/fonts/fonts.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="scroll-progress" aria-hidden="true"><span id="scroll-progress-bar"></span></div>
+
+<header class="nav" id="nav">
+  <div class="container nav-inner">
+    <a href="#top" class="brand">
+      <img src="assets/logo.svg" alt="" width="26" height="26">
+      <span>Equity</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#idea">Idea</a>
+      <a href="#how">How it works</a>
+      <a href="#climb">The climb</a>
+      <a href="#numbers">Numbers</a>
+      <a href="#milestones">Milestones</a>
+    </nav>
+    <span class="nav-chip">research preview</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============================== HERO ============================== -->
+  <section class="hero" id="top">
+    <canvas id="hero-canvas" aria-hidden="true"></canvas>
+    <div class="hero-aurora" aria-hidden="true"></div>
+    <div class="hero-inner container">
+      <p class="eyebrow reveal">research inference engine&nbsp;&nbsp;·&nbsp;&nbsp;stock Android&nbsp;&nbsp;·&nbsp;&nbsp;offline</p>
+      <h1 class="reveal">
+        <span class="h1-line">The model is <em>bigger</em></span>
+        <span class="h1-line">than the phone's <em>memory</em>.</span>
+        <span class="h1-line grad">It runs anyway.</span>
+      </h1>
+      <p class="hero-sub reveal">Equity runs mixture-of-experts models larger than the device's memory — offline, on stock
+        Android — by streaming from storage only the experts each token needs, bit for bit. Streamed output is
+        <strong>bitwise identical</strong> to running the model in memory. No cloud, no shrinking, no compromise.</p>
+      <div class="hero-ctas reveal">
+        <a class="btn btn-primary" href="#climb">See the climb</a>
+        <a class="btn btn-ghost" href="#how">How it works</a>
+      </div>
+      <div class="hero-chips reveal" aria-label="Key facts">
+        <span class="chip">5.54 tok/s decode</span>
+        <span class="chip">262k context</span>
+        <span class="chip">0 bytes sent</span>
+        <span class="chip">no root</span>
+      </div>
+    </div>
+    <div class="hero-foot container">
+      <span class="mono-dim">weights streamed from flash · every claim tied to a measurement record</span>
+      <a class="scroll-hint" href="#idea" aria-label="Scroll to the idea">
+        <span>scroll</span>
+        <span class="scroll-hint-line" aria-hidden="true"></span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============================== IDEA ============================== -->
+  <section class="section" id="idea">
+    <div class="container">
+      <p class="eyebrow reveal">the idea</p>
+      <h2 class="reveal">Mixture-of-experts models are <em>mostly dormant weights</em>.</h2>
+      <p class="lede reveal">In a MoE transformer, each token activates only a handful of experts per layer. The rest of the
+        model just sits there. A large MoE model might therefore never need most of its weights at any given instant —
+        and flash storage can keep up, if you read exactly the right bytes at exactly the right time.</p>
+      <p class="lede reveal">Equity keeps the shared attention and shared-expert weights resident, and streams the routed
+        experts from the phone's storage on demand. The model is never shrunk, distilled or approximated to fit:
+        what runs is the published model, bit for bit.</p>
+
+      <div class="fit-visual reveal" aria-label="Model size versus device memory">
+        <div class="fit-row">
+          <span class="fit-label">model file</span>
+          <div class="fit-track"><div class="fit-bar fit-model" style="--w:100%"><span>22.7&nbsp;GB&nbsp;· UD-Q4_K_M</span></div></div>
+        </div>
+        <div class="fit-row">
+          <span class="fit-label">visible RAM</span>
+          <div class="fit-track"><div class="fit-bar fit-ram" style="--w:48%"><span>10.9&nbsp;GiB</span></div></div>
+        </div>
+        <div class="fit-row">
+          <span class="fit-label">peak RSS</span>
+          <div class="fit-track"><div class="fit-bar fit-rss" style="--w:20.7%"><span>≈4.7&nbsp;GiB</span></div></div>
+        </div>
+        <p class="fit-note mono-dim">the model is 2.1× the phone's memory; the process never holds more than ~4.7 GiB</p>
+      </div>
+
+      <div class="pillars">
+        <article class="card reveal">
+          <div class="card-glyph">≡</div>
+          <h3>Exact by construction</h3>
+          <p>Streamed inference is <strong>bitwise identical</strong> to resident inference on verification fixtures — host,
+            Linux container with real <span class="mono">O_DIRECT</span>, and the phone. Optimizations are either bitwise
+            exact or differ only in float rounding (≤&nbsp;3.4·10⁻⁷ relative), with output tokens compared on device.</p>
+        </article>
+        <article class="card reveal">
+          <div class="card-glyph">◍</div>
+          <h3>Off-grid by default</h3>
+          <p>Stock Android, no root, no thermal overrides. No network permission, no accounts, no telemetry, no silent
+            downloads — acquiring the weights is an explicit, resumable step. Nothing leaves the phone.</p>
+        </article>
+        <article class="card reveal">
+          <div class="card-glyph">⌁</div>
+          <h3>Measured, not promised</h3>
+          <p>Every number ties to a record in <span class="mono">results/</span>. A/B runs cooled to skin temperature,
+            energy read from the battery counter, an automatically checked quality set. Negative results are kept and
+            written down, not deleted.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== HOW ============================== -->
+  <section class="section" id="how">
+    <div class="container">
+      <p class="eyebrow reveal">how it works</p>
+      <h2 class="reveal">Shared weights stay resident. <em>Experts stream.</em></h2>
+      <p class="lede reveal">One token touches forty layers in a fixed cycle. Equity turns that pattern into a pipeline:
+        predict, read, compute — overlapped, zero-copy, and exact.</p>
+
+      <figure class="pipeline-wrap reveal">
+        <canvas id="pipeline-canvas" aria-label="Pipeline: storage streams experts through direct I/O into a slot cache, feeding four compute cores; the router prefetches the next layer ahead."></canvas>
+        <figcaption class="mono-dim">the decode path — one token's experts travel left to right; the dashed line is the router lookahead</figcaption>
+      </figure>
+
+      <div class="cards-grid">
+        <article class="card reveal">
+          <h3><span class="card-num">01</span>Resident core, streamed experts</h3>
+          <p>About 2.4&nbsp;GiB of attention and shared weights live in RAM. The routed experts — 9–19&nbsp;GB — are read on
+            demand into a bounded set of reusable, page-aligned slots, found through a hook added to GGML's
+            <span class="mono">MUL_MAT_ID</span>.</p>
+        </article>
+        <article class="card reveal">
+          <h3><span class="card-num">02</span>Zero-copy direct I/O</h3>
+          <p>Expert banks sit at file offsets congruent to their memory addresses, so direct reads land in place — no
+            bounce buffer, no page faults on reload. <span class="mono">memmove</span> fell from 7.9% to 1.7% of samples;
+            page faults from ~21,000 to <strong>19 per token</strong>.</p>
+        </article>
+        <article class="card reveal">
+          <h3><span class="card-num">03</span>Router lookahead</h3>
+          <p>Applying layer <span class="mono">l+1</span>'s router to layer <span class="mono">l</span>'s state predicts the
+            next experts with <strong>81.8% accuracy</strong> and cut decode I/O wait by 40% in its first version — the
+            next layer is being read while the current one computes.</p>
+        </article>
+        <article class="card reveal">
+          <h3><span class="card-num">04</span>A cache that respects the cycle</h3>
+          <p>Expert access is cyclic across layers, so a global LRU scores <strong>0% hits at any budget</strong>. Per-layer
+            quotas make the cache work at all — up to <strong>91% hit rate</strong> on the target with a 2&nbsp;GiB budget.</p>
+        </article>
+        <article class="card reveal">
+          <h3><span class="card-num">05</span>Kernels for this CPU</h3>
+          <p>Exact 2×2 dotprod tiles for Q5_K / IQ2_XXS / IQ3_XXS, bit-identical to single-column; an i8mm (USMMLA)
+            microkernel for tiled prefill, up to <strong>3.8× faster</strong> on IQ3_XXS; a NEON GEMM where SVE builds fell
+            back to scalar attention; expert pairing, so tokens choosing the same expert decode it once.</p>
+        </article>
+        <article class="card reveal">
+          <h3><span class="card-num">06</span>Context bounded by the model</h3>
+          <p>The engine's own 8,192-token cap is gone; admission counts the KV cache from GGUF metadata (~22&nbsp;KiB per
+            token). Context now runs to the model's full <strong>262,144 tokens</strong> — memory admission, not an
+            arbitrary constant.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== CLIMB ============================== -->
+  <section class="section" id="climb">
+    <div class="container">
+      <p class="eyebrow reveal">the climb</p>
+      <h2 class="reveal">From <em>2.52</em> to <em>5.54 tokens/s</em> — one measured step at a time.</h2>
+      <p class="lede reveal">The target model streamed on the first reference device — a stock Android phone — 64 greedy tokens,
+        alternating A/B arms. Every step is bitwise exact unless noted; identical token sequences across all arms.</p>
+
+      <div class="chart reveal" role="img" aria-label="Decode speed progression in tokens per second: 2.52, 2.68, 3.06, 3.48, 3.86, 4.49, 5.54, against a 5 tokens per second target line">
+        <div class="chart-target" style="--x:83.33"><span class="mono-dim">5 tok/s target</span></div>
+        <div class="chart-row" style="--w:42.0%">
+          <span class="chart-label">1 GiB cache · buffered · 4 I/O threads</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">2.52</span>
+        </div>
+        <div class="chart-row" style="--w:44.7%">
+          <span class="chart-label">direct I/O · 16 I/O threads</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">2.68</span>
+        </div>
+        <div class="chart-row" style="--w:51.0%">
+          <span class="chart-label">+ router lookahead</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">3.06</span>
+        </div>
+        <div class="chart-row" style="--w:58.0%">
+          <span class="chart-label">+ 2 GiB expert cache</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">3.48</span>
+        </div>
+        <div class="chart-row" style="--w:64.3%">
+          <span class="chart-label">+ zero-copy, page-congruent reads</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">3.86</span>
+        </div>
+        <div class="chart-row" style="--w:74.8%">
+          <span class="chart-label">+ 2-bit experts · UD-IQ2_M*&nbsp;(11.9 GB)</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">4.49</span>
+        </div>
+        <div class="chart-row is-final" style="--w:92.3%">
+          <span class="chart-label">+ slot-addressed expert cache · UD-IQ2_M*</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">5.54</span>
+        </div>
+      </div>
+      <p class="footnote mono-dim reveal">mean of 2–3 alternating runs · * different quantization, quality evaluated separately
+        (26/27) · best runs on a cool phone reach 5.84 tok/s · sustained over 10 minutes on battery: ≈3.5 tok/s, where heat — not
+        I/O — sets the pace</p>
+    </div>
+  </section>
+
+  <!-- ============================== NUMBERS ============================== -->
+  <section class="section" id="numbers">
+    <div class="container">
+      <p class="eyebrow reveal">numbers that hold</p>
+      <h2 class="reveal">What the work is <em>worth</em>, so far.</h2>
+      <p class="lede reveal">Each figure below is attributable to a specific change, measured on the phone, and recorded.
+        Nothing here is extrapolated from other hardware.</p>
+
+      <div class="stats-grid">
+        <div class="stat stat-accent reveal">
+          <div class="stat-val"><span class="count" data-count="5.54" data-decimals="2">5.54</span><span class="stat-unit">tok/s</span></div>
+          <div class="stat-label">decode, short runs</div>
+          <div class="stat-sub">from 2.52 at the first streamed run · best 5.84 on a cool phone</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="19">19</span></div>
+          <div class="stat-label">page faults per token</div>
+          <div class="stat-sub">down from ~21,000 — slot-addressed expert cache</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="81.8" data-decimals="1" data-suffix="%">81.8%</span></div>
+          <div class="stat-label">router lookahead accuracy</div>
+          <div class="stat-sub">−40% decode I/O wait in its first version</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="3.8" data-decimals="1" data-suffix="×">3.8×</span></div>
+          <div class="stat-label">prefill matrix products, IQ3_XXS</div>
+          <div class="stat-sub">i8mm USMMLA microkernel · 2.9× on IQ2_XXS</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="3.2" data-decimals="1" data-suffix="×">3.2×</span></div>
+          <div class="stat-label">long-prompt prefill</div>
+          <div class="stat-sub">3,803 tokens: 521.6 s → 164.4 s, bit-identical logits</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="262144">262,144</span></div>
+          <div class="stat-label">tokens of context</div>
+          <div class="stat-sub">needle at 7,857 tokens answered correctly</div>
+        </div>
+        <div class="stat stat-accent reveal">
+          <div class="stat-val"><span class="count" data-count="26">26</span><span class="stat-unit">/27</span></div>
+          <div class="stat-label">quality-v1, both builds</div>
+          <div class="stat-sub">the 2.7-bit build is ~33% faster with no measured loss</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="1.07" data-decimals="2">1.07</span><span class="stat-unit">J</span></div>
+          <div class="stat-label">net energy per token</div>
+          <div class="stat-sub">read from the battery counter · ≈3.5 tok/s sustained</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="38" data-prefix="~">~38</span><span class="stat-unit">ms</span></div>
+          <div class="stat-label">kernel CPU per token</div>
+          <div class="stat-sub">down from ~125 ms with the slot cache</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="91" data-suffix="%">91%</span></div>
+          <div class="stat-label">expert cache hit rate</div>
+          <div class="stat-sub">per-layer quotas · a global LRU gets 0% at any budget</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="1.2" data-decimals="1" data-suffix="×">1.2×</span></div>
+          <div class="stat-label">cost of a 2-token batch</div>
+          <div class="stat-sub">was ~1.9× · exact 2×2 tiles turned MTP from a loss into a gain</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="3.95" data-decimals="2">3.95</span><span class="stat-unit">s</span></div>
+          <div class="stat-label">52-token chat prompt</div>
+          <div class="stat-sub">from 5.78 s · coalesced reads, whole-next-layer loading</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== MILESTONES ============================== -->
+  <section class="section" id="milestones">
+    <div class="container">
+      <p class="eyebrow reveal">milestones</p>
+      <h2 class="reveal">Things that <em>now exist</em>, and did not before.</h2>
+
+      <ol class="timeline">
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">first beyond-RAM run</span><span class="tl-tag">exactness</span></div>
+            <h3>A model twice the device's memory, running on it</h3>
+            <p>The first target checkpoint — twice the phone's visible RAM — streams on a stock Android device at ~3.7–3.9 GiB RSS, the shared weights read once at
+              load in 4.3 s, the experts as demanded. On every verification fixture, streamed output is
+              <strong>bitwise identical</strong> to resident inference.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">the 5 tok/s barrier</span><span class="tl-tag">speed</span></div>
+            <h3>5.54 tok/s — from 2.52, with identical tokens</h3>
+            <p>The slot-addressed expert cache — reusable pages hooked into GGML's expert matrix product — took decode from
+              5.05 to 5.54 tok/s mean, and the whole climb from 2.52. In short runs on a cool phone the experimental target
+              is met; over minutes, power and heat set the speed, and that is measured too.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">long context, unlocked</span><span class="tl-tag">capability</span></div>
+            <h3>262k context, needle at 7,857 tokens found</h3>
+            <p>Context and generation caps removed, with the KV cache counted in memory admission. A 7,857-token
+              needle-in-a-haystack prompt is answered correctly; a 3,803-token prompt prefills 3.2× faster
+              (521.6 s → 164.4 s) with bit-identical logits.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">speculation, made profitable</span><span class="tl-tag">kernels</span></div>
+            <h3>MTP went from a loss to a tie or a gain</h3>
+            <p>Exact 2×2 dotprod tiles for Q5_K / IQ2_XXS / IQ3_XXS — bit-identical to single-column kernels — cut a
+              2-token batch from ~1.9× to 1.2–1.4× a single token. Expert pairing in <span class="mono">MUL_MAT_ID</span>
+              makes tokens that choose the same expert share one decode of its weights.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">the first yardstick</span><span class="tl-tag">quality</span></div>
+            <h3>26/27 on both builds — quantization on trial</h3>
+            <p>A 27-item, automatically checked set (Italian, instructions, reasoning, code, knowledge, long context):
+              UD-IQ2_M and UD-Q4_K_M both score 26/27 — they miss the same discount-and-markup item — and the 2.7-bit build
+              is ~33% faster. A first signal, kept honest by its own footnote: a larger set is required before it can
+              replace the reference.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">the instrument panel</span><span class="tl-tag">method</span></div>
+            <h3>Measurement tooling that makes the gains believable</h3>
+            <p>Bit-for-bit checks of streamed against resident inference; an automatically checked quality set; energy per
+              token from the battery counter; A/B runs cooled to skin temperature between arms. Negative results — WFE
+              waits, layer-skip speculation, wider prefetch — are documented, not discarded.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============================== NEXT ============================== -->
+  <section class="section section-tight" id="next">
+    <div class="container">
+      <p class="eyebrow reveal">where this goes</p>
+      <h2 class="reveal">This is a <em>work in progress</em> — the queue is ordered by measured bottleneck.</h2>
+      <div class="next-row">
+        <div class="next-item reveal"><span class="next-num mono-dim">01</span><p><strong>Energy per token</strong> — spin-wait is 35% of cycles; storage wait doubles in long runs</p></div>
+        <div class="next-item reveal"><span class="next-num mono-dim">02</span><p><strong>Prefill kernels</strong> — microkernel register blocking; DeltaNet and attention</p></div>
+        <div class="next-item reveal"><span class="next-num mono-dim">03</span><p><strong>Cache policy</strong> — eviction informed by router scores (the Belady gap is ~15 points)</p></div>
+        <div class="next-item reveal"><span class="next-num mono-dim">04</span><p><strong>Exact Q4_K / Q8_0 tiles</strong> — lossless, faster MTP on the reference build</p></div>
+        <div class="next-item reveal"><span class="next-num mono-dim">05</span><p><strong>A larger quality set</strong> — before the 2.7-bit build can replace the reference</p></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container footer-grid">
+    <div class="footer-col footer-brand">
+      <div class="brand">
+        <img src="assets/logo.svg" alt="" width="26" height="26">
+        <span>Equity</span>
+      </div>
+      <p>Language models that do not fit in a device's memory — on the device, offline, at usable speed.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Honesty notes</h4>
+      <p>Research preview. All numbers are measured on the current reference device — a stock Android phone — and
+        recorded in <span class="mono">results/</span>. The 5 tokens/s <em>sustained</em> goal is an experimental target,
+        never a promise. Quality, context and capabilities are not traded for speed.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Standing on</h4>
+      <p>Built on <strong>llama.cpp / GGML</strong>, pinned with two recorded patches. The streaming design was informed by
+        antirez's <strong>ds4</strong> and published expert-offloading work. Development is AI-assisted; every claim is tied
+        to a measurement record.</p>
+    </div>
+    <div class="footer-col">
+      <h4>License</h4>
+      <p><strong>AGPLv3</strong> for open use; commercial licensing available.</p>
+      <p><a href="mailto:z3tawave@gmail.com">z3tawave@gmail.com</a></p>
+    </div>
+  </div>
+  <div class="container footer-bottom mono-dim">
+    <span>© 2026 Equity · eqt</span>
+    <span>bit-exact · off-grid · measured</span>
+  </div>
+</footer>
+
+<script src="assets/vendor/three.min.js"></script>
+<script src="js/hero-scene.js"></script>
+<script src="js/pipeline.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
