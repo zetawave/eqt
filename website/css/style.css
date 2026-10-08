@@ -177,6 +177,29 @@ section[id] { scroll-margin-top: 74px; }
   padding: 6px 12px;
   white-space: nowrap;
 }
+.github-link {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+.github-link svg { width: 19px; height: 19px; }
+.github-link:hover {
+  color: var(--text);
+  background: var(--panel-strong);
+  border-color: var(--line-strong);
+  text-decoration: none;
+}
+.github-link:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+}
 
 /* ------------------------------ hero ------------------------------ */
 .hero {
@@ -742,6 +765,7 @@ section[id] { scroll-margin-top: 74px; }
 @media (max-width: 760px) {
   body { font-size: 15.5px; }
   .nav-links { display: none; }
+  .github-link { margin-left: auto; }
   .hero { padding-top: 110px; }
   .hero-sub { font-size: 1.05rem; }
   .hero-foot { flex-direction: column; align-items: flex-start; }
@@ -761,6 +785,7 @@ section[id] { scroll-margin-top: 74px; }
 
 @media (max-width: 430px) {
   .stats-grid { grid-template-columns: 1fr; }
+  .nav-chip { display: none; }
 }
 
 /* ------------------------------ reduced motion ------------------------------ */
