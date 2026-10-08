@@ -9,13 +9,13 @@ $arguments = @('-S', $root, '-B', $build, '-DCMAKE_BUILD_TYPE=Release')
 if ($Target -eq 'Android') {
     $arguments += @('-G', 'Ninja', "-DCMAKE_MAKE_PROGRAM=$ninja",
         "-DCMAKE_TOOLCHAIN_FILE=$env:ANDROID_HOME/ndk/28.2.13676358/build/cmake/android.toolchain.cmake",
-        '-DANDROID_ABI=arm64-v8a', '-DANDROID_PLATFORM=android-28', '-DANDROID_STL=c++_static')
+        '-DANDROID_ABI=arm64-v8a', '-DANDROID_PLATFORM=android-28', '-DANDROID_STL=c++_shared')
 } else {
     $arguments += @('-G', 'Visual Studio 17 2022', '-A', 'x64')
 }
 & $cmake @arguments
 if ($LASTEXITCODE) { throw 'CMake configure failed' }
-$targets = @('eqt-bench', 'eqt-check')
+$targets = @('eqt-bench', 'eqt-check', 'eqt-simd-test', 'eqt-kernel-bench')
 if ($Target -eq 'Android') { $targets += 'eqt-io-bench' }
 & $cmake --build $build --config Release --parallel $Jobs --target @targets
 if ($LASTEXITCODE) { throw 'Native build failed' }

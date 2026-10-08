@@ -1,0 +1,23 @@
+diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
+index 6cc0b20..425d1ee 100644
+--- a/src/llama-model-loader.cpp
++++ b/src/llama-model-loader.cpp
+@@ -1290,13 +1290,17 @@ struct ggml_tensor * llama_model_loader::create_tensor(
+     };
+ 
+     if (files.empty()) {
+-        if (flags & TENSOR_SKIP_IF_VIRTUAL) {
++        // skipped tensors (e.g. MTP layers when load_mtp is off) are not created, as when loading from a file
++        if (flags & (TENSOR_SKIP_IF_VIRTUAL | TENSOR_SKIP)) {
+             return nullptr;
+         }
+         ggml_type type = GGML_TYPE_F32;
+         const int64_t tid = gguf_find_tensor(metadata, tn.str().c_str());
+         if (tid != -1) {
+             type = gguf_get_tensor_type(metadata, tid);
++        } else if ((flags & TENSOR_NOT_REQUIRED) && gguf_get_n_tensors(metadata) > 0) {
++            // metadata that lists tensors: an absent optional tensor is absent, as when loading from a file
++            return nullptr;
+         }
+ 
+         // for tensors that are not required some of the dimensions can be invalid:

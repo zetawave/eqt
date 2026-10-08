@@ -1,0 +1,28 @@
+{
+  "mem_available_mib": 5847,
+  "data_free_gib": 31.378490447998047,
+  "cpu_max_khz": {
+    "0": 1959000,
+    "1": 1959000,
+    "2": 1959000,
+    "3": 1959000,
+    "4": 2592000,
+    "5": 2592000,
+    "6": 2592000,
+    "7": 2900000,
+    "8": 2900000,
+    "9": 3207000
+  },
+  "big_core_mask": "0x3f0",
+  "target_storage_ok": true,
+  "properties": {
+    "ro.product.model": "SM-S926B",
+    "ro.product.device": "e2s",
+    "ro.soc.model": "s5e9945",
+    "ro.build.version.release": "16",
+    "ro.build.version.sdk": "36",
+    "ro.build.fingerprint": "samsung/e2sxeea/e2s:16/BP4A.251205.006/S926BXXSHDZH3:user/release-keys",
+    "ro.product.cpu.abilist": "arm64-v8a"
+  },
+  "cpu_features": "fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti ecv afp wfxt"
+}

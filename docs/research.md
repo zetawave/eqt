@@ -43,3 +43,60 @@ Priority after the real CPU baseline: (1) read-only target-shaped I/O measuremen
 The first read-only I/O proxy and a fifteen-minute resident fixture trial are complete; see [progress](progress.md). The proxy used 2 MiB random reads, whereas exact inspection of the target header now shows three separated banks per expert. The next replay must preserve this distinction. Bank shapes follow the pinned [Qwen3.5 MoE loader](https://github.com/ggml-org/llama.cpp/blob/6c59c40076c00eab49754dc955d7652d93f9e125/src/models/qwen35moe.cpp); K-block byte sizes follow [GGML definitions](https://github.com/ggml-org/llama.cpp/blob/6c59c40076c00eab49754dc955d7652d93f9e125/ggml/src/ggml-common.h). These inspected layouts establish byte ranges, not routing locality or cache hit rate.
 
 The [Qwen3.5-0.8B hybrid fixture](https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/tree/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0) now passes host full-prefix replay and cancellation-recovery checks as well as mapped/allocated and chunked-prefill comparisons. This covers hybrid state clearing for a small dense-FFN model. It does not establish MoE, prefix reuse, speculative rollback or principal-model correctness.
+
+## Offloading literature update — checked 2026-10-06
+
+Searched for 2025–2026 work on MoE expert offloading, caching and prediction. "Read" means the paper text was inspected; "abstract" means only the abstract/search summary, so claims stay unverified. No figure below is an Equity or Exynos result.
+
+| Source | Status / authors' environment | What Equity takes, and what remains a hypothesis |
+|---|---|---|
+| [Paging the Experts](https://arxiv.org/abs/2609.29032) | Read. iPhone 17 Pro Max, **Qwen3.6-35B-A3B** INT4 g64 (18.1 GB routed, 1.77 MB/expert), positional reads, pinned per-layer evaluation. | Reported LRU hit rate 0% at 512 MiB (313 experts needed, 303 fit), 38.6% at 576 MiB, 47.6% at 1 GiB; random eviction 18.8% at 512 MiB; offline farthest-next-use 54.5–68.2%. Confidence-gated predictor: 61.3% accuracy, no useful prefetch, recency pollution. Equity adopts layer-partitioned quotas (D006), prefetch that never refreshes recency, and an offline Belady bound. Their per-token serial prefill dominated TTFT (10.8–13.6 s). |
+| [Reproducible Evaluation of MoE Expert Caching](https://arxiv.org/abs/2608.07911) | Abstract-level. | Replay semantics matter. Equity's replay reproduces the native cache exactly (identical hits/misses on a 512-call trace) and separates calibration from evaluation traces. |
+| [MoE-CORE](https://arxiv.org/abs/2610.01950) | Abstract-level; compact AI appliances. | Non-uniform layer-wise capacity, routing-history replacement, cross-layer prefetch. Equity's analogue: quotas from per-layer LRU hit curves (below). Their gains are not transferable without target traces. |
+| [Fate](https://arxiv.org/abs/2502.12224) | Abstract-level; desktop GPU offloading. | Adjacent-layer gate inputs as predictor; shallow-favoring cache; claims ~99% hit rate in its setting. Basis of Equity's optional lookahead; contradicted on phone by Paging the Experts, so A/B is mandatory. |
+| [DALI](https://arxiv.org/abs/2602.03495), [PROBE](https://arxiv.org/abs/2602.00509) | Abstract-level; local PCs / serving. | Residual-corrected lookahead and reuse of the target router as prior. Candidate refinement of the predictor after real accuracy is measured. |
+| [Mixture of Cache-Conditional Experts](https://arxiv.org/abs/2412.00099), [SliceMoE](https://arxiv.org/abs/2512.12990), [ReMoE](https://arxiv.org/abs/2605.27081) | Abstract-level; mobile (Qualcomm) and memory-constrained inference. | Cache-aware rerouting / bit-sliced fallback / router fine-tuning raise hit rates by **changing outputs**. Only as opt-in quality-evaluated modes, never in the reference path. |
+| [SeqMoE](https://arxiv.org/abs/2609.12978), [EStream](https://arxiv.org/abs/2609.06551), [MoE-SpeQ](https://arxiv.org/abs/2511.14102) | Abstract-level. | Learned multi-step prediction, NPU prefill streaming, speculative quantized drafting: later candidates once the CPU streaming baseline and Exynos NPU access are measured. |
+
+### Equity's own refinement (hypothesis under test)
+
+Per-layer quotas are optimized offline from **exact per-layer LRU hit curves**: one Mattson stack-distance pass over a calibration trace gives hits for every quota simultaneously, with native call semantics (residency checked at call start, trim after the call). Slots are allocated greedily by marginal hits per byte (optimal for concave curves) and exported as `expert_layer_weights`. Routing stays exact; only residency changes. On random-weight fixture traces (0.5/1/2 MiB) the pipeline runs end to end: global LRU 0/0/0%, random 0.3/3.7/26.4%, uniform layer LRU 0/23.9/47.5%, optimized 12.0/24.0/51.0%, global Belady bound 12.0/24.0/51.0%. This shows mechanics and the cyclic cliff only; random weights say nothing about real locality. Target traces from the Galaxy decide whether optimized quotas beat uniform ones on held-out prompts.
+
+### Qwen3.8 family check — 2026-10-07
+
+Published Qwen3.8 models (Hugging Face API, checked 2026-10-07):
+
+- `Qwen3.8-27B` is **dense** (64 layers, hidden 5120, no experts; Apache 2.0). A dense model reads all weights for every token, about 16 GB at 4 bits: it cannot fit the phone's RAM, and streaming it from storage would cost seconds per token.
+- `Qwen3.8-Flash-Next` is about 180B total parameters including 51B n-gram tables and MTP, with 6B active; its license is Qwen Community, not Apache. Its smallest known Q2 build is about 42 GiB (per ds4), which exceeds the Galaxy's free storage, and roughly twice the active bytes per token of Qwen3.6-35B-A3B.
+- `Qwen3.8-2.4T-A95B` is out of scope.
+
+Qwen3.6-35B-A3B therefore remains the most capable model that fits the device's storage with a plausible path to 5 tokens/s. The engine techniques (exact expert cache, layer quotas, zero-copy direct I/O, MTP, asymmetric expert quantization) carry over to larger MoE models once storage allows.
+
+### First real target routing traces — 2026-10-07
+
+Traces: six quality prompts on the Galaxy, UD-Q4_K_M (MTP artifact, plain decoding), one process per prompt so each request starts cold. Replay with exact native semantics:
+
+- Consecutive decode tokens share 3.30 of 8 experts per layer on average; the union of two tokens is 12.70 experts. This matches the measured I/O behaviour of MTP verification.
+- Hit rates, layer-partitioned LRU versus global LRU: +2.5 to +3.5 points at 1 and 2 GiB.
+- **Optimized quotas did not beat uniform quotas on held-out requests** (within ±0.4 points, both split directions). The quota-optimization hypothesis is not supported at this scale; uniform quotas remain the default.
+- The farthest-next-use bound is about 15 points above layer LRU (46.5–70.8% versus 30.7–56.0%). Prediction-informed eviction is the next candidate policy.
+
+### Kernel cost of expert reloads; slot-addressed cache (hypothesis) — 2026-10-08
+
+Local measurement on the Galaxy (UD-IQ2_M, 2 GiB cache, plain decoding, 32 tokens; `decode_process_cpu` in `results/local/galaxy-2026-10-08/prefill-short`):
+
+- about 600,000 minor page faults per run, roughly 18,800 per decoded token;
+- 3.5–4.2 s of system CPU time, about 110–130 ms per token summed over all threads.
+
+Every expert loaded from storage lands on pages that eviction released with `MADV_DONTNEED`. The kernel therefore takes a fault, zeroes the page and maps it again for every 4 KiB the read writes. Eviction itself unmaps pages and flushes TLBs on the other cores. How much of this sits on the decode critical path is not yet measured: the `eqt-io-bench` `fresh_pages` probe and the store's `evict_ms` counter are pending.
+
+Hypothesis: a slot-addressed cache removes this cost without changing numerics.
+
+- Experts live in persistent, page-aligned slots that are reused and never released, so there are no faults after warm-up, no zeroing and no `MADV_DONTNEED`.
+- MUL_MAT_ID asks the store for each expert's address through a small GGML hook, instead of computing it from the bank's GGUF layout.
+- In these GGUFs every expert stride is a multiple of 4 KiB, so each bank has a constant misalignment from the page grid. Each slot can therefore receive one fully direct read of the page-rounded range, with no bounce buffer. Coalesced reads become vectored reads (`preadv`) plus a 4 KiB copy per shared boundary page.
+- Accounting becomes exact: resident expert bytes are slot bytes.
+
+Pass criterion: identical outputs (bitwise, as for every streaming change), fewer faults and less system time per token, and lower decode time per token under the same cool-down protocol.
+
+Result (D020): passed. Faults per token fell from 21,013 to 19 and system CPU from about 125 to 38 ms per token. Decode rose from a mean of 5.05 to 5.54 tokens/s, with identical tokens.

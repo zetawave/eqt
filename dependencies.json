@@ -2,7 +2,19 @@
   "llama_cpp": {
     "url": "https://github.com/ggml-org/llama.cpp.git",
     "revision": "6c59c40076c00eab49754dc955d7652d93f9e125",
-    "license": "MIT"
+    "license": "MIT",
+    "patches": [
+      {
+        "file": "patches/llama.cpp/0001-metadata-mode-skips-absent-optional-tensors.patch",
+        "sha256": "98bd393cdabd016b49f79e3449ff43e1e9452f755ab708c3dbddcce3cb5d15a2",
+        "purpose": "llama_model_init_from_user: absent optional tensors and skipped tensors (MTP with load_mtp off) stay absent, as in file mode"
+      },
+      {
+        "file": "patches/llama.cpp/0002-ggml-cpu-exact-tiles-and-paired-experts.patch",
+        "sha256": "adf39208a41836cc9c0ed5a7599c172919603fa47b3668c9fb0ff2c98fc3f380",
+        "purpose": "ggml-cpu (AArch64 dotprod): 2x2 tiles for Q5_K/IQ2_XXS/IQ3_XXS bitwise equal to one-column dot products; MUL_MAT pairs columns for odd batches; MUL_MAT_ID pairs tokens routed to the same expert; tiled GEMM path enabled on AArch64 i8mm with a USMMLA microkernel; NEON simd_gemm for SVE builds; MUL_MAT_ID expert-address hook for slot-addressed expert caches"
+      }
+    ]
   },
   "toolchain": {
     "ndk": "28.2.13676358",

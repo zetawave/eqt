@@ -1,0 +1,899 @@
+{
+ "workload": "workloads/quality-v1.jsonl",
+ "model": "/data/local/tmp/eqt/mtp/Qwen3.6-35B-A3B-UD-IQ2_M.gguf",
+ "target": "android",
+ "load": {
+  "context": 2048,
+  "batch": 2048,
+  "threads": 4,
+  "memory_budget_mib": 6656,
+  "mmap": false,
+  "expert_streaming": true,
+  "expert_cache_mib": 2048,
+  "io_threads": 16,
+  "direct_io": true,
+  "prefetch": true,
+  "coalesce_kib": 2048,
+  "coalesce_gap": 1,
+  "prefill_prefetch_mib": 512,
+  "tiled_mm": true
+ },
+ "thinking": false,
+ "code_executed": true,
+ "rows": [
+  {
+   "id": "it-two-sentences",
+   "category": "italian",
+   "answer": "La RAM è una memoria volatile utilizzata per l'elaborazione temporanea dei dati durante il funzionamento del computer, garantendo un accesso rapido alle informazioni in uso. Al contrario, la memoria di archiviazione è non volatile e serve a conservare permanentemente file e programmi anche quando il dispositivo è spento.",
+   "checks": [
+    {
+     "spec": {
+      "type": "sentences",
+      "count": 2
+     },
+     "passed": true,
+     "detail": "2 sentences"
+    },
+    {
+     "spec": {
+      "type": "contains_any",
+      "values": [
+       "volatil",
+       "tempora"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "contains_any",
+      "values": [
+       "permanent",
+       "persist",
+       "non volatil",
+       "spegn"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 54,
+   "generated_tokens": 63,
+   "termination": "eos",
+   "prefill_ms": 3812.215234,
+   "ttft_ms": 3829.145782,
+   "decode_tokens_per_second": 4.931525864352331,
+   "peak_rss_bytes": 4576948224
+  },
+  {
+   "id": "it-translate",
+   "category": "italian",
+   "answer": "Il motore legge dall'archivio solo gli esperti di cui ogni token ha bisogno.",
+   "checks": [
+    {
+     "spec": {
+      "type": "contains_any",
+      "values": [
+       "legge",
+       "carica"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "contains_any",
+      "values": [
+       "token"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "contains_any",
+      "values": [
+       "archivi",
+       "memoria",
+       "storage",
+       "disco"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "not_contains",
+      "values": [
+       "The engine",
+       "reads"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "max_words",
+      "value": 25
+     },
+     "passed": true,
+     "detail": "13 words"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 57,
+   "generated_tokens": 17,
+   "termination": "eos",
+   "prefill_ms": 4850.57793,
+   "ttft_ms": 4874.215195,
+   "decode_tokens_per_second": 4.0625053789363506,
+   "peak_rss_bytes": 4621688832
+  },
+  {
+   "id": "it-summary-limit",
+   "category": "italian",
+   "answer": "Le piante usano luce solare, acqua e anidride carbonica per produrre glucosio e ossigeno.",
+   "checks": [
+    {
+     "spec": {
+      "type": "max_words",
+      "value": 20
+     },
+     "passed": true,
+     "detail": "14 words"
+    },
+    {
+     "spec": {
+      "type": "contains_any",
+      "values": [
+       "luce",
+       "solare"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "contains_any",
+      "values": [
+       "glucosio",
+       "zucchero",
+       "zuccheri"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "contains_any",
+      "values": [
+       "ossigeno"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 79,
+   "generated_tokens": 24,
+   "termination": "eos",
+   "prefill_ms": 5518.629961,
+   "ttft_ms": 5541.761016,
+   "decode_tokens_per_second": 4.26552747508758,
+   "peak_rss_bytes": 4657590272
+  },
+  {
+   "id": "it-grammar",
+   "category": "italian",
+   "answer": "Ieri sono andato al mare con i miei amici e abbiamo mangiato dei gelati buonissimi.",
+   "checks": [
+    {
+     "spec": {
+      "type": "contains_all",
+      "values": [
+       "sono andat"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "contains_any",
+      "values": [
+       "gelato buonissimo",
+       "gelati buonissimi"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "not_contains",
+      "values": [
+       "ho andato"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "max_words",
+      "value": 25
+     },
+     "passed": true,
+     "detail": "15 words"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 66,
+   "generated_tokens": 20,
+   "termination": "eos",
+   "prefill_ms": 4980.22832,
+   "ttft_ms": 5004.58668,
+   "decode_tokens_per_second": 4.233552174690933,
+   "peak_rss_bytes": 4646367232
+  },
+  {
+   "id": "it-unicode-exact",
+   "category": "italian",
+   "answer": "perché, città, caffè, già, 🧠.",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "^\\s*perché, città, caffè, già, 🧠\\.?\\s*$",
+      "flags": ""
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 52,
+   "generated_tokens": 13,
+   "termination": "eos",
+   "prefill_ms": 4402.582305,
+   "ttft_ms": 4425.975821,
+   "decode_tokens_per_second": 3.8423066547678073,
+   "peak_rss_bytes": 4613181440
+  },
+  {
+   "id": "json-capital",
+   "category": "instructions",
+   "answer": "```json\n{\"capitale\": \"Roma\", \"paese\": \"Italia\"}\n```",
+   "checks": [
+    {
+     "spec": {
+      "type": "json_object",
+      "keys": [
+       "capitale",
+       "paese"
+      ],
+      "values": {
+       "capitale": "Roma",
+       "paese": "Italia"
+      }
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 61,
+   "generated_tokens": 19,
+   "termination": "eos",
+   "prefill_ms": 4736.478984,
+   "ttft_ms": 4760.433789,
+   "decode_tokens_per_second": 3.8783560951068945,
+   "peak_rss_bytes": 4643655680
+  },
+  {
+   "id": "three-lines",
+   "category": "instructions",
+   "answer": "- Elimina i rischi di sicurezza legati alla generazione di contenuti in tempo reale\n- Permette un'analisi approfondita e accurata dei dati storici\n- Riduce i costi computazionali grazie all'ottimizzazione dei processi batch",
+   "checks": [
+    {
+     "spec": {
+      "type": "lines",
+      "count": 3,
+      "prefix": "- "
+     },
+     "passed": true,
+     "detail": "3 lines"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 62,
+   "generated_tokens": 48,
+   "termination": "eos",
+   "prefill_ms": 4588.951094,
+   "ttft_ms": 4612.188008,
+   "decode_tokens_per_second": 4.552380820434168,
+   "peak_rss_bytes": 4633858048
+  },
+  {
+   "id": "yes-no-prime",
+   "category": "instructions",
+   "answer": "no",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "^\\W*no\\W*$"
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 52,
+   "generated_tokens": 1,
+   "termination": "eos",
+   "prefill_ms": 4747.382969,
+   "ttft_ms": 4771.951172,
+   "decode_tokens_per_second": 2.852936682927493,
+   "peak_rss_bytes": 4633202688
+  },
+  {
+   "id": "uppercase-only",
+   "category": "instructions",
+   "answer": "GIOVE",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "^\\W*GIOVE\\W*$",
+      "flags": ""
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 54,
+   "generated_tokens": 2,
+   "termination": "eos",
+   "prefill_ms": 4602.482734,
+   "ttft_ms": 4627.656406,
+   "decode_tokens_per_second": 3.265741412455368,
+   "peak_rss_bytes": 4583596032
+  },
+  {
+   "id": "english-switch",
+   "category": "instructions",
+   "answer": "The capital of Japan is Tokyo.",
+   "checks": [
+    {
+     "spec": {
+      "type": "contains_all",
+      "values": [
+       "Tokyo"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "sentences",
+      "count": 1
+     },
+     "passed": true,
+     "detail": "1 sentences"
+    },
+    {
+     "spec": {
+      "type": "not_contains",
+      "values": [
+       "capitale",
+       "Giappone"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 46,
+   "generated_tokens": 7,
+   "termination": "eos",
+   "prefill_ms": 4169.061289,
+   "ttft_ms": 4192.433633,
+   "decode_tokens_per_second": 3.6310131225530076,
+   "peak_rss_bytes": 4611334144
+  },
+  {
+   "id": "word-constraint",
+   "category": "instructions",
+   "answer": "La lanterna del faro guida le barche nel mare scuro.",
+   "checks": [
+    {
+     "spec": {
+      "type": "contains_all",
+      "values": [
+       "lanterna"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "max_words",
+      "value": 15
+     },
+     "passed": true,
+     "detail": "10 words"
+    },
+    {
+     "spec": {
+      "type": "sentences",
+      "count": 1
+     },
+     "passed": true,
+     "detail": "1 sentences"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 54,
+   "generated_tokens": 16,
+   "termination": "eos",
+   "prefill_ms": 4454.219961,
+   "ttft_ms": 4495.363633,
+   "decode_tokens_per_second": 4.456635684011905,
+   "peak_rss_bytes": 4623405056
+  },
+  {
+   "id": "change",
+   "category": "reasoning",
+   "answer": "49",
+   "checks": [
+    {
+     "spec": {
+      "type": "final_number",
+      "value": 49
+     },
+     "passed": true,
+     "detail": "last number 49"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 67,
+   "generated_tokens": 2,
+   "termination": "eos",
+   "prefill_ms": 4972.758438,
+   "ttft_ms": 5032.541563,
+   "decode_tokens_per_second": 3.4185548343519683,
+   "peak_rss_bytes": 4664004608
+  },
+  {
+   "id": "travel-minutes",
+   "category": "reasoning",
+   "answer": "155",
+   "checks": [
+    {
+     "spec": {
+      "type": "final_number",
+      "value": 155
+     },
+     "passed": true,
+     "detail": "last number 155"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 70,
+   "generated_tokens": 3,
+   "termination": "eos",
+   "prefill_ms": 5017.339883,
+   "ttft_ms": 5039.753007,
+   "decode_tokens_per_second": 3.590345168340502,
+   "peak_rss_bytes": 4654317568
+  },
+  {
+   "id": "discount-markup",
+   "category": "reasoning",
+   "answer": "68",
+   "checks": [
+    {
+     "spec": {
+      "type": "final_number",
+      "value": 74.8,
+      "tolerance": 0.01
+     },
+     "passed": false,
+     "detail": "last number 68"
+    }
+   ],
+   "passed": false,
+   "prompt_tokens": 76,
+   "generated_tokens": 2,
+   "termination": "eos",
+   "prefill_ms": 5174.465781,
+   "ttft_ms": 5218.114414,
+   "decode_tokens_per_second": 3.38389234521439,
+   "peak_rss_bytes": 4628733952
+  },
+  {
+   "id": "order-logic",
+   "category": "reasoning",
+   "answer": "Carlo",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "^\\W*carlo\\W*$"
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 61,
+   "generated_tokens": 2,
+   "termination": "eos",
+   "prefill_ms": 4576.364024,
+   "ttft_ms": 4599.970117,
+   "decode_tokens_per_second": 3.3246317137972308,
+   "peak_rss_bytes": 4627886080
+  },
+  {
+   "id": "sequence",
+   "category": "reasoning",
+   "answer": "42",
+   "checks": [
+    {
+     "spec": {
+      "type": "final_number",
+      "value": 42
+     },
+     "passed": true,
+     "detail": "last number 42"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 67,
+   "generated_tokens": 2,
+   "termination": "eos",
+   "prefill_ms": 4986.054571,
+   "ttft_ms": 5008.285039,
+   "decode_tokens_per_second": 3.483829786626225,
+   "peak_rss_bytes": 4656644096
+  },
+  {
+   "id": "weekday",
+   "category": "reasoning",
+   "answer": "venerdì",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "^\\W*venerd[iì]\\W*$"
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 58,
+   "generated_tokens": 2,
+   "termination": "eos",
+   "prefill_ms": 4592.131641,
+   "ttft_ms": 4651.185273,
+   "decode_tokens_per_second": 3.1856014788785334,
+   "peak_rss_bytes": 4630106112
+  },
+  {
+   "id": "code-mean",
+   "category": "coding",
+   "answer": "```python\ndef mean(values):\n    if not values:\n        return None\n    return sum(values) / len(values)\n```",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "def\\s+mean\\s*\\("
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "python",
+      "tests": "assert mean([]) is None\nassert mean([1, 2, 3]) == 2\nassert abs(mean([1.5, 2.5]) - 2.0) < 1e-9"
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 70,
+   "generated_tokens": 29,
+   "termination": "eos",
+   "prefill_ms": 5126.233477,
+   "ttft_ms": 5186.158399,
+   "decode_tokens_per_second": 3.673801701707786,
+   "peak_rss_bytes": 4658319360
+  },
+  {
+   "id": "code-reverse-words",
+   "category": "coding",
+   "answer": "```python\ndef reverse_words(s):\n    return ' '.join(s.split()[::-1])\n```",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "def\\s+reverse_words\\s*\\("
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "python",
+      "tests": "assert reverse_words('a b c') == 'c b a'\nassert reverse_words('uno') == 'uno'\nassert reverse_words('rosso verde blu') == 'blu verde rosso'"
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 76,
+   "generated_tokens": 22,
+   "termination": "eos",
+   "prefill_ms": 5525.257109,
+   "ttft_ms": 5572.453554,
+   "decode_tokens_per_second": 3.831605327138778,
+   "peak_rss_bytes": 4650672128
+  },
+  {
+   "id": "code-fix-bug",
+   "category": "coding",
+   "answer": "```python\ndef even_sum(xs):\n    return sum(x for x in xs if x % 2 == 0)\n```",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "def\\s+even_sum\\s*\\("
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "python",
+      "tests": "assert even_sum([1, 2, 3, 4]) == 6\nassert even_sum([]) == 0\nassert even_sum([7, 9]) == 0"
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 89,
+   "generated_tokens": 28,
+   "termination": "eos",
+   "prefill_ms": 6475.363164,
+   "ttft_ms": 6502.994843,
+   "decode_tokens_per_second": 3.4243499563357163,
+   "peak_rss_bytes": 4706992128
+  },
+  {
+   "id": "chemistry",
+   "category": "knowledge",
+   "answer": "H₂O₂",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "H(2|₂)O(2|₂)",
+      "flags": ""
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "max_words",
+      "value": 3
+     },
+     "passed": true,
+     "detail": "1 words"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 60,
+   "generated_tokens": 4,
+   "termination": "eos",
+   "prefill_ms": 5071.236836,
+   "ttft_ms": 5098.255352,
+   "decode_tokens_per_second": 3.2508781757728324,
+   "peak_rss_bytes": 4659179520
+  },
+  {
+   "id": "berlin-wall",
+   "category": "knowledge",
+   "answer": "1989",
+   "checks": [
+    {
+     "spec": {
+      "type": "final_number",
+      "value": 1989
+     },
+     "passed": true,
+     "detail": "last number 1989"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 52,
+   "generated_tokens": 4,
+   "termination": "eos",
+   "prefill_ms": 4651.755899,
+   "ttft_ms": 4683.459375,
+   "decode_tokens_per_second": 3.4316696605396406,
+   "peak_rss_bytes": 4633645056
+  },
+  {
+   "id": "longest-river",
+   "category": "knowledge",
+   "answer": "Po",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "^\\W*po\\W*$"
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 49,
+   "generated_tokens": 1,
+   "termination": "eos",
+   "prefill_ms": 4538.436992,
+   "ttft_ms": 4564.871367,
+   "decode_tokens_per_second": 2.755999525031042,
+   "peak_rss_bytes": 4601548800
+  },
+  {
+   "id": "follow-context",
+   "category": "conversation",
+   "answer": "lampone",
+   "checks": [
+    {
+     "spec": {
+      "type": "regex",
+      "pattern": "^\\W*lampone\\W*$"
+     },
+     "passed": true,
+     "detail": ""
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 75,
+   "generated_tokens": 2,
+   "termination": "eos",
+   "prefill_ms": 5943.550234,
+   "ttft_ms": 5972.164062,
+   "decode_tokens_per_second": 2.8330337721196477,
+   "peak_rss_bytes": 4699246592
+  },
+  {
+   "id": "needle-4k",
+   "category": "long-context",
+   "answer": "3704-ALFA",
+   "checks": [
+    {
+     "spec": {
+      "type": "contains_all",
+      "values": [
+       "3704-ALFA"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "max_words",
+      "value": 6
+     },
+     "passed": true,
+     "detail": "1 words"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 3803,
+   "generated_tokens": 7,
+   "termination": "eos",
+   "prefill_ms": 161950.860742,
+   "ttft_ms": 162014.914258,
+   "decode_tokens_per_second": 3.344555324591872,
+   "peak_rss_bytes": 5123952640
+  },
+  {
+   "id": "needle-8k",
+   "category": "long-context",
+   "answer": "1212-ECO",
+   "checks": [
+    {
+     "spec": {
+      "type": "contains_all",
+      "values": [
+       "1212-ECO"
+      ]
+     },
+     "passed": true,
+     "detail": ""
+    },
+    {
+     "spec": {
+      "type": "max_words",
+      "value": 6
+     },
+     "passed": true,
+     "detail": "1 words"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 7857,
+   "generated_tokens": 6,
+   "termination": "eos",
+   "prefill_ms": 365414.505039,
+   "ttft_ms": 365469.785547,
+   "decode_tokens_per_second": 3.185821700168228,
+   "peak_rss_bytes": 5221556224
+  },
+  {
+   "id": "aggregate-4k",
+   "category": "long-context",
+   "answer": "245",
+   "checks": [
+    {
+     "spec": {
+      "type": "final_number",
+      "value": 245
+     },
+     "passed": true,
+     "detail": "last number 245"
+    }
+   ],
+   "passed": true,
+   "prompt_tokens": 3873,
+   "generated_tokens": 3,
+   "termination": "eos",
+   "prefill_ms": 168399.345117,
+   "ttft_ms": 168437.110781,
+   "decode_tokens_per_second": 3.21456977089158,
+   "peak_rss_bytes": 5116715008
+  }
+ ],
+ "summary": {
+  "passed": 26,
+  "scored": 27,
+  "errors": 0,
+  "categories": {
+   "coding": "3/3",
+   "conversation": "1/1",
+   "instructions": "6/6",
+   "italian": "5/5",
+   "knowledge": "3/3",
+   "long-context": "3/3",
+   "reasoning": "5/6"
+  },
+  "median_decode_tokens_per_second": 3.483829786626225,
+  "total_prefill_s": 813.278469728
+ },
+ "rescored_with": "workloads/quality-v1.jsonl"
+}

@@ -8,10 +8,12 @@
 #include <cstring>
 #include <fcntl.h>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <random>
 #include <stdexcept>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
@@ -45,6 +47,9 @@ int main(int argc, char **argv) {
         const auto read_size = request.value("read_bytes", 2 * 1024 * 1024);
         const int count = request.value("reads", 128);
         const bool direct = request.value("direct", false);
+        // fresh_pages: every read lands on freshly faulted, zero-filled pages, released afterwards with
+        // MADV_DONTNEED, as an evicted-then-reloaded expert slice does in the expert store.
+        const bool fresh_pages = request.value("fresh_pages", false);
         const unsigned seed = request.value("seed", 42u);
         if (read_size < 4096 || read_size > 16 * 1024 * 1024 || read_size % 4096 || count < 1 ||
             count > 4096) {
@@ -60,11 +65,12 @@ int main(int argc, char **argv) {
         if (fstat(file.fd, &stat) || !S_ISREG(stat.st_mode) || stat.st_size < read_size) {
             throw std::runtime_error("Expected a regular file at least as large as one read");
         }
-        void *allocation = nullptr;
-        if (posix_memalign(&allocation, 4096, read_size) != 0) {
+        void *allocation = mmap(nullptr, read_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (allocation == MAP_FAILED) {
             throw std::bad_alloc();
         }
-        std::unique_ptr<void, decltype(&std::free)> buffer(allocation, std::free);
+        std::unique_ptr<void, std::function<void(void *)>> buffer(allocation, [read_size](void *p) { munmap(p, read_size); });
+        std::vector<double> discards;
         std::mt19937 random(seed);
         std::uniform_int_distribution<int64_t> blocks(0, (stat.st_size - read_size) / 4096);
         std::vector<int64_t> offsets(count);
@@ -98,6 +104,11 @@ int main(int argc, char **argv) {
             latencies.push_back(elapsed(read_start));
             const auto *data = static_cast<const unsigned char *>(buffer.get());
             check += data[0] + data[read_size - 1];
+            if (fresh_pages) {
+                const auto discard_start = Clock::now();
+                madvise(buffer.get(), read_size, MADV_DONTNEED);
+                discards.push_back(elapsed(discard_start));
+            }
         }
         const auto total_ms = elapsed(start);
         const uint64_t total_bytes = static_cast<uint64_t>(read_size) * count;
@@ -118,6 +129,8 @@ int main(int argc, char **argv) {
             {"read_p50_ms", quantile(latencies, 0.50)},
             {"read_p95_ms", quantile(latencies, 0.95)},
             {"read_p99_ms", quantile(latencies, 0.99)},
+            {"fresh_pages", fresh_pages},
+            {"discard_p50_ms", discards.empty() ? eqt::Json(nullptr) : eqt::Json(quantile(discards, 0.50))},
             {"read_latency_ms", latencies},
             {"offsets", offsets},
             {"partial_reads", partial_reads},

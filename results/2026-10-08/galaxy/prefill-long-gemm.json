@@ -1,0 +1,25 @@
+{
+ "load": "tiled_mm, batch 2048, coalesce 2048 KiB, prefill_prefetch 512 MiB, 2 GiB cache",
+ "rows": [
+  {
+   "label": "armv9.0 variant, scalar GEMM fallback (before fix)",
+   "prompt_tokens": 3803,
+   "prefill_ms": 318909.4,
+   "note": "simpleperf run; flash attention 53% of user cycles"
+  },
+  {
+   "label": "armv8.6 variant (SIMD GEMM active)",
+   "cpu_variant": "android_armv8.6_1",
+   "prompt_tokens": 3803,
+   "prefill_ms": 157479.743593,
+   "text": "3704"
+  },
+  {
+   "label": "armv9.0 variant with AArch64 NEON GEMM",
+   "cpu_variant": "android_armv9.0_1",
+   "prompt_tokens": 3803,
+   "prefill_ms": 164419.424844,
+   "text": "3704"
+  }
+ ]
+}

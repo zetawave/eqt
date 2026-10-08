@@ -4,53 +4,34 @@ import argparse
 import json
 import math
 from pathlib import Path
-import subprocess
 import tempfile
 
-from benchmark import ROOT, sha256, source_hash
-from device import adb
+from benchmark import ROOT, source_hash
+from runner import Runner
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target", choices=["host", "android"], default="host")
+    parser.add_argument("--target", choices=["host", "linux", "android"], default="host")
+    parser.add_argument("--serial")
+    parser.add_argument("--cpu-variant", help="Android only: force one GGML CPU backend variant")
     parser.add_argument("--output", default="results/local/correctness.json")
     parser.add_argument("--model", default="models/Qwen3-0.6B-Q8_0.gguf")
     args = parser.parse_args()
+    runner = Runner(args.target, args.serial, args.cpu_variant)
     request = json.loads((ROOT / "configs/smoke-request.json").read_text(encoding="utf-8"))
     request.update(max_tokens=24, capture_logits=True)
-    lifecycle_request = json.dumps(request)
-    outcomes = []
-    reference = None
-    binary = ROOT / "build" / args.target / "bin" / ("Release/eqt-bench.exe" if args.target == "host" else "eqt-bench")
-    checker = binary.with_name("eqt-check.exe" if args.target == "host" else "eqt-check")
-    model = Path(args.model).resolve()
-    model_hash, binary_hash, checker_hash = sha256(model), sha256(binary), sha256(checker)
-    remote = "/data/local/tmp/eqt"
-    if args.target == "android":
-        adb("shell", "mkdir", "-p", remote)
-        for local, name, expected in [(binary, "eqt-bench", binary_hash), (checker, "eqt-check", checker_hash),
-                                      (model, "model.gguf", model_hash)]:
-            adb("push", "--sync", str(local), remote + "/" + name)
-            actual = adb("shell", "sha256sum", remote + "/" + name).stdout.split()[0]
-            if actual != expected:
-                raise RuntimeError(f"Device artifact hash mismatch: {name}")
-        # ADB push can reset the executable bit, including after a previous successful run.
-        adb("shell", "chmod", "700", remote + "/eqt-bench", remote + "/eqt-check")
+    lifecycle_request = json.loads(json.dumps(request))
+    local = Path(args.model).resolve()
+    hashes = runner.stage(["eqt-bench", "eqt-check"], [local])
+    model = local if runner.local else local.name
+    outcomes, reference, configuration = [], None, None
     (ROOT / ".cache").mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="eqt-verify-", dir=ROOT / ".cache") as directory:
-        directory = Path(directory)
         for mapped, batch in [(True, 128), (False, 128), (True, 16)]:
             request["load"].update(mmap=mapped, batch=batch)
-            source, target = directory / "request.json", directory / "result.json"
-            source.write_text(json.dumps(request), encoding="utf-8")
-            if args.target == "android":
-                adb("push", str(source), remote + "/verify-request.json")
-                run = adb("shell", remote + "/eqt-bench", remote + "/model.gguf", remote + "/verify-request.json", remote + "/verify-result.json")
-                adb("pull", remote + "/verify-result.json", str(target))
-            else:
-                run = subprocess.run([str(binary), str(model), str(source), str(target)], capture_output=True, check=True)
-            result = json.loads(target.read_text(encoding="utf-8"))
+            result = runner.run("eqt-bench", model, request, directory)[1]
+            configuration = configuration or result["configuration"]
             logits = result["first_logits"]
             if reference is None:
                 reference = result
@@ -63,34 +44,22 @@ def main():
             outcomes.append(dict(mmap=mapped, batch=batch, max_abs_logit_delta=delta, token_ids_equal=token_match, passed=passed))
             if not passed:
                 raise AssertionError(outcomes[-1])
-        request["load"]["context"] = 128
-        request["max_tokens"] = 2048
-        source.write_text(json.dumps(request), encoding="utf-8")
-        if args.target == "host":
-            rejected = subprocess.run([str(binary), str(model), str(source), str(target)], capture_output=True)
-            assert rejected.returncode == 1 and b"exceeds context" in rejected.stderr
-        else:
-            adb("push", str(source), remote + "/verify-request.json")
-            rejected = adb("shell", remote + "/eqt-bench", remote + "/model.gguf", remote + "/verify-request.json",
-                           remote + "/verify-result.json", check=False)
-            assert rejected.returncode == 1 and "exceeds context" in rejected.stderr + rejected.stdout
+        overflow = json.loads(json.dumps(request))
+        overflow["load"]["context"] = 128
+        overflow["max_tokens"] = 2048
+        rejected, _ = runner.run("eqt-bench", model, overflow, directory, check=False)
+        assert rejected.returncode == 1 and "exceeds context" in rejected.stderr + rejected.stdout
         outcomes.append(dict(case="context_overflow", passed=True))
-        source.write_text(lifecycle_request, encoding="utf-8")
-        if args.target == "host":
-            subprocess.run([str(checker), str(model), str(source), str(target)], capture_output=True, check=True)
-        else:
-            adb("push", str(source), remote + "/verify-request.json")
-            adb("shell", remote + "/eqt-check", remote + "/model.gguf", remote + "/verify-request.json",
-                remote + "/verify-result.json")
-            adb("pull", remote + "/verify-result.json", str(target))
-        lifecycle = json.loads(target.read_text(encoding="utf-8"))
+        lifecycle = runner.run("eqt-check", model, lifecycle_request, directory)[1]
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(dict(target=args.target, model_sha256=model_hash, binary_sha256=binary_hash,
-                                      source_sha256=source_hash(),
-                                      lifecycle_binary_sha256=checker_hash, lifecycle=lifecycle,
+    tool = runner.tool("eqt-bench").name
+    output.write_text(json.dumps(dict(target=args.target, model_sha256=hashes[local.name], binary_sha256=hashes[tool],
+                                      lifecycle_binary_sha256=hashes[runner.tool("eqt-check").name],
+                                      source_sha256=source_hash(), cpu_variant=configuration.get("cpu_variant"),
+                                      threadpool=configuration.get("threadpool"), lifecycle=lifecycle,
                                       tolerance_absolute=0.002, outcomes=outcomes,
-                                      scope=f"{model.name}: mapped/allocated, prefill chunks and state reset; not expert streaming"), indent=2) + "\n")
+                                      scope=f"{local.name}: mapped/allocated, prefill chunks and state reset; not expert streaming"), indent=2) + "\n")
     print(output)
 
 

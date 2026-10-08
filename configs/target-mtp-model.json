@@ -1,0 +1,17 @@
+{
+  "repository": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF",
+  "revision": "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
+  "license": "apache-2.0",
+  "purpose": "Same UD-Q4_K_M trunk layout as configs/target-model.json plus the native MTP block (blk.40, 504 MiB) for self-speculative decoding. Header metadata differs in imatrix chunk count, so trunk values may differ from the non-MTP artifact.",
+  "files": [
+    {
+      "name": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+      "size_bytes": 22663387424,
+      "sha256": "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+      "header": {
+        "size_bytes": 16777216,
+        "sha256": "9b4417ea4d76a4dc15472de8c6b463d7adb1b13bdf8573b2eb68fdafddcf78b8"
+      }
+    }
+  ]
+}
