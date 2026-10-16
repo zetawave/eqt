@@ -28,6 +28,9 @@ foreach(option LLAMA_BUILD_COMMON LLAMA_BUILD_TESTS LLAMA_BUILD_TOOLS LLAMA_BUIL
         LLAMA_BUILD_SERVER LLAMA_BUILD_APP LLAMA_OPENSSL GGML_NATIVE GGML_OPENMP GGML_LLAMAFILE)
     set(${option} OFF CACHE BOOL "" FORCE)
 endforeach()
+# Image input: the mtmd library alone, without llama-common or the CLI tools. Video needs an ffmpeg subprocess.
+set(LLAMA_BUILD_MTMD ON CACHE BOOL "" FORCE)
+set(MTMD_VIDEO OFF CACHE BOOL "" FORCE)
 set(LLAMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp")
 if(NOT EXISTS "${LLAMA_DIR}/include/llama.h")
     message(FATAL_ERROR "Run scripts/bootstrap.ps1 first")
@@ -53,6 +56,7 @@ add_library(eqt_engine STATIC native/engine.cpp native/expert_store.cpp)
 target_include_directories(eqt_engine PUBLIC native ${LLAMA_DIR}/vendor PRIVATE ${LLAMA_DIR}/ggml/src ${LLAMA_DIR}/src)
 target_link_libraries(eqt_engine PUBLIC eqt_simd)
 target_link_libraries(eqt_engine PUBLIC eqt_template)
+target_link_libraries(eqt_engine PRIVATE mtmd)
 execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     OUTPUT_VARIABLE EQT_REV OUTPUT_STRIP_TRAILING_WHITESPACE)
 execute_process(COMMAND git status --porcelain WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

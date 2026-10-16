@@ -7,6 +7,8 @@
 #include "jinja/runtime.h"
 #include "json.h"
 #include "llama.h"
+#include "mtmd-helper.h"
+#include "mtmd.h"
 
 #include <algorithm>
 #include <chrono>
@@ -24,6 +26,9 @@
 #endif
 #ifndef _WIN32
 #include <sys/resource.h>
+#endif
+#ifdef __linux__
+#include <sched.h>
 #endif
 #if defined(__aarch64__) && defined(__linux__)
 #include <asm/hwcap.h>
@@ -158,6 +163,18 @@ ThreadpoolApi threadpool_api() {
     }
     return {reinterpret_cast<decltype(&ggml_threadpool_new)>(ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_new")),
             reinterpret_cast<decltype(&ggml_threadpool_free)>(ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_free"))};
+}
+
+// CPUs this process may run on now; 0 when unknown. Android moves a backgrounded app, even one with a foreground
+// service, into a smaller cpuset (on the Galaxy S24+, the four little cores), which narrows every thread's affinity.
+int allowed_cpus() {
+#ifdef __linux__
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    return sched_getaffinity(0, sizeof(set), &set) == 0 ? CPU_COUNT(&set) : 0;
+#else
+    return 0;
+#endif
 }
 
 // Supplies tensor bytes for llama_model_init_from_user: routed banks are registered with the store,
@@ -327,6 +344,72 @@ Json counter_delta(const Json &before, const Json &after) {
     return delta;
 }
 
+void log_line(ggml_log_level level, const char *text, void *) {
+    if (level == GGML_LOG_LEVEL_DEBUG) {
+        return;
+    }
+#ifdef __ANDROID__
+    __android_log_write(level == GGML_LOG_LEVEL_ERROR ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO, "Equity", text);
+#else
+    std::fputs(text, stderr);
+#endif
+}
+
+constexpr size_t max_images_per_request = 8;
+
+// Chat messages for the template: content parts are flattened to one string in which every image is the media
+// marker that mtmd_tokenize later replaces with that image's embeddings, in order.
+struct ChatInput {
+    Json messages = Json::array();
+    std::vector<std::string> images;
+};
+ChatInput chat_input(const Json &messages) {
+    if (!messages.is_array() || messages.empty() || messages.size() > 128) {
+        throw std::invalid_argument("messages must contain 1..128 messages");
+    }
+    ChatInput input;
+    for (const auto &message : messages) {
+        const auto role = message.at("role").get<std::string>();
+        if (role != "system" && role != "user" && role != "assistant") {
+            throw std::invalid_argument("Only system/user/assistant roles are supported");
+        }
+        const auto &content = message.at("content");
+        std::string text;
+        if (content.is_string()) {
+            text = content.get<std::string>();
+        } else if (content.is_array()) {
+            for (const auto &part : content) {
+                const auto type = part.at("type").get<std::string>();
+                if (type == "text") {
+                    text += part.at("text").get<std::string>();
+                } else if (type == "image") {
+                    if (role != "user") {
+                        throw std::invalid_argument("Images are supported in user messages only");
+                    }
+                    if (input.images.size() == max_images_per_request) {
+                        throw std::invalid_argument("At most " + std::to_string(max_images_per_request) +
+                                                    " images per request");
+                    }
+                    input.images.push_back(part.at("path").get<std::string>());
+                    text += mtmd_default_marker();
+                } else {
+                    throw std::invalid_argument("Unsupported content part: " + type);
+                }
+            }
+        } else {
+            throw std::invalid_argument("content must be a string or an array of parts");
+        }
+        if (text.size() > 1024 * 1024) {
+            throw std::invalid_argument("Message exceeds 1 MiB");
+        }
+        input.messages.push_back({{"role", role}, {"content", std::move(text)}});
+    }
+    return input;
+}
+
+using MediaContext = std::unique_ptr<mtmd_context, decltype(&mtmd_free)>;
+using MediaChunks = std::unique_ptr<mtmd_input_chunks, decltype(&mtmd_input_chunks_free)>;
+
 } // namespace
 
 Json process_memory() {
@@ -391,6 +474,9 @@ struct Engine::State {
     std::unique_ptr<ggml_context, decltype(&ggml_free)> shapes{nullptr, ggml_free};
     std::unique_ptr<llama_model, decltype(&llama_model_free)> model{nullptr, llama_model_free};
     std::unique_ptr<ggml_threadpool, void (*)(ggml_threadpool *)> threadpool{nullptr, nullptr};
+    // Smaller pools used while Android allows fewer CPUs, by thread count. GGML's CPU backends keep a pointer to
+    // the last pool they ran and pause it when another one is attached, so pools live until the contexts are freed.
+    std::vector<std::pair<int, std::unique_ptr<ggml_threadpool, void (*)(ggml_threadpool *)>>> reduced_pools;
     std::unique_ptr<llama_context, decltype(&llama_free)> context{nullptr, llama_free};
     std::unique_ptr<llama_batch_ext, decltype(&llama_batch_ext_free)> batch{nullptr, llama_batch_ext_free};
     // Native MTP head of the same model, drafting tokens that the target verifies in one batch.
@@ -404,24 +490,62 @@ struct Engine::State {
     size_t n_embd = 0;
     std::vector<float> pending_h, verify_h, draft_h;
     std::string chat_template;
+    // Vision projector (mmproj GGUF). It is loaded only for requests with images and released as soon as they
+    // are encoded, so text chats, prompt evaluation and decoding never hold its weights in memory.
+    std::string projector_path;
+    int image_max_tokens = 0;
+    int threads = 0;
+    // Persistent pool sized to min(configured threads, allowed CPUs).
+    ThreadpoolApi pool_api;
+    ggml_threadpool_params pool_params{};
+    bool adaptive_threads = false;
+    int pool_threads = 0;
+    int pool_changes = 0;
+
+    // Spinning workers that outnumber the CPUs Android allows stall one another at every barrier (measured:
+    // 0.2 tokens/s with six threads on four cores), so the pool follows the allowed CPU count, never above the
+    // configured threads. Called before each graph evaluation; it only rebuilds the pool when the count changes.
+    void fit_threads() {
+        if (!adaptive_threads) {
+            return;
+        }
+        const int allowed = allowed_cpus();
+        const int wanted = allowed > 0 ? std::min(threads, allowed) : threads;
+        if (wanted == pool_threads) {
+            return;
+        }
+        ggml_threadpool *pool = wanted == threads ? threadpool.get() : nullptr;
+        for (const auto &[size, reduced] : reduced_pools) {
+            if (size == wanted) {
+                pool = reduced.get();
+            }
+        }
+        if (!pool) {
+            auto params = pool_params;
+            params.n_threads = wanted;
+            std::unique_ptr<ggml_threadpool, void (*)(ggml_threadpool *)> created{pool_api.create(&params), pool_api.destroy};
+            if (!created) {
+                return;
+            }
+            pool = created.get();
+            reduced_pools.emplace_back(wanted, std::move(created));
+        }
+        for (llama_context *target : {context.get(), draft.get()}) {
+            if (target) {
+                llama_attach_threadpool(target, pool, pool);
+                llama_set_n_threads(target, wanted, wanted);
+            }
+        }
+        pool_threads = wanted;
+        ++pool_changes;
+    }
 };
 
 Engine::Engine() {
     static std::once_flag init;
     std::call_once(init, [] {
-        llama_log_set(
-            [](ggml_log_level level, const char *text, void *) {
-                if (level == GGML_LOG_LEVEL_DEBUG) {
-                    return;
-                }
-#ifdef __ANDROID__
-                __android_log_write(level == GGML_LOG_LEVEL_ERROR ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO,
-                                    "Equity", text);
-#else
-            std::fputs(text, stderr);
-#endif
-            },
-            nullptr);
+        llama_log_set(log_line, nullptr);
+        mtmd_helper_log_set(log_line, nullptr);
 #ifdef GGML_BACKEND_DL
         load_cpu_backend();
 #endif
@@ -459,6 +583,11 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
 #endif
     }
     const bool streaming = options.value("expert_streaming", false);
+    const std::string projector = options.value("mmproj", std::string());
+    const int image_max_tokens = integer(options, "image_max_tokens", 1024, 64, 4096);
+    if (!projector.empty() && !mtmd_get_cap_from_file(projector.c_str()).inp_vision) {
+        throw std::runtime_error("The vision projector cannot be read or has no image encoder");
+    }
     const auto size = std::filesystem::file_size(path);
     {
         std::ifstream probe(path, std::ios::binary);
@@ -660,7 +789,12 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
             throw std::runtime_error("Threadpool creation failed");
         }
         llama_attach_threadpool(state->context.get(), state->threadpool.get(), state->threadpool.get());
+        state->pool_api = api;
+        state->pool_params = pool_params;
+        state->pool_threads = threads;
+        state->adaptive_threads = mask.empty() && options.value("adaptive_threads", true);
         pool_info = {{"persistent", true},
+                     {"adaptive", state->adaptive_threads},
                      {"poll", pool_params.poll},
                      {"cpu_mask", mask.empty() ? Json(nullptr) : Json(mask)}};
     }
@@ -699,6 +833,9 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         throw std::runtime_error("Missing model chat template");
     }
     state->chat_template = tmpl;
+    state->projector_path = projector;
+    state->image_max_tokens = image_max_tokens;
+    state->threads = threads;
     state->info = {{"backend", "cpu"},
                    {"architecture", arch},
                    {"model_file_bytes", size},
@@ -726,6 +863,10 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                                               {"draft_p_min", draft_p_min}, {"sampling", "greedy only"}}
                                        : Json(nullptr)},
                    {"steering", false},
+                   {"vision", projector.empty() ? Json(nullptr)
+                                                : Json{{"projector_bytes", std::filesystem::file_size(projector)},
+                                                       {"image_max_tokens", image_max_tokens},
+                                                       {"residency", "per_request"}}},
                    {"load_ms", milliseconds(start)},
                    {"eqt_revision", EQT_REV},
                    {"compiler", EQT_COMPILER},
@@ -743,18 +884,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     auto &s = *state_;
     const auto start = Clock::now();
     const auto memory_before = process_memory();
-    const auto &messages = request.at("messages");
-    if (!messages.is_array() || messages.empty() || messages.size() > 128) {
-        throw std::invalid_argument("messages must contain 1..128 text messages");
-    }
-    for (const auto &message : messages) {
-        const auto role = message.at("role").get<std::string>();
-        if (role != "system" && role != "user" && role != "assistant") {
-            throw std::invalid_argument("Only text system/user/assistant roles are supported");
-        }
-        if (message.at("content").get_ref<const std::string &>().size() > 1024 * 1024) {
-            throw std::invalid_argument("Message exceeds 1 MiB");
-        }
+    const int pool_changes_before = s.pool_changes;
+    const ChatInput input = chat_input(request.at("messages"));
+    const bool has_media = !input.images.empty();
+    if (has_media && s.projector_path.empty()) {
+        throw std::invalid_argument("This model was loaded without image support");
     }
     // Bounded by the context window, checked with the prompt length below.
     const int maximum = integer(request, "max_tokens", 128, 1, 1 << 20);
@@ -766,18 +900,105 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     const bool thinking = request.value("thinking", false);
     const bool ignore_eos = request.value("ignore_eos", false);
     const auto *vocab = llama_model_get_vocab(s.model.get());
-    const auto prompt = render_chat(s.chat_template, messages, thinking, piece(vocab, llama_vocab_bos(vocab)),
-                                    piece(vocab, llama_vocab_eos(vocab)));
-    const int count =
-        -llama_tokenize(vocab, prompt.data(), static_cast<int>(prompt.size()), nullptr, 0, true, true);
+    const auto prompt = render_chat(s.chat_template, input.messages, thinking,
+                                    piece(vocab, llama_vocab_bos(vocab)), piece(vocab, llama_vocab_eos(vocab)));
+    // A text prompt is one token sequence. With images, mtmd splits it into text and image chunks; an image
+    // fills its token count of KV cells but advances M-RoPE positions by its own n_pos, so `positions` (the next
+    // free position) differs from `count` (cells used).
+    std::vector<llama_token> tokens;
+    MediaContext media{nullptr, mtmd_free};
+    MediaChunks chunks{nullptr, mtmd_input_chunks_free};
+    int count = 0;
+    llama_pos positions = 0;
+    double media_load_ms = 0;
+    if (!has_media) {
+        count = -llama_tokenize(vocab, prompt.data(), static_cast<int>(prompt.size()), nullptr, 0, true, true);
+        if (count > 0 && count + maximum <= s.context_size) {
+            tokens.resize(count);
+            if (llama_tokenize(vocab, prompt.data(), static_cast<int>(prompt.size()), tokens.data(), count, true,
+                               true) != count) {
+                throw std::runtime_error("Tokenization failed");
+            }
+        }
+        positions = count;
+    } else {
+        const auto media_start = Clock::now();
+        auto media_params = mtmd_context_params_default();
+        media_params.use_gpu = false;
+        media_params.print_timings = false;
+        // The encoder spins at barriers like the decoder; it uses at most the CPUs Android allows right now.
+        const int allowed = allowed_cpus();
+        media_params.n_threads = allowed > 0 ? std::min(s.threads, allowed) : s.threads;
+        media_params.warmup = false;
+        media_params.image_max_tokens = s.image_max_tokens;
+        media.reset(mtmd_init_from_file(s.projector_path.c_str(), s.model.get(), media_params));
+        if (!media) {
+            throw std::runtime_error("Cannot load the vision projector; see native log");
+        }
+        std::vector<std::unique_ptr<mtmd_bitmap, decltype(&mtmd_bitmap_free)>> bitmaps;
+        std::vector<const mtmd_bitmap *> views;
+        for (const auto &path : input.images) {
+            const auto wrapper =
+                mtmd_helper_bitmap_init_from_file(media.get(), path.c_str(), false, mtmd_helper_init_opt_default());
+            if (wrapper.video_ctx) {
+                mtmd_helper_video_free(wrapper.video_ctx);
+            }
+            bitmaps.emplace_back(wrapper.bitmap, mtmd_bitmap_free);
+            if (!wrapper.bitmap || mtmd_bitmap_is_audio(wrapper.bitmap)) {
+                throw std::invalid_argument("Cannot decode image " + std::filesystem::path(path).filename().string());
+            }
+            views.push_back(wrapper.bitmap);
+        }
+        chunks.reset(mtmd_input_chunks_init());
+        const mtmd_input_text text{prompt.c_str(), prompt.size(), true, true};
+        if (mtmd_tokenize(media.get(), chunks.get(), &text, views.data(), views.size()) != 0) {
+            throw std::runtime_error("Cannot tokenize the prompt with its images");
+        }
+        const size_t chunk_count = mtmd_input_chunks_size(chunks.get());
+        if (!chunk_count ||
+            mtmd_input_chunk_get_type(mtmd_input_chunks_get(chunks.get(), chunk_count - 1)) != MTMD_INPUT_CHUNK_TYPE_TEXT) {
+            throw std::runtime_error("The prompt must end with text after its images");
+        }
+        count = static_cast<int>(mtmd_helper_get_n_tokens(chunks.get()));
+        positions = mtmd_helper_get_n_pos(chunks.get());
+        media_load_ms = milliseconds(media_start);
+    }
     if (count <= 0 || count + maximum > s.context_size) {
         throw std::invalid_argument(
             "Prompt plus output exceeds context; start a new chat or lower output limit");
     }
-    std::vector<llama_token> tokens(count);
-    if (llama_tokenize(vocab, prompt.data(), static_cast<int>(prompt.size()), tokens.data(), count, true,
-                       true) != count) {
-        throw std::runtime_error("Tokenization failed");
+    // Every image is encoded before the prompt is evaluated and the projector is released at once: its weights
+    // and encoder buffers are never resident together with the prompt's expert prefetch or during decoding.
+    std::vector<std::vector<float>> image_embeddings;
+    bool use_mrope = false;
+    double encode_ms = 0;
+    Json encode_memory = nullptr;
+    if (has_media) {
+        const auto encode_start = Clock::now();
+        use_mrope = mtmd_decode_use_mrope(media.get());
+        const size_t width = static_cast<size_t>(llama_model_n_embd_inp(s.model.get()));
+        for (size_t c = 0; c < mtmd_input_chunks_size(chunks.get()); ++c) {
+            const auto *chunk = mtmd_input_chunks_get(chunks.get(), c);
+            if (mtmd_input_chunk_get_type(chunk) == MTMD_INPUT_CHUNK_TYPE_TEXT) {
+                continue;
+            }
+            if (mtmd_input_chunk_get_type(chunk) != MTMD_INPUT_CHUNK_TYPE_IMAGE ||
+                mtmd_decode_use_non_causal(media.get(), chunk)) {
+                throw std::runtime_error("This projector needs a decoding mode Equity does not support");
+            }
+            if (cancelled_) {
+                break;
+            }
+            if (mtmd_encode_chunk(media.get(), chunk) != 0) {
+                throw std::runtime_error("Image encoding failed; see native log");
+            }
+            const float *embedding = mtmd_get_output_embd(media.get());
+            image_embeddings.emplace_back(embedding, embedding + mtmd_input_chunk_get_n_tokens(chunk) * width);
+        }
+        // Peak of the image path: projector weights and encoder buffers on top of everything else.
+        encode_memory = process_memory();
+        media.reset();
+        encode_ms = milliseconds(encode_start);
     }
     // Rebuild the entire prefix each request: safe for hybrid recurrent state and cancellation.
     llama_memory_clear(llama_get_memory(s.context.get()), true);
@@ -810,6 +1031,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         if (cancelled_) {
             return false;
         }
+        s.fit_threads();
         const int code = llama_process(context, LLAMA_PROCESS_TYPE_DECODE, batch);
         if (code != 0 && !cancelled_) {
             const auto failure = s.store ? s.store->error() : std::string();
@@ -888,8 +1110,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         draft_ms += milliseconds(begin);
         return ok;
     };
-    const bool speculative = s.draft && temperature == 0 && count >= 2;
-    if (s.draft) {
+    // The MTP head pairs every prompt token with a target hidden state; image embeddings have no token to pair,
+    // so prompts with images decode without drafting.
+    const bool use_draft = s.draft && !has_media;
+    const bool speculative = use_draft && temperature == 0 && count >= 2;
+    if (use_draft) {
         llama_memory_clear(llama_get_memory(s.draft.get()), true);
         std::fill(s.pending_h.begin(), s.pending_h.end(), 0.0f);
     }
@@ -897,9 +1122,71 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     const int prefill = speculative ? count - 1 : count;
     const auto prefill_start = Clock::now();
     bool ready = true;
-    for (int i = 0; i < prefill && ready; i += s.batch_size) {
-        const int length = std::min(s.batch_size, prefill - i);
-        ready = evaluate(tokens.data() + i, length, i) && (!s.draft || mtp_process(tokens.data() + i, length, i));
+    double image_ms = 0;
+    if (!has_media) {
+        for (int i = 0; i < prefill && ready; i += s.batch_size) {
+            const int length = std::min(s.batch_size, prefill - i);
+            ready = evaluate(tokens.data() + i, length, i) && (!use_draft || mtp_process(tokens.data() + i, length, i));
+        }
+    } else {
+        const size_t width = static_cast<size_t>(llama_model_n_embd_inp(s.model.get()));
+        ready = !cancelled_ && image_embeddings.size() == input.images.size();
+        size_t image = 0;
+        llama_pos position = 0;
+        std::vector<mtmd_decoder_pos> relative;
+        std::vector<llama_pos> rows;
+        for (size_t c = 0; c < mtmd_input_chunks_size(chunks.get()) && ready; ++c) {
+            const auto *chunk = mtmd_input_chunks_get(chunks.get(), c);
+            if (mtmd_input_chunk_get_type(chunk) == MTMD_INPUT_CHUNK_TYPE_TEXT) {
+                size_t length = 0;
+                const llama_token *ids = mtmd_input_chunk_get_tokens_text(chunk, &length);
+                for (size_t i = 0; i < length && ready; i += s.batch_size) {
+                    const int part = static_cast<int>(std::min<size_t>(s.batch_size, length - i));
+                    ready = evaluate(ids + i, part, position + static_cast<llama_pos>(i));
+                }
+                position += static_cast<llama_pos>(length);
+                continue;
+            }
+            const auto image_start = Clock::now();
+            const auto &embedding = image_embeddings[image++];
+            const int length = static_cast<int>(mtmd_input_chunk_get_n_tokens(chunk));
+            // M-RoPE: each embedding row has (t, y, x, z) positions from the image grid; otherwise positions are
+            // consecutive. Same layout as mtmd-helper's decode_embd_batch.
+            constexpr int sections = 4;
+            rows.assign(static_cast<size_t>(length) * sections, 0);
+            if (use_mrope) {
+                relative.resize(length);
+                mtmd_helper_image_get_decoder_pos(mtmd_input_chunk_get_tokens_image(chunk), position, relative.data());
+                for (int r = 0; r < length; ++r) {
+                    llama_pos *row = rows.data() + static_cast<size_t>(r) * sections;
+                    row[0] = relative[r].t;
+                    row[1] = relative[r].y;
+                    row[2] = relative[r].x;
+                    row[3] = relative[r].z;
+                }
+            } else {
+                for (int r = 0; r < length; ++r) {
+                    rows[static_cast<size_t>(r) * sections] = position + r;
+                }
+            }
+            for (int first = 0; first < length && ready; first += s.batch_size) {
+                llama_batch_ext_clear(s.batch.get());
+                for (int r = first; r < std::min(length, first + s.batch_size); ++r) {
+                    const int idx = llama_batch_ext_add_embd(s.batch.get(), 0, {embedding.data() + r * width, 1, width});
+                    if (idx < 0 || !llama_batch_ext_set_pos(s.batch.get(), idx, rows.data() + static_cast<size_t>(r) * sections)) {
+                        throw std::runtime_error("Invalid native image batch");
+                    }
+                }
+                ready = run(s.context.get(), s.batch.get());
+            }
+            position += mtmd_input_chunk_get_n_pos(chunk);
+            image_ms += milliseconds(image_start);
+        }
+        if (ready && position != positions) {
+            throw std::runtime_error("Image prompt positions disagree with mtmd");
+        }
+        image_embeddings.clear();
+        chunks.reset();
     }
     const double prefill_ms = milliseconds(prefill_start);
     const bool prefill_complete = ready;
@@ -956,7 +1243,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
             if (!push(token)) {
                 break;
             }
-            if (!evaluate(&token, 1, count + i)) {
+            if (!evaluate(&token, 1, positions + i)) {
                 reason = "cancelled";
                 break;
             }
@@ -1040,6 +1327,13 @@ Json Engine::generate(const Json &request, const Emit &emit) {
           {"thinking", thinking},
           {"ignore_eos", ignore_eos}}},
         {"prompt_tokens", count},
+        {"threads_at_end", s.pool_threads},
+        {"thread_pool_rebuilds", s.pool_changes - pool_changes_before},
+        {"prompt_images", input.images.size()},
+        {"image_projector_load_ms", has_media ? Json(media_load_ms) : Json(nullptr)},
+        {"image_encode_ms", has_media ? Json(encode_ms) : Json(nullptr)},
+        {"image_prefill_ms", has_media ? Json(image_ms) : Json(nullptr)},
+        {"memory_after_image_encode", encode_memory},
         {"generated_tokens", generated.size()},
         {"prefill_ms", prefill_ms},
         {"prefill_tokens_per_second", prefill_complete ? Json(count * 1000 / prefill_ms) : Json(nullptr)},

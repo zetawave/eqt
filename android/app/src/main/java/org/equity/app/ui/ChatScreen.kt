@@ -1,11 +1,22 @@
 package org.equity.app.ui
 
+import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,16 +37,26 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,12 +67,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,16 +88,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import android.content.ClipData
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.equity.app.Attachment
+import org.equity.app.AttachmentException
+import org.equity.app.AttachmentKind
+import org.equity.app.Attachments
+import org.equity.app.Catalog
+import org.equity.app.ChatStore
+import org.equity.app.ChatsState
 import org.equity.app.EngineController
 import org.equity.app.EngineState
 import org.equity.app.Message
 import org.equity.app.Phase
+import java.io.File
 
 private val Suggestions = listOf(
     "Spiegami in due frasi la differenza tra RAM e memoria di archiviazione.",
@@ -79,23 +116,92 @@ private val Suggestions = listOf(
     "Explain how a mixture-of-experts model works, simply.",
 )
 
+// Matches the number of images the engine is shown per request.
+private const val MAX_IMAGES_PER_MESSAGE = 4
+
 @Composable
-fun ChatScreen(engine: EngineState, onOpenModels: () -> Unit) {
+fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit, onOpenChats: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var input by rememberSaveable { mutableStateOf("") }
+    val pending = remember { mutableStateListOf<Attachment>() }
+    var importing by remember { mutableIntStateOf(0) }
+    var viewing by remember { mutableStateOf<File?>(null) }
+    val vision by rememberUpdatedState(engine.vision)
+    val chat = chats.current
+    val messages = chat?.messages.orEmpty()
     val list = rememberLazyListState()
-    val last = engine.messages.lastOrNull()
-    LaunchedEffect(engine.messages.size, last?.text?.length) {
-        if (engine.messages.isNotEmpty()) list.scrollToItem(engine.messages.lastIndex, Int.MAX_VALUE)
+    val last = messages.lastOrNull()
+    LaunchedEffect(chat?.id, messages.size, last?.text?.length) {
+        if (messages.isNotEmpty()) list.scrollToItem(messages.lastIndex, Int.MAX_VALUE)
     }
+
+    val import = { uris: List<Uri>, cleanup: (() -> Unit)? ->
+        scope.launch {
+            importing++
+            for (uri in uris) {
+                if (pending.count { it.kind == AttachmentKind.Image } >= MAX_IMAGES_PER_MESSAGE) {
+                    Toast.makeText(context, "Up to $MAX_IMAGES_PER_MESSAGE images per message", Toast.LENGTH_SHORT).show()
+                    break
+                }
+                try {
+                    pending += withContext(Dispatchers.IO) { Attachments.import(context, uri, vision) }
+                } catch (error: AttachmentException) {
+                    Toast.makeText(context, error.message, Toast.LENGTH_LONG).show()
+                } catch (error: Exception) {
+                    Toast.makeText(context, "Cannot attach this file", Toast.LENGTH_LONG).show()
+                }
+            }
+            cleanup?.invoke()
+            importing--
+        }
+    }
+    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_IMAGES_PER_MESSAGE)) {
+        if (it.isNotEmpty()) import(it, null)
+    }
+    val documents = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
+        if (it.isNotEmpty()) import(it, null)
+    }
+    var capture by rememberSaveable { mutableStateOf<String?>(null) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+        val file = capture?.let(::File)
+        capture = null
+        if (file != null) {
+            if (taken) import(listOf(Uri.fromFile(file))) { file.delete() } else file.delete()
+        }
+    }
+    val takePhoto: () -> Unit = {
+        val file = File(context.cacheDir, "camera/${System.currentTimeMillis()}.jpg").apply { parentFile?.mkdirs() }
+        capture = file.path
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+        try {
+            camera.launch(uri)
+        } catch (_: ActivityNotFoundException) {
+            capture = null
+            Toast.makeText(context, "No camera app is available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    var askedNotifications by rememberSaveable { mutableStateOf(false) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val send = { text: String ->
-        EngineController.send(context, text)
-        input = ""
+        if (EngineController.send(context, chats.currentId, text, pending.toList())) {
+            input = ""
+            pending.clear()
+            // The finished-answer notification needs this permission on Android 13+; asked once, on first use.
+            val missing = Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
+                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            if (missing && !askedNotifications) {
+                askedNotifications = true
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
     }
+    val answeringElsewhere = engine.generation != null && engine.generation.chatId != chats.currentId
     Column(Modifier.fillMaxSize().imePadding()) {
-        ChatHeader(engine)
+        ChatHeader(engine, chat?.title, onOpenChats, onNewChat = { ChatStore.newChat() }, canStartNew = chat != null)
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (engine.messages.isEmpty()) {
+            if (messages.isEmpty()) {
                 EmptyChat(engine, onOpenModels, onSuggestion = send)
             } else {
                 LazyColumn(
@@ -104,8 +210,9 @@ fun ChatScreen(engine: EngineState, onOpenModels: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(engine.messages, key = { it.id }) { message ->
-                        if (message.fromUser) UserBubble(message) else AssistantMessage(message)
+                    items(messages, key = { it.id }) { message ->
+                        if (message.fromUser) UserMessage(chat!!.id, message, onView = { viewing = it })
+                        else AssistantMessage(message)
                     }
                 }
             }
@@ -113,24 +220,37 @@ fun ChatScreen(engine: EngineState, onOpenModels: () -> Unit) {
         Composer(
             value = input,
             onValueChange = { input = it },
-            phase = engine.phase,
+            engine = engine,
+            answeringElsewhere = answeringElsewhere,
+            pending = pending,
+            importing = importing > 0,
+            onRemove = { attachment ->
+                pending.remove(attachment)
+                Attachments.discard(attachment)
+            },
+            onPhotos = { photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            onCamera = takePhoto,
+            onFile = { documents.launch(arrayOf("*/*")) },
+            onView = { viewing = it },
             onSend = { send(input) },
             onStop = { EngineController.stop() },
         )
     }
+    viewing?.let { ImageViewer(it) { viewing = null } }
 }
 
 @Composable
-private fun ChatHeader(engine: EngineState) {
+private fun ChatHeader(engine: EngineState, title: String?, onOpenChats: () -> Unit, onNewChat: () -> Unit, canStartNew: Boolean) {
     val colors = MaterialTheme.colorScheme
+    val context = LocalContext.current
     Row(
-        Modifier.fillMaxWidth().statusBarsPadding().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Logo(30.dp, wordmark = false)
-        Spacer(Modifier.width(12.dp))
+        IconButton(onClick = onOpenChats) { Icon(Icons.Rounded.Menu, contentDescription = "Chats") }
+        Spacer(Modifier.width(4.dp))
         Column(Modifier.weight(1f)) {
-            Text(engine.modelName ?: "Equity", style = MaterialTheme.typography.titleMedium, maxLines = 1,
+            Text(title ?: if (engine.phase == Phase.Empty) "Equity" else "New chat", style = MaterialTheme.typography.titleMedium, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusDot(engine.phase)
@@ -138,16 +258,21 @@ private fun ChatHeader(engine: EngineState) {
                 val detail = when (engine.phase) {
                     Phase.Empty -> "No model loaded"
                     Phase.Loading -> engine.loadPercent?.let { "Loading $it%" } ?: engine.status
-                    Phase.Ready -> engine.lastSpeed?.let { "Ready · last %.1f tok/s".format(it) } ?: "Ready · offline"
+                    Phase.Ready -> buildString {
+                        append(engine.modelName ?: "Ready")
+                        engine.lastSpeed?.let { append(" · last %.1f tok/s".format(it)) }
+                    }
                     else -> engine.status
                 }
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
             }
         }
-        IconButton(
-            onClick = { EngineController.newChat() },
-            enabled = engine.messages.isNotEmpty() && engine.phase != Phase.Generating,
-        ) { Icon(Icons.Rounded.Add, contentDescription = "New chat") }
+        val reload = Catalog.byId(engine.lastModelId)
+        if (engine.phase == Phase.Empty && reload != null) {
+            TextButton(onClick = { EngineController.load(context, reload) }) { Text("Load model") }
+        }
+        IconButton(onClick = onNewChat, enabled = canStartNew) { Icon(Icons.Rounded.Add, contentDescription = "New chat") }
     }
     if (engine.phase == Phase.Loading) {
         val percent = engine.loadPercent
@@ -189,7 +314,9 @@ private fun EmptyChat(engine: EngineState, onOpenModels: () -> Unit, onSuggestio
         when (engine.phase) {
             Phase.Empty -> Button(onClick = onOpenModels) { Text("Choose a model") }
             Phase.Loading, Phase.Unloading -> Text(engine.status, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-            else -> FlowRow(
+            Phase.Generating -> Text("Equity is answering in another chat.", style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant)
+            Phase.Ready -> FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -208,18 +335,34 @@ private fun EmptyChat(engine: EngineState, onOpenModels: () -> Unit, onSuggestio
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun UserBubble(message: Message) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp),
-            modifier = Modifier.widthIn(max = 320.dp),
-        ) {
-            SelectionContainer {
-                Text(message.text, style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp))
+private fun UserMessage(chatId: String, message: Message, onView: (File) -> Unit) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+        if (message.attachments.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.widthIn(max = 320.dp).padding(bottom = 6.dp),
+            ) {
+                message.attachments.forEach { attachment ->
+                    val file = ChatStore.file(chatId, attachment)
+                    if (attachment.kind == AttachmentKind.Image) ImageThumbnail(file, 120.dp) { onView(file) }
+                    else DocumentChip(attachment)
+                }
+            }
+        }
+        if (message.text.isNotEmpty()) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp),
+                modifier = Modifier.widthIn(max = 320.dp),
+            ) {
+                SelectionContainer {
+                    Text(message.text, style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp))
+                }
             }
         }
     }
@@ -235,16 +378,16 @@ private fun AssistantMessage(message: Message) {
             TypingDots()
         } else {
             SelectionContainer {
-                Text(
+                MarkdownText(
                     message.text + if (message.streaming) " ▍" else "",
-                    style = MaterialTheme.typography.bodyLarge,
                     color = if (message.failed) colors.error else colors.onSurface,
                 )
             }
         }
         if (!message.streaming) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                message.stats?.let {
+                val note = message.stats ?: if (message.failed) "Not completed" else null
+                note?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
                         modifier = Modifier.weight(1f, fill = false))
                 }
@@ -273,38 +416,110 @@ private fun TypingDots() {
 }
 
 @Composable
-private fun Composer(value: String, onValueChange: (String) -> Unit, phase: Phase, onSend: () -> Unit, onStop: () -> Unit) {
+private fun Composer(
+    value: String,
+    onValueChange: (String) -> Unit,
+    engine: EngineState,
+    answeringElsewhere: Boolean,
+    pending: List<Attachment>,
+    importing: Boolean,
+    onRemove: (Attachment) -> Unit,
+    onPhotos: () -> Unit,
+    onCamera: () -> Unit,
+    onFile: () -> Unit,
+    onView: (File) -> Unit,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
-    val ready = phase == Phase.Ready
-    val generating = phase == Phase.Generating
+    val ready = engine.phase == Phase.Ready
+    val generating = engine.phase == Phase.Generating
+    var menu by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)) {
         Surface(color = colors.surfaceContainerHigh, shape = RoundedCornerShape(28.dp)) {
-            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(end = 6.dp, bottom = 6.dp)) {
-                TextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    enabled = ready || generating,
-                    placeholder = { Text(if (phase == Phase.Empty) "Load a model to start" else "Message Equity") },
-                    maxLines = 6,
-                    textStyle = MaterialTheme.typography.bodyLarge,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                    ),
-                    modifier = Modifier.weight(1f),
-                )
-                if (generating) {
-                    FilledIconButton(
-                        onClick = onStop,
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.onSurface, contentColor = colors.surface),
-                    ) { Icon(Icons.Rounded.Stop, contentDescription = "Stop") }
-                } else {
-                    FilledIconButton(onClick = onSend, enabled = ready && value.isNotBlank()) {
-                        Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send")
+            Column {
+                if (pending.isNotEmpty() || importing) {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        pending.forEach { attachment ->
+                            if (attachment.kind == AttachmentKind.Image) {
+                                val file = File(ChatStore.staging, attachment.file)
+                                Box {
+                                    ImageThumbnail(file, 64.dp) { onView(file) }
+                                    RemoveBadge(Modifier.align(Alignment.TopEnd)) { onRemove(attachment) }
+                                }
+                            } else {
+                                DocumentChip(attachment) {
+                                    IconButton(onClick = { onRemove(attachment) }, modifier = Modifier.size(28.dp)) {
+                                        Icon(Icons.Rounded.Close, contentDescription = "Remove ${attachment.name}", modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                        if (importing) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                    }
+                }
+                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(start = 4.dp, end = 6.dp, bottom = 6.dp)) {
+                    Box {
+                        IconButton(onClick = { menu = true }, enabled = ready || generating, modifier = Modifier.padding(bottom = 2.dp)) {
+                            Icon(Icons.Outlined.AttachFile, contentDescription = "Attach")
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = colors.surfaceContainerHighest) {
+                            val imageHint = if (engine.vision) null else "Needs a model with image support"
+                            DropdownMenuItem(
+                                text = { MenuLabel("Photos", imageHint) },
+                                leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = null) },
+                                enabled = engine.vision,
+                                onClick = { menu = false; onPhotos() },
+                            )
+                            DropdownMenuItem(
+                                text = { MenuLabel("Camera", imageHint) },
+                                leadingIcon = { Icon(Icons.Outlined.PhotoCamera, contentDescription = null) },
+                                enabled = engine.vision,
+                                onClick = { menu = false; onCamera() },
+                            )
+                            DropdownMenuItem(
+                                text = { MenuLabel("File", "Text, code or PDF") },
+                                leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) },
+                                onClick = { menu = false; onFile() },
+                            )
+                        }
+                    }
+                    TextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        enabled = ready || generating,
+                        placeholder = {
+                            Text(when {
+                                engine.phase == Phase.Empty -> "Load a model to start"
+                                answeringElsewhere -> "Equity is answering in another chat"
+                                else -> "Message Equity"
+                            })
+                        },
+                        maxLines = 6,
+                        textStyle = MaterialTheme.typography.bodyLarge,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (generating) {
+                        FilledIconButton(
+                            onClick = onStop,
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.onSurface, contentColor = colors.surface),
+                        ) { Icon(Icons.Rounded.Stop, contentDescription = "Stop") }
+                    } else {
+                        FilledIconButton(onClick = onSend, enabled = ready && !importing && (value.isNotBlank() || pending.isNotEmpty())) {
+                            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send")
+                        }
                     }
                 }
             }
@@ -315,6 +530,24 @@ private fun Composer(value: String, onValueChange: (String) -> Unit, phase: Phas
             Spacer(Modifier.width(4.dp))
             Text("Runs on this device. Nothing is sent online.", style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun MenuLabel(title: String, hint: String?) {
+    Column {
+        Text(title)
+        hint?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+@Composable
+private fun RemoveBadge(modifier: Modifier, onClick: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), shape = CircleShape,
+        modifier = modifier.padding(3.dp).size(22.dp), onClick = onClick) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Close, contentDescription = "Remove image", modifier = Modifier.size(14.dp))
         }
     }
 }

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.rounded.Download
@@ -37,6 +38,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +65,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.work.WorkInfo
 import kotlinx.coroutines.delay
+import org.equity.app.Artifact
 import org.equity.app.Catalog
 import org.equity.app.CatalogModel
 import org.equity.app.Downloads
@@ -152,21 +155,21 @@ private fun Metric(icon: ImageVector, label: String, value: String, modifier: Mo
 private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -> Unit) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
-    val work by remember(model.id) { Downloads.observe(context, model) }.collectAsStateWithLifecycle(initialValue = null)
+    val work by remember(model.id) { Downloads.observe(context, model.artifact) }.collectAsStateWithLifecycle(initialValue = null)
     var refresh by remember { mutableIntStateOf(0) }
     val state = work?.state
-    val installed = remember(state, refresh) { ModelFiles.installed(context, model) }
-    val partial = remember(state, refresh, work?.progress) { ModelFiles.partialBytes(context, model) }
+    val installed = remember(state, refresh) { ModelFiles.installed(context, model.artifact) }
+    val partial = remember(state, refresh, work?.progress) { ModelFiles.partialBytes(context, model.artifact) }
     val transferring = state == WorkInfo.State.RUNNING || state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
     val loaded = engine.modelId == model.id && (engine.phase == Phase.Ready || engine.phase == Phase.Generating)
     val loading = engine.modelId == model.id && engine.phase == Phase.Loading
     val engineIdle = engine.phase == Phase.Empty || engine.phase == Phase.Ready
     var confirmDelete by remember { mutableStateOf(false) }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Downloads.start(context, model) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Downloads.start(context, model.artifact) }
     val startDownload = {
         val needsPermission = Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        if (needsPermission) permission.launch(Manifest.permission.POST_NOTIFICATIONS) else Downloads.start(context, model)
+        if (needsPermission) permission.launch(Manifest.permission.POST_NOTIFICATIONS) else Downloads.start(context, model.artifact)
     }
     LaunchedEffect(state) { if (state?.isFinished == true) refresh++ }
 
@@ -195,6 +198,7 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Pill(formatBytes(model.sizeBytes), colors.surfaceContainerHighest, colors.onSurface)
                 Pill(if (model.streamed) "Expert streaming" else "In memory", colors.surfaceContainerHighest, colors.onSurface)
+                if (model.projector != null) Pill("Images", colors.surfaceContainerHighest, colors.onSurface)
                 Pill(model.license, colors.surfaceContainerHighest, colors.onSurfaceVariant)
             }
             Spacer(Modifier.height(18.dp))
@@ -209,10 +213,10 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                     }
                 }
                 transferring -> {
-                    DownloadProgress(model, work)
+                    DownloadProgress(model.artifact, work)
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { Downloads.pause(context, model) }) {
+                        OutlinedButton(onClick = { Downloads.pause(context, model.artifact) }) {
                             Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Pause")
@@ -266,6 +270,7 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                     }
                 }
             }
+            model.projector?.let { ProjectorSection(model, it, engine) }
         }
     }
 
@@ -278,7 +283,7 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                 TextButton(onClick = {
                     confirmDelete = false
                     if (engine.modelId == model.id) EngineController.unload()
-                    Downloads.delete(context, model) { refresh++ }
+                    Downloads.delete(context, model.artifact) { refresh++ }
                 }) { Text("Delete", color = colors.error) }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Keep") } },
@@ -287,8 +292,86 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
     }
 }
 
+/** Image input: the model's vision projector, downloaded and removed on its own. */
 @Composable
-private fun DownloadProgress(model: CatalogModel, work: WorkInfo?) {
+private fun ProjectorSection(model: CatalogModel, projector: Artifact, engine: EngineState) {
+    val context = LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    val work by remember(projector.id) { Downloads.observe(context, projector) }.collectAsStateWithLifecycle(initialValue = null)
+    var refresh by remember { mutableIntStateOf(0) }
+    val state = work?.state
+    val installed = remember(state, refresh) { ModelFiles.installed(context, projector) }
+    val partial = remember(state, refresh, work?.progress) { ModelFiles.partialBytes(context, projector) }
+    val transferring = state == WorkInfo.State.RUNNING || state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
+    val loaded = engine.modelId == model.id && (engine.phase == Phase.Ready || engine.phase == Phase.Generating)
+    var confirmDelete by remember { mutableStateOf(false) }
+    LaunchedEffect(state) { if (state?.isFinished == true) refresh++ }
+    Spacer(Modifier.height(18.dp))
+    HorizontalDivider(color = colors.outlineVariant)
+    Spacer(Modifier.height(14.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.Image, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Image input", style = MaterialTheme.typography.titleSmall)
+            Text(
+                when {
+                    installed && loaded && !engine.vision -> "Downloaded · load the model again to use it"
+                    installed -> "Ready · photos and scanned PDFs can be attached"
+                    else -> "Lets this model read photos, screenshots and scanned documents. While it reads an image " +
+                        "it needs about ${formatBytes(projector.sizeBytes + (512L shl 20))} of extra memory."
+                },
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+            )
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    when {
+        transferring -> {
+            DownloadProgress(projector, work)
+            Spacer(Modifier.height(4.dp))
+            TextButton(onClick = { Downloads.pause(context, projector) }) { Text("Pause") }
+        }
+        installed -> TextButton(onClick = { confirmDelete = true }, enabled = engine.phase != Phase.Generating) {
+            Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Remove image support")
+        }
+        else -> Column {
+            if (state == WorkInfo.State.FAILED) {
+                Text(work?.outputData?.getString(Downloads.KEY_ERROR) ?: "Download failed",
+                    style = MaterialTheme.typography.bodySmall, color = colors.error)
+                Spacer(Modifier.height(6.dp))
+            }
+            OutlinedButton(onClick = { Downloads.start(context, projector) }) {
+                Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (partial > 0) "Resume · ${formatBytes(partial)} of ${formatBytes(projector.sizeBytes)}"
+                    else "Add image support · ${formatBytes(projector.sizeBytes)}")
+            }
+        }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Remove image support?") },
+            text = { Text("This frees ${formatBytes(projector.sizeBytes)}. Models that share it lose image input until it is downloaded again.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    // The engine reads the projector on every image request; release a model loaded with it first.
+                    if (Catalog.byId(engine.modelId)?.projector?.id == projector.id && engine.vision) EngineController.unload()
+                    Downloads.delete(context, projector) { refresh++ }
+                }) { Text("Remove", color = colors.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Keep") } },
+            containerColor = colors.surfaceContainerHigh,
+        )
+    }
+}
+
+@Composable
+private fun DownloadProgress(model: Artifact, work: WorkInfo?) {
     val colors = MaterialTheme.colorScheme
     val progress = work?.progress
     val done = progress?.getLong(Downloads.KEY_DONE, 0L) ?: 0L
@@ -299,7 +382,7 @@ private fun DownloadProgress(model: CatalogModel, work: WorkInfo?) {
     if (waiting) ThinProgress(null) else ThinProgress(done.toFloat() / total)
     Spacer(Modifier.height(8.dp))
     val text = when {
-        waiting -> if (model.streamed) "Waiting for Wi-Fi…" else "Waiting for a connection…"
+        waiting -> if (model.unmeteredOnly) "Waiting for Wi-Fi…" else "Waiting for a connection…"
         verifying -> "Checking the partial download · ${formatBytes(done)}"
         else -> buildString {
             append("${formatBytes(done)} of ${formatBytes(total)}")

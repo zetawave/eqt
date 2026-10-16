@@ -27,7 +27,7 @@ data class Settings(
     val maxTokens: Int = 512,
     val temperature: Float = 0f,
     val threads: Int = 4,
-    val context: Int = 2048,
+    val context: Int = 4096,
     /** 0 selects the expert-cache budget from available RAM at load time. */
     val expertCacheMiB: Int = 0,
 )
@@ -61,14 +61,8 @@ object SettingsStore {
 
 enum class Phase { Empty, Loading, Ready, Generating, Unloading }
 
-data class Message(
-    val id: Long,
-    val fromUser: Boolean,
-    val text: String,
-    val streaming: Boolean = false,
-    val stats: String? = null,
-    val failed: Boolean = false,
-)
+/** The answer being written: its chat, its message and how many tokens have arrived. */
+data class Generation(val chatId: String, val answerId: Long, val startedAt: Long, val tokens: Int = 0)
 
 data class EngineState(
     val phase: Phase = Phase.Empty,
@@ -77,11 +71,17 @@ data class EngineState(
     val status: String = "No model loaded",
     val loadPercent: Int? = null,
     val configuration: String? = null,
-    val messages: List<Message> = emptyList(),
+    /** The loaded model was given its vision projector and accepts images. */
+    val vision: Boolean = false,
+    /** The catalog model loaded most recently, offered again after an unload. */
+    val lastModelId: String? = null,
+    val generation: Generation? = null,
     val lastResult: String? = null,
     val lastSpeed: Double? = null,
     val error: String? = null,
-)
+) {
+    val busy get() = phase == Phase.Loading || phase == Phase.Generating
+}
 
 /** Owns the single native engine. Native calls run on one worker thread; only cancellation crosses threads. */
 object EngineController {
@@ -89,10 +89,14 @@ object EngineController {
     private val flow = MutableStateFlow(EngineState())
     val state: StateFlow<EngineState> = flow.asStateFlow()
     private var descriptor: ParcelFileDescriptor? = null
-    private var history = JSONArray()
     private var modelHash: String? = null
-    private var nextId = 1L
     @Volatile private var cancelled = false
+
+    // Images shown to the model per request: older images in a chat are described in text instead, so a long
+    // conversation does not re-encode every photo on each turn.
+    private const val MAX_CONTEXT_IMAGES = 4
+    // Vision encoder working memory on top of the projector weights while images are encoded.
+    private const val VISION_WORK_MIB = 512
 
     private fun update(change: (EngineState) -> EngineState) = flow.update(change)
 
@@ -114,13 +118,24 @@ object EngineController {
     fun load(context: Context, model: CatalogModel) {
         val app = context.applicationContext
         val settings = SettingsStore.state.value
-        startLoad(model.id, model.name)
+        startLoad(app, model.id, model.name)
         task {
             guardLoad {
-                val path = ModelFiles.final(app, model)
-                require(ModelFiles.installed(app, model)) { "${model.name} is not downloaded" }
-                val options = loadOptions(app, model.streamed, model.residentMiB, model.contextMiBPer1k, path.length(), settings)
-                loadNative(path.absolutePath, options, model.sha256)
+                val path = ModelFiles.final(app, model.artifact)
+                require(ModelFiles.installed(app, model.artifact)) { "${model.name} is not downloaded" }
+                val projector = model.projector?.takeIf { ModelFiles.installed(app, it) }
+                val visionMiB = projector?.let { (it.sizeBytes shr 20).toInt() + VISION_WORK_MIB } ?: 0
+                // Image support keeps room for the projector while it encodes; without that room the model still
+                // loads, text-only.
+                val withVision = projector?.let {
+                    runCatching {
+                        loadOptions(app, model.streamed, model.residentMiB, model.contextMiBPer1k, path.length(), settings, visionMiB)
+                    }.getOrNull()?.put("mmproj", ModelFiles.final(app, it).absolutePath)
+                }
+                val options = withVision
+                    ?: loadOptions(app, model.streamed, model.residentMiB, model.contextMiBPer1k, path.length(), settings, 0)
+                val note = if (projector != null && withVision == null) "images off: not enough free memory" else null
+                loadNative(path.absolutePath, options, model.sha256, note)
             }
         }
     }
@@ -129,7 +144,7 @@ object EngineController {
     fun load(context: Context, uri: Uri) {
         val app = context.applicationContext
         val settings = SettingsStore.state.value
-        startLoad(null, "Local model")
+        startLoad(app, null, "Local model")
         task {
             guardLoad {
                 val pfd = requireNotNull(app.contentResolver.openFileDescriptor(uri, "r")) { "Cannot open the file" }
@@ -161,17 +176,18 @@ object EngineController {
                     hash = digest.digest().joinToString("") { "%02x".format(it) }
                 }
                 // Unknown local files use the larger per-token context cost of the catalog models.
-                val options = loadOptions(app, streamed, if (streamed) 2448 else sizeMiB, 112, stat.st_size, settings)
-                loadNative("/proc/self/fd/${pfd.fd}", options, hash)
+                val options = loadOptions(app, streamed, if (streamed) 2448 else sizeMiB, 112, stat.st_size, settings, 0)
+                loadNative("/proc/self/fd/${pfd.fd}", options, hash, null)
             }
         }
     }
 
-    private fun startLoad(id: String?, name: String) {
+    private fun startLoad(context: Context, id: String?, name: String) {
         update {
             it.copy(phase = Phase.Loading, modelId = id, modelName = name, loadPercent = null, error = null,
-                status = "Preparing $name…", configuration = null)
+                status = "Preparing $name…", configuration = null, vision = false, lastModelId = id ?: it.lastModelId)
         }
+        InferenceService.start(context)
     }
 
     /** Any load failure returns the engine to an empty, consistent state. */
@@ -182,7 +198,7 @@ object EngineController {
             runCatching { NativeBridge.unload() }
             closeDescriptor()
             update {
-                EngineState(status = "No model loaded",
+                EngineState(status = "No model loaded", lastModelId = it.lastModelId,
                     error = if (cancelled) null else (error.message ?: error.javaClass.simpleName))
             }
         }
@@ -194,8 +210,9 @@ object EngineController {
         return (memory.availMem shr 20).toInt()
     }
 
+    /** [visionMiB] is memory kept free for image encoding; 0 for a text-only load. */
     private fun loadOptions(context: Context, streamed: Boolean, residentMiB: Int, contextMiBPer1k: Int, fileBytes: Long,
-                            settings: Settings): JSONObject {
+                            settings: Settings, visionMiB: Int): JSONObject {
         val available = availableMiB(context)
         // Context state and compute buffers are allocated at load; admitting without them invites the low-memory killer.
         // Prompt batches of 512 tokens take the tiled GEMM path and need larger compute buffers.
@@ -203,8 +220,8 @@ object EngineController {
         val options = JSONObject().put("context", settings.context).put("batch", 512).put("threads", settings.threads)
         if (!streamed) {
             val fileMiB = (fileBytes shr 20).toInt()
-            require(fileMiB + workMiB + 512 <= available) {
-                "This model needs about ${fileMiB + workMiB + 512} MiB of free memory and $available MiB are available. " +
+            require(fileMiB + workMiB + 512 + visionMiB <= available) {
+                "This model needs about ${fileMiB + workMiB + 512 + visionMiB} MiB of free memory and $available MiB are available. " +
                     "Close some apps or choose a smaller context in Settings."
             }
             return options.put("mmap", true).put("memory_budget_mib", maxOf(2048, fileMiB + 1024))
@@ -212,10 +229,13 @@ object EngineController {
         // Expert cache from free RAM after shared weights, compute buffers, the transient next-layer allowance used
         // while reading prompts, and system headroom.
         val prefillMiB = 512
+        // Images are encoded before the prompt is read and the projector is released before it, so image memory
+        // and the prompt-time prefetch allowance are never needed at the same time.
+        val transientMiB = maxOf(prefillMiB, visionMiB)
         val cache = settings.expertCacheMiB.takeIf { it > 0 }
-            ?: (available - residentMiB - workMiB - prefillMiB - 1024).coerceIn(512, 3072)
-        require(residentMiB + cache + prefillMiB + workMiB + 512 <= available) {
-            "This model needs about ${residentMiB + cache + prefillMiB + workMiB + 512} MiB of free memory and " +
+            ?: (available - residentMiB - workMiB - transientMiB - 1024).coerceIn(512, 3072)
+        require(residentMiB + cache + transientMiB + workMiB + 512 <= available) {
+            "This model needs about ${residentMiB + cache + transientMiB + workMiB + 512} MiB of free memory and " +
                 "$available MiB are available. Close some apps and try again."
         }
         // Measured defaults (docs/decisions.md D018, D020): coalesced expert reads, next-layer prefetch for prompts;
@@ -226,7 +246,7 @@ object EngineController {
             .put("memory_budget_mib", residentMiB + cache + prefillMiB + 1536)
     }
 
-    private fun loadNative(path: String, options: JSONObject, hash: String?) {
+    private fun loadNative(path: String, options: JSONObject, hash: String?, note: String?) {
         NativeBridge.unload()
         val progress = ByteSink { bytes ->
             val percent = bytes.decodeToString().toIntOrNull()
@@ -241,7 +261,7 @@ object EngineController {
             JSONObject(NativeBridge.load(path.toByteArray(), options.toString().toByteArray(), progress).decodeToString())
         }
         modelHash = hash
-        history = JSONArray()
+        val vision = !info.isNull("vision")
         val streaming = info.optJSONObject("expert_streaming")
         val configuration = buildString {
             append("CPU ").append(info.optString("cpu_variant").removePrefix("android_"))
@@ -250,10 +270,12 @@ object EngineController {
                 append(" · ${streaming.getLong("effective_budget_bytes") shr 20} MiB expert cache")
                 if (!options.optBoolean("direct_io")) append(" · buffered reads")
             }
+            if (vision) append(" · images")
+            note?.let { append(" · ").append(it) }
         }
         update {
-            it.copy(phase = Phase.Ready, loadPercent = null, messages = emptyList(), lastResult = null, lastSpeed = null,
-                configuration = configuration, status = "Ready")
+            it.copy(phase = Phase.Ready, loadPercent = null, lastResult = null, lastSpeed = null,
+                configuration = configuration, status = "Ready", vision = vision)
         }
     }
 
@@ -269,8 +291,7 @@ object EngineController {
         task {
             NativeBridge.unload()
             closeDescriptor()
-            history = JSONArray()
-            update { EngineState(status = "Model unloaded") }
+            update { EngineState(status = "Model unloaded", lastModelId = it.lastModelId) }
         }
     }
 
@@ -280,38 +301,37 @@ object EngineController {
         NativeBridge.cancel()
     }
 
-    fun memoryPressure() {
+    /** Releases the model when Android asks for memory; [message] is shown when the user returns. */
+    fun memoryPressure(message: String) {
         if (flow.value.phase == Phase.Empty) return
         stop()
         task {
             NativeBridge.unload()
             closeDescriptor()
-            history = JSONArray()
-            update { EngineState(status = "No model loaded", error = "Android asked to free memory, so the model was unloaded.") }
+            update { EngineState(status = "No model loaded", lastModelId = it.lastModelId, error = message) }
         }
     }
 
-    fun newChat() {
-        if (flow.value.phase == Phase.Generating) return
-        history = JSONArray()
-        update { it.copy(messages = emptyList()) }
-    }
-
-    fun send(context: Context, prompt: String) {
+    /**
+     * Sends a message in [chatId] (a new chat when null). The answer keeps being written while Equity is in the
+     * background: a foreground service holds the process and a wake lock until it is complete.
+     */
+    fun send(context: Context, chatId: String?, prompt: String, attachments: List<Attachment>): Boolean {
         val text = prompt.trim()
-        if (flow.value.phase != Phase.Ready || text.isEmpty()) return
+        val engine = flow.value
+        if (engine.phase != Phase.Ready || (text.isEmpty() && attachments.isEmpty())) return false
+        if (attachments.any { it.kind == AttachmentKind.Image } && !engine.vision) return false
         val app = context.applicationContext
         val settings = SettingsStore.state.value
-        val answerId = nextId + 1
+        val (chat, answerId) = ChatStore.startTurn(chatId, text, attachments)
         update {
             it.copy(phase = Phase.Generating, status = "Reading your message…", error = null,
-                messages = it.messages + Message(nextId, true, text) + Message(answerId, false, "", streaming = true))
+                generation = Generation(chat.id, answerId, SystemClock.elapsedRealtime()))
         }
-        nextId += 2
+        InferenceService.start(app)
         task {
             val messages = JSONArray().put(JSONObject().put("role", "system").put("content", settings.systemPrompt))
-            for (i in 0 until history.length()) messages.put(history.getJSONObject(i))
-            messages.put(JSONObject().put("role", "user").put("content", text))
+            requestMessages(chat, engine.vision).forEach { messages.put(it) }
             val request = JSONObject().put("messages", messages).put("max_tokens", settings.maxTokens)
                 .put("temperature", settings.temperature.toDouble()).put("seed", 42).put("thinking", false)
                 .put("ignore_eos", false)
@@ -319,23 +339,31 @@ object EngineController {
             val thermalBefore = if (Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else null
             val output = ByteArrayOutputStream()
             var lastUpdate = 0L
+            var lastSave = SystemClock.elapsedRealtime()
+            var tokens = 0
             val result = try {
                 NativeBridge.generate(request.toString().toByteArray(), ByteSink { chunk ->
                     output.write(chunk)
+                    tokens++
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastUpdate >= 60) {
                         lastUpdate = now
+                        // Partial answers reach disk every few seconds, so a killed process loses little.
+                        val save = now - lastSave >= 3000
+                        if (save) lastSave = now
                         val partial = decodeComplete(output.toByteArray())
-                        update { s -> s.copy(status = "Writing…", messages = s.messages.map { m -> if (m.id == answerId) m.copy(text = partial) else m }) }
+                        ChatStore.updateMessage(chat.id, answerId, save) { it.copy(text = partial) }
+                        update { s -> s.copy(status = "Writing…", generation = s.generation?.copy(tokens = tokens)) }
                     }
                 })
             } catch (error: Exception) {
-                update { s ->
-                    s.copy(phase = Phase.Ready, status = "Ready", error = error.message,
-                        messages = s.messages.map { m ->
-                            if (m.id == answerId) m.copy(streaming = false, failed = true, text = m.text.ifEmpty { "Generation failed." }) else m
-                        })
+                val failure = error.message ?: error.javaClass.simpleName
+                ChatStore.updateMessage(chat.id, answerId, true) {
+                    it.copy(streaming = false, failed = true,
+                        text = decodeComplete(output.toByteArray()).ifEmpty { "Generation failed." })
                 }
+                update { s -> s.copy(phase = Phase.Ready, status = "Ready", error = failure, generation = null) }
+                if (!AppVisibility.visible) Notifications.answerFinished(app, chat.id, chat.title, failure, failed = true)
                 return@task
             }
             val json = JSONObject(result.decodeToString())
@@ -343,12 +371,9 @@ object EngineController {
                 .put("workload_sha256", MessageDigest.getInstance("SHA-256").digest(request.toString().toByteArray()).joinToString("") { "%02x".format(it) })
                 .put("thermal_status_before", thermalBefore ?: JSONObject.NULL)
                 .put("thermal_status_after", if (Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else JSONObject.NULL)
-            val answer = json.getString("text")
+                .put("finished_in_background", !AppVisibility.visible)
+            val answer = json.getString("text").ifEmpty { "(no answer)" }
             val termination = json.getString("termination")
-            if (termination != "cancelled") {
-                history.put(JSONObject().put("role", "user").put("content", text))
-                history.put(JSONObject().put("role", "assistant").put("content", answer))
-            }
             val speed = json.getDouble("decode_tokens_per_second")
             val stats = buildString {
                 append("%.1f tok/s".format(Locale.US, speed))
@@ -357,12 +382,56 @@ object EngineController {
                 if (termination == "cancelled") append(" · stopped")
                 if (termination == "length") append(" · length limit")
             }
+            val stopped = termination == "cancelled"
+            ChatStore.updateMessage(chat.id, answerId, true) { it.copy(text = answer, streaming = false, stats = stats, stopped = stopped) }
             update { s ->
-                s.copy(phase = Phase.Ready, status = "Ready", lastResult = json.toString(2), lastSpeed = speed,
-                    messages = s.messages.map { m ->
-                        if (m.id == answerId) m.copy(text = answer.ifEmpty { "(no answer)" }, streaming = false, stats = stats) else m
-                    })
+                s.copy(phase = Phase.Ready, status = "Ready", lastResult = json.toString(2), lastSpeed = speed, generation = null)
             }
+            if (!AppVisibility.visible) Notifications.answerFinished(app, chat.id, chat.title, answer, failed = false, stopped = stopped)
+        }
+        return true
+    }
+
+    /**
+     * The conversation as the engine sees it. A turn is context only once its answer completed; the newest user
+     * message is the question. Attached documents become text; images are files the engine encodes.
+     */
+    private fun requestMessages(chat: Chat, vision: Boolean): List<JSONObject> {
+        val list = chat.messages.dropLast(1)
+        val turns = mutableListOf<Message>()
+        for ((i, message) in list.withIndex()) {
+            if (!message.fromUser) continue
+            if (i == list.lastIndex) {
+                turns += message
+                continue
+            }
+            val answer = list[i + 1]
+            if (!answer.fromUser && !answer.failed && !answer.stopped && !answer.streaming) turns += listOf(message, answer)
+        }
+        val shown = if (!vision) emptySet() else turns.asReversed().asSequence().filter { it.fromUser }
+            .flatMap { m -> m.attachments.asReversed().asSequence().filter { it.kind == AttachmentKind.Image }.map { it.file } }
+            .take(MAX_CONTEXT_IMAGES).toSet()
+        return turns.map { m ->
+            // Text-only messages keep plain string content, exactly as before attachments existed.
+            val content: Any = if (!m.fromUser || m.attachments.isEmpty()) m.text else {
+                val parts = JSONArray()
+                val text = StringBuilder()
+                for (attachment in m.attachments) when (attachment.kind) {
+                    AttachmentKind.Image -> when {
+                        attachment.file in shown -> parts.put(JSONObject().put("type", "image")
+                            .put("path", ChatStore.file(chat.id, attachment).absolutePath))
+                        vision -> text.append("[An earlier image, \"${attachment.name}\", is no longer shown.]\n\n")
+                        else -> text.append("[The user attached an image, \"${attachment.name}\", that this model cannot see.]\n\n")
+                    }
+                    AttachmentKind.Document -> {
+                        val body = runCatching { ChatStore.file(chat.id, attachment).readText() }.getOrDefault("(unreadable)")
+                        text.append("[File: ${attachment.name}]\n").append(body).append("\n[End of file]\n\n")
+                    }
+                }
+                text.append(m.text)
+                parts.put(JSONObject().put("type", "text").put("text", text.toString().trim()))
+            }
+            JSONObject().put("role", if (m.fromUser) "user" else "assistant").put("content", content)
         }
     }
 

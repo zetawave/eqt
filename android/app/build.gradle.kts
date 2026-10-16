@@ -48,6 +48,8 @@ android {
         }
     }
     buildFeatures { compose = true }
+    // AndroidMath ships the same NDK libc++_shared.so as the engine (byte-identical for NDK 28).
+    packaging { jniLibs { pickFirsts += "lib/*/libc++_shared.so" } }
     externalNativeBuild { cmake { path = file("../../CMakeLists.txt"); version = "3.22.1" } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -67,5 +69,18 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    // Markdown answers: CommonMark parser with GFM tables and strikethrough, rendered by Equity's Compose code.
+    implementation("org.commonmark:commonmark:0.27.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.27.0")
+    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.27.0")
+    // LaTeX formulas (MIT, iosMath port; FreeType under the FTL). Its POM lists AppCompat and test libraries as
+    // runtime dependencies (and a JitPack placeholder) that the view does not use.
+    implementation("com.github.gregcockroft:AndroidMath:v1.1.0") {
+        exclude(group = "androidx.appcompat")
+        exclude(group = "junit")
+        exclude(group = "androidx.test")
+        exclude(group = "androidx.test.espresso")
+        exclude(group = "com.github.jitpack")
+    }
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

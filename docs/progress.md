@@ -32,7 +32,17 @@
 4. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
 5. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
 
-**Features requested and not started:** multimodal input (Qwen3.6 vision needs the `mmproj` projector and llama.cpp `mtmd`; models should advertise their capabilities in the app).
+**Features requested and not started:** additional per-chat configuration.
+
+## App session: 2026-10-16 — images, chats, background answers (branch `feature/multimodal`)
+
+- **Image input** (D021): mtmd linked into the engine; the Qwen3.6 projector is a separate pinned download ("Add image support", 899 MB) shared by both 35B builds and installed on the Galaxy. Text requests are bitwise equal to `main` (host A/B). On the Galaxy the 35B read a newspaper photo correctly; foreground follow-up: first token 26 s, 3.6 tokens/s.
+- **Chats** (D022): persistent, side drawer with new/open/delete; photos, camera, text files and PDFs as attachments.
+- **Markdown and LaTeX** (D023): answers render headings, lists, tables, code blocks and formulas (commonmark-java + AndroidMath).
+- **Background answers** (D022): foreground service + wake lock + completion notification; the thread pool follows the CPUs Android allows (background: 4 little cores, 1.8 tokens/s instead of 0.2).
+- Not verified: answers with the screen off after the thread fix, the release (R8) build, the in-app projector download, camera capture, PDF import, and image understanding quality beyond one photo.
+- Device: `/data` has under 1 GB free. About 17 GB are old `runner-*` staging folders in `files/bench` and `/data/local/tmp/eqt`; they were left untouched pending the owner's decision.
+- The `third_party/llama.cpp` tree had the experimental branch's patches 0003–0005 applied; it was reset to this branch's 0001–0002 (the diff equalled the committed patches exactly; a copy is in `build/backup/`). Switching back to the experimental branch needs its patches re-applied.
 
 ## Working implementation
 
