@@ -56,8 +56,8 @@ fun EquityApp() {
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(engine.error) {
         engine.error?.let {
-            EngineController.clearError()
             snackbar.showSnackbar(it)
+            EngineController.clearError(it)
         }
     }
     // A finished load lands in the conversation.

@@ -118,6 +118,8 @@ fun SettingsScreen(engine: EngineState) {
             Choice(listOf(2, 4, 6), settings.threads, { "$it" }) { value -> SettingsStore.update(context) { it.copy(threads = value) } }
             Text("Context window", style = MaterialTheme.typography.labelLarge)
             Choice(listOf(2048, 4096, 8192), settings.context, { "${it / 1024}K" }) { value -> SettingsStore.update(context) { it.copy(context = value) } }
+            Text("Starting size. Grows for longer messages and attachments when memory allows.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Expert cache (large model)", style = MaterialTheme.typography.labelLarge)
             Choice(listOf(0, 1024, 2048, 3072), settings.expertCacheMiB, { if (it == 0) "Auto" else "${it / 1024} GB" }) { value ->
                 SettingsStore.update(context) { it.copy(expertCacheMiB = value) }

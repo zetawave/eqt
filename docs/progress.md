@@ -34,6 +34,15 @@
 
 **Features requested and not started:** additional per-chat configuration.
 
+## Attachment context recovery: 2026-10-17
+
+- Valid document attachments could fail because their tokenized text plus the reserved answer exceeded the loaded context. The engine now reports exact input/output/context counts through a typed JNI exception. The app retries once with a larger context, rounded to 2,048 tokens and bounded by the model and the existing memory admission checks. It preserves the request, sampling options and imported document text.
+- Reloading runs on the existing native worker, frees the previous allocations before computing the new expert-cache budget, and retains local-file descriptors until the replacement model is unloaded. Memory budgets now include the larger context for both resident and streamed models. A failed reload leaves an empty engine rather than reporting it ready.
+- Generation and attachment-read errors remain visible in the saved answer. Snackbar errors are cleared after display, so clearing state does not cancel the coroutine that displays them. Settings describe the context selector as the starting size.
+- Galaxy checks: native inference/reload/typed overflow/cancellation/recovery passed. The attachment integration check imported a synthetic JSON without changing its staged text, expanded 4,096 → 10,240 context for 7,628 input tokens, generated text, rejected a request beyond the model's trained context with a saved explanation, then generated again. Generation was stopped after at least 24 emitted chunks; this is a functional check, not a long-answer quality or performance result. Temporary test chats were removed and settings restored.
+- A 21 KB user JSON on UD-IQ2_M with GPU mode grew to 18,432 context and reached generated output, but exceeded the integration test's ten-minute deadline before its 24-chunk stop condition. This is not a passed full-run or a latency claim; long-document prefill remains slow. The private input is not included in the repository.
+- Unloading and memory-pressure teardown no longer reset the cancellation flag while generation is running. The unloading phase stays busy until the native worker has released the model. The Galaxy unload-during-prefill regression passed (201 ms in this single functional check).
+
 ## GPU session: 2026-10-17 — GPU mode for prompts and images (D025)
 
 - Settings › Performance › Processor: "CPU + GPU" reads prompts, chat history and images on the Xclipse 940 through GGML's Vulkan backend (`libggml-vulkan.so`, built when Visual Studio's C++ environment is present; `scripts/android-app.ps1` sets it up). Answers are still written by the CPU path, unchanged.

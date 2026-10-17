@@ -1052,9 +1052,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         positions = mtmd_helper_get_n_pos(chunks.get());
         media_load_ms = milliseconds(media_start);
     }
-    if (count <= 0 || count + maximum > s.context_size) {
-        throw std::invalid_argument(
-            "Prompt plus output exceeds context; start a new chat or lower output limit");
+    if (count <= 0) {
+        throw std::invalid_argument("The prompt contains no tokens");
+    }
+    if (count + maximum > s.context_size) {
+        throw ContextOverflowError(count, maximum, s.context_size);
     }
     // Every image is encoded before the prompt is evaluated and the projector is released at once: its weights
     // and encoder buffers are never resident together with the prompt's expert prefetch or during decoding.

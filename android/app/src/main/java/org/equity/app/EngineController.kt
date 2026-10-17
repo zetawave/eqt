@@ -85,7 +85,7 @@ data class EngineState(
     val lastSpeed: Double? = null,
     val error: String? = null,
 ) {
-    val busy get() = phase == Phase.Loading || phase == Phase.Generating
+    val busy get() = phase == Phase.Loading || phase == Phase.Generating || phase == Phase.Unloading
 }
 
 /** Owns the single native engine. Native calls run on one worker thread; only cancellation crosses threads. */
@@ -95,6 +95,19 @@ object EngineController {
     val state: StateFlow<EngineState> = flow.asStateFlow()
     private var descriptor: ParcelFileDescriptor? = null
     private var modelHash: String? = null
+    private data class ModelSource(
+        val path: String,
+        val hash: String?,
+        val streamed: Boolean,
+        val residentMiB: Int,
+        val contextMiBPer1k: Int,
+        val fileBytes: Long,
+        val settings: Settings,
+        val projectorPath: String? = null,
+        val visionMiB: Int = 0,
+    )
+    private var loadedSource: ModelSource? = null
+    private var trainedContext: Int? = null
     @Volatile private var cancelled = false
 
     // Images shown to the model per request: older images in a chat are described in text instead, so a long
@@ -117,9 +130,11 @@ object EngineController {
 
     private fun update(change: (EngineState) -> EngineState) = flow.update(change)
 
-    private fun task(action: () -> Unit) {
-        cancelled = false
-        NativeBridge.prepare()
+    private fun task(prepare: Boolean = true, action: () -> Unit) {
+        if (prepare) {
+            cancelled = false
+            NativeBridge.prepare()
+        }
         worker.execute {
             try {
                 action()
@@ -129,7 +144,9 @@ object EngineController {
         }
     }
 
-    fun clearError() = update { it.copy(error = null) }
+    fun clearError(message: String? = null) = update {
+        if (message == null || it.error == message) it.copy(error = null) else it
+    }
 
     /** Loads a downloaded catalog model with options tuned for it. */
     fun load(context: Context, model: CatalogModel) {
@@ -138,21 +155,15 @@ object EngineController {
         startLoad(app, model.id, model.name)
         task {
             guardLoad {
+                NativeBridge.unload()
+                closeDescriptor()
                 val path = ModelFiles.final(app, model.artifact)
                 require(ModelFiles.installed(app, model.artifact)) { "${model.name} is not downloaded" }
                 val projector = model.projector?.takeIf { ModelFiles.installed(app, it) }
                 val visionMiB = projector?.let { (it.sizeBytes shr 20).toInt() + VISION_WORK_MIB } ?: 0
-                // Image support keeps room for the projector while it encodes; without that room the model still
-                // loads, text-only.
-                val withVision = projector?.let {
-                    runCatching {
-                        loadOptions(app, model.streamed, model.residentMiB, model.contextMiBPer1k, path.length(), settings, visionMiB)
-                    }.getOrNull()?.put("mmproj", ModelFiles.final(app, it).absolutePath)
-                }
-                val options = withVision
-                    ?: loadOptions(app, model.streamed, model.residentMiB, model.contextMiBPer1k, path.length(), settings, 0)
-                val note = if (projector != null && withVision == null) "images off: not enough free memory" else null
-                loadNative(path.absolutePath, options, model.sha256, note)
+                loadSource(app, ModelSource(path.absolutePath, model.sha256, model.streamed, model.residentMiB,
+                    model.contextMiBPer1k, path.length(), settings,
+                    projector?.let { ModelFiles.final(app, it).absolutePath }, visionMiB))
             }
         }
     }
@@ -164,6 +175,8 @@ object EngineController {
         startLoad(app, null, "Local model")
         task {
             guardLoad {
+                NativeBridge.unload()
+                closeDescriptor()
                 val pfd = requireNotNull(app.contentResolver.openFileDescriptor(uri, "r")) { "Cannot open the file" }
                 descriptor = pfd
                 val stat = Os.fstat(pfd.fileDescriptor)
@@ -193,8 +206,8 @@ object EngineController {
                     hash = digest.digest().joinToString("") { "%02x".format(it) }
                 }
                 // Unknown local files use the larger per-token context cost of the catalog models.
-                val options = loadOptions(app, streamed, if (streamed) 2448 else sizeMiB, 112, stat.st_size, settings, 0)
-                loadNative("/proc/self/fd/${pfd.fd}", options, hash, null)
+                loadSource(app, ModelSource("/proc/self/fd/${pfd.fd}", hash, streamed,
+                    if (streamed) 2448 else sizeMiB, 112, stat.st_size, settings))
             }
         }
     }
@@ -243,11 +256,12 @@ object EngineController {
         if (settings.gpu) options.put("gpu", true)
         if (!streamed) {
             val fileMiB = (fileBytes shr 20).toInt()
-            require(fileMiB + workMiB + 512 + maxOf(visionMiB, gpuStagingMiB) <= available) {
-                "This model needs about ${fileMiB + workMiB + 512 + maxOf(visionMiB, gpuStagingMiB)} MiB of free memory and $available MiB are available. " +
+            val requiredMiB = fileMiB + workMiB + 512 + maxOf(visionMiB, gpuStagingMiB)
+            require(requiredMiB <= available) {
+                "This model needs about $requiredMiB MiB of free memory and $available MiB are available. " +
                     "Close some apps or choose a smaller context in Settings."
             }
-            return options.put("mmap", true).put("memory_budget_mib", maxOf(2048, fileMiB + 1024) + gpuWorkMiB + gpuStagingMiB)
+            return options.put("mmap", true).put("memory_budget_mib", maxOf(2048, requiredMiB))
         }
         // Expert cache from free RAM after shared weights, compute buffers, the transient next-layer allowance used
         // while reading prompts, and system headroom.
@@ -266,11 +280,28 @@ object EngineController {
         return options.put("mmap", false).put("expert_streaming", true).put("expert_cache_mib", cache)
             .put("io_threads", 16).put("direct_io", true).put("prefetch", true)
             .put("coalesce_kib", 2048).put("coalesce_gap", 1).put("prefill_prefetch_mib", prefillMiB)
-            .put("memory_budget_mib", residentMiB + cache + prefillMiB + 1536 + gpuWorkMiB + gpuStagingMiB)
+            .put("memory_budget_mib", residentMiB + cache + prefillMiB + 1536 + gpuWorkMiB + gpuStagingMiB +
+                contextMiBPer1k * settings.context / 1024)
     }
 
-    private fun loadNative(path: String, options: JSONObject, hash: String?, note: String?) {
+    private fun loadSource(context: Context, source: ModelSource, growing: Boolean = false) {
+        // Reclaim the previous context and expert cache before sizing their replacements from free memory.
         NativeBridge.unload()
+        loadedSource = null
+        fun options(visionMiB: Int) = loadOptions(context, source.streamed, source.residentMiB,
+            source.contextMiBPer1k, source.fileBytes, source.settings, visionMiB)
+        val withVision = source.projectorPath?.let { path ->
+            if (growing) options(source.visionMiB).put("mmproj", path)
+            else runCatching { options(source.visionMiB).put("mmproj", path) }.getOrNull()
+        }
+        val options = withVision ?: options(0)
+        val note = if (source.projectorPath != null && withVision == null) "images off: not enough free memory" else null
+        loadNative(source.path, options, source.hash, note, growing)
+        loadedSource = source.copy(settings = source.settings.copy(gpu = options.optBoolean("gpu")),
+            projectorPath = source.projectorPath.takeIf { withVision != null })
+    }
+
+    private fun loadNative(path: String, options: JSONObject, hash: String?, note: String?, growing: Boolean) {
         val progress = ByteSink { bytes ->
             val percent = bytes.decodeToString().toIntOrNull()
             update { it.copy(loadPercent = percent, status = "Loading ${percent ?: 0}%") }
@@ -293,6 +324,7 @@ object EngineController {
             JSONObject(NativeBridge.load(path.toByteArray(), options.toString().toByteArray(), progress).decodeToString())
         }
         modelHash = hash
+        trainedContext = if (info.isNull("trained_context")) null else info.getInt("trained_context")
         val vision = !info.isNull("vision")
         val streaming = info.optJSONObject("expert_streaming")
         val configuration = buildString {
@@ -308,21 +340,53 @@ object EngineController {
             gpuNote?.let { append(" · ").append(it) }
         }
         update {
-            it.copy(phase = Phase.Ready, loadPercent = null, lastResult = null, lastSpeed = null,
-                configuration = configuration, status = "Ready", vision = vision)
+            it.copy(phase = if (growing) Phase.Generating else Phase.Ready, loadPercent = null,
+                lastResult = null, lastSpeed = null, configuration = configuration,
+                status = if (growing) "Reading your message…" else "Ready", vision = vision)
+        }
+    }
+
+    private fun generateWithContext(context: Context, request: JSONObject, sink: ByteSink): ByteArray {
+        val bytes = request.toString().toByteArray()
+        try {
+            return NativeBridge.generate(bytes, sink)
+        } catch (overflow: ContextOverflowException) {
+            val source = loadedSource ?: throw overflow
+            val required = overflow.promptTokens + overflow.outputTokens
+            val limit = trainedContext ?: (1 shl 20)
+            require(required <= limit) {
+                "This message and its answer need $required tokens, exceeding the model's $limit-token context. " +
+                    "Use a smaller attachment or start a new chat."
+            }
+            val expanded = (((required + 2047) / 2048) * 2048).coerceAtMost(limit)
+            check(!cancelled) { "Generation cancelled" }
+            update { it.copy(status = "Expanding context to $expanded tokens…") }
+            try {
+                loadSource(context, source.copy(settings = source.settings.copy(context = expanded)), growing = true)
+            } catch (error: Exception) {
+                runCatching { NativeBridge.unload() }
+                closeDescriptor()
+                throw IllegalStateException("This message needs $required context tokens. " +
+                    "Could not allocate a larger context: ${error.message}", error)
+            }
+            check(!cancelled) { "Generation cancelled" }
+            // Overflow is reported before evaluation, so retrying preserves the full prompt and sampling request.
+            return NativeBridge.generate(bytes, sink)
         }
     }
 
     private fun closeDescriptor() {
         descriptor?.close()
         descriptor = null
+        loadedSource = null
+        trainedContext = null
     }
 
     fun unload() {
         if (flow.value.phase == Phase.Empty) return
         stop()
         update { it.copy(phase = Phase.Unloading, status = "Unloading…") }
-        task {
+        task(prepare = false) {
             NativeBridge.unload()
             closeDescriptor()
             update { EngineState(status = "Model unloaded", lastModelId = it.lastModelId) }
@@ -339,7 +403,7 @@ object EngineController {
     fun memoryPressure(message: String) {
         if (flow.value.phase == Phase.Empty) return
         stop()
-        task {
+        task(prepare = false) {
             NativeBridge.unload()
             closeDescriptor()
             update { EngineState(status = "No model loaded", lastModelId = it.lastModelId, error = message) }
@@ -364,11 +428,7 @@ object EngineController {
         }
         InferenceService.start(app)
         task {
-            val messages = JSONArray().put(JSONObject().put("role", "system").put("content", settings.systemPrompt))
-            requestMessages(chat, engine.vision).forEach { messages.put(it) }
-            val request = JSONObject().put("messages", messages).put("max_tokens", settings.maxTokens)
-                .put("temperature", settings.temperature.toDouble()).put("seed", 42).put("thinking", false)
-                .put("ignore_eos", false)
+            val request = JSONObject()
             val power = app.getSystemService(PowerManager::class.java)
             val thermalBefore = if (Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else null
             val output = ByteArrayOutputStream()
@@ -376,7 +436,12 @@ object EngineController {
             var lastSave = SystemClock.elapsedRealtime()
             var tokens = 0
             val result = try {
-                NativeBridge.generate(request.toString().toByteArray(), ByteSink { chunk ->
+                val messages = JSONArray().put(JSONObject().put("role", "system").put("content", settings.systemPrompt))
+                requestMessages(chat, engine.vision).forEach { messages.put(it) }
+                request.put("messages", messages).put("max_tokens", settings.maxTokens)
+                    .put("temperature", settings.temperature.toDouble()).put("seed", 42).put("thinking", false)
+                    .put("ignore_eos", false)
+                generateWithContext(app, request, ByteSink { chunk ->
                     output.write(chunk)
                     tokens++
                     val now = SystemClock.elapsedRealtime()
@@ -394,9 +459,13 @@ object EngineController {
                 val failure = error.message ?: error.javaClass.simpleName
                 ChatStore.updateMessage(chat.id, answerId, true) {
                     it.copy(streaming = false, failed = true,
-                        text = decodeComplete(output.toByteArray()).ifEmpty { "Generation failed." })
+                        text = decodeComplete(output.toByteArray()).ifEmpty { "Generation failed.\n\n$failure" },
+                        stats = failure.takeIf { output.size() > 0 })
                 }
-                update { s -> s.copy(phase = Phase.Ready, status = "Ready", error = failure, generation = null) }
+                update { s ->
+                    if (loadedSource == null) EngineState(lastModelId = s.lastModelId, error = failure)
+                    else s.copy(phase = Phase.Ready, status = "Ready", error = failure, generation = null)
+                }
                 if (!AppVisibility.visible) Notifications.answerFinished(app, chat.id, chat.title, failure, failed = true)
                 return@task
             }
@@ -458,7 +527,11 @@ object EngineController {
                         else -> text.append("[The user attached an image, \"${attachment.name}\", that this model cannot see.]\n\n")
                     }
                     AttachmentKind.Document -> {
-                        val body = runCatching { ChatStore.file(chat.id, attachment).readText() }.getOrDefault("(unreadable)")
+                        val body = try {
+                            ChatStore.file(chat.id, attachment).readText()
+                        } catch (error: Exception) {
+                            throw AttachmentException("Cannot read attachment \"${attachment.name}\": ${error.message}")
+                        }
                         text.append("[File: ${attachment.name}]\n").append(body).append("\n[End of file]\n\n")
                     }
                 }

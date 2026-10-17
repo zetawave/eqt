@@ -21,6 +21,22 @@ jbyteArray bytes(JNIEnv *env, const std::string &value) {
     return result;
 }
 void error(JNIEnv *env, const std::exception &e) {
+    if (const auto *overflow = dynamic_cast<const eqt::ContextOverflowError *>(&e)) {
+        const auto type = env->FindClass("org/equity/app/ContextOverflowException");
+        if (!type) {
+            return;
+        }
+        const auto constructor = env->GetMethodID(type, "<init>", "(III)V");
+        if (!constructor) {
+            return;
+        }
+        const auto exception = env->NewObject(type, constructor, overflow->prompt_tokens,
+                                              overflow->output_tokens, overflow->context_tokens);
+        if (exception) {
+            env->Throw(static_cast<jthrowable>(exception));
+        }
+        return;
+    }
     env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), e.what());
 }
 } // namespace

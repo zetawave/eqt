@@ -4,11 +4,24 @@
 #include <functional>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <stdexcept>
 #include <string>
 
 namespace eqt {
 using Json = nlohmann::ordered_json;
 using Emit = std::function<void(const std::string &)>;
+
+class ContextOverflowError : public std::invalid_argument {
+  public:
+    ContextOverflowError(int prompt, int output, int capacity)
+        : std::invalid_argument("Prompt plus output exceeds context: the message needs " + std::to_string(prompt) +
+                                " input tokens and " + std::to_string(output) + " output tokens, but the loaded context holds " +
+                                std::to_string(capacity) + ". Increase the context or use a smaller attachment."),
+          prompt_tokens(prompt), output_tokens(output), context_tokens(capacity) {}
+    const int prompt_tokens;
+    const int output_tokens;
+    const int context_tokens;
+};
 
 class Engine {
   public:
