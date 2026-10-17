@@ -34,6 +34,12 @@
 
 **Features requested and not started:** additional per-chat configuration.
 
+## Decode session: 2026-10-16 — 5.45 → 8.22 tokens/s on UD-IQ2_M (D024)
+
+- Per-op profile of a token, kernel roofline, and four exact changes: six threads, overlapped expert reads (patch 0002 ready-first MUL_MAT_ID hook), lookahead on a predictor thread, file-mapped token embedding (−332/−515 MiB RSS), reserved demand I/O threads. Tokens identical in every Galaxy run; host streaming 29/29 bitwise; text requests bitwise equal to `main`.
+- In the app: 4.24 → 6.87 tokens/s after enlarging the auto expert cache (admission margin) and removing UI animation/relayout that preempted compute threads.
+- Next, by measured size: demanded-read latency (~0.45 ms wake-up + 1.3–1.8 ms read; awake demand threads implemented, default off, unmeasured); fused per-expert gate/up/down so resident experts overlap a pending read beyond the gate projection; IQ2_XXS/IQ3_XXS NEON kernels (≈30 ms per token, compute-bound at 14 GB/s against 38 for K-quants); the DeltaNet state gather/scatter copies (`GET_ROWS`/`CPY`, ~6 ms; MTP rollback needs care); then sustained and in-app measurements of the combined build.
+
 ## App session: 2026-10-16 — images, chats, background answers (branch `feature/multimodal`)
 
 - **Image input** (D021): mtmd linked into the engine; the Qwen3.6 projector is a separate pinned download ("Add image support", 899 MB) shared by both 35B builds and installed on the Galaxy. Text requests are bitwise equal to `main` (host A/B). On the Galaxy the 35B read a newspaper photo correctly; foreground follow-up: first token 26 s, 3.6 tokens/s.

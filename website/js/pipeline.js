@@ -53,7 +53,7 @@
       { name: 'STORAGE', sub: isNarrow ? '22.7 GB experts' : '22.7 GB · experts on f2fs', accent: COLORS.teal },
       { name: 'DIRECT I/O', sub: 'O_DIRECT · zero-copy', accent: COLORS.teal },
       { name: 'SLOT CACHE', sub: isNarrow ? '2 GiB quotas' : '2 GiB · per-layer quotas', accent: COLORS.blue },
-      { name: 'COMPUTE', sub: isNarrow ? '4 threads' : '4 threads · dotprod · i8mm', accent: COLORS.violet },
+      { name: 'COMPUTE', sub: isNarrow ? '6 threads' : '6 threads · dotprod · i8mm', accent: COLORS.violet },
       { name: 'TOKEN', sub: '5.54 tok/s', accent: '#e8eaef' }
     ];
 

@@ -11,8 +11,8 @@
       },
       {
         "file": "patches/llama.cpp/0002-ggml-cpu-exact-tiles-and-paired-experts.patch",
-        "sha256": "adf39208a41836cc9c0ed5a7599c172919603fa47b3668c9fb0ff2c98fc3f380",
-        "purpose": "ggml-cpu (AArch64 dotprod): 2x2 tiles for Q5_K/IQ2_XXS/IQ3_XXS bitwise equal to one-column dot products; MUL_MAT pairs columns for odd batches; MUL_MAT_ID pairs tokens routed to the same expert; tiled GEMM path enabled on AArch64 i8mm with a USMMLA microkernel; NEON simd_gemm for SVE builds; MUL_MAT_ID expert-address hook for slot-addressed expert caches"
+        "sha256": "f6a7e8447866737ed3042d82adf3e26ebfb108f5921ba025663d2b29a64a07b4",
+        "purpose": "ggml-cpu (AArch64 dotprod): 2x2 tiles for Q5_K/IQ2_XXS/IQ3_XXS bitwise equal to one-column dot products; MUL_MAT pairs columns for odd batches; MUL_MAT_ID pairs tokens routed to the same expert; tiled GEMM path enabled on AArch64 i8mm with a USMMLA microkernel; NEON simd_gemm for SVE builds; MUL_MAT_ID expert-address hook for slot-addressed expert caches; MUL_MAT_ID processes experts reported ready by an optional hook first, so an expert cache can overlap a pending read with the other experts' work (same results)"
       }
     ]
   },

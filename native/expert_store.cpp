@@ -1,5 +1,9 @@
 #include "expert_store.h"
 
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#endif
+
 #include "ggml-backend-impl.h"
 #include "ggml-backend.h"
 #include "ggml.h"
@@ -13,6 +17,7 @@
 #include <cstring>
 #include <functional>
 #include <stdexcept>
+#include <string>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -22,6 +27,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sched.h>
 #include <sys/uio.h>
 #include <unistd.h>
 #endif
@@ -154,6 +160,66 @@ const ggml_backend_buffer_type_i buffer_type_interface = {
     /* .is_host          = */ [](ggml_backend_buffer_type_t) { return true; },
 };
 
+// File-backed tensors: the reservation is replaced in place by read-only private mappings of each tensor's
+// page-rounded file range. On hosts without mmap the pages are committed and the loader copies the bytes.
+const ggml_backend_buffer_i mapped_buffer_interface = {
+    /* .free_buffer   = */
+    [](ggml_backend_buffer_t buffer) {
+        auto *reservation = static_cast<Reservation *>(buffer->context);
+        if (reservation->base) {
+            release(reservation->base, reservation->size);
+        }
+        delete reservation;
+    },
+    /* .get_base      = */
+    [](ggml_backend_buffer_t buffer) -> void * { return static_cast<Reservation *>(buffer->context)->base; },
+    /* .init_tensor   = */
+    [](ggml_backend_buffer_t buffer, ggml_tensor *tensor) {
+        const auto *store = static_cast<const ExpertStore *>(buffer->buft->context);
+        tensor->data = static_cast<uint8_t *>(tensor->data) + store->source_offset(ggml_get_name(tensor)) % page;
+        return store->map_tensor(tensor) ? GGML_STATUS_SUCCESS : GGML_STATUS_ALLOC_FAILED;
+    },
+    /* .memset_tensor = */
+    [](ggml_backend_buffer_t, ggml_tensor *, uint8_t, size_t, size_t) { unsupported("memset_tensor"); },
+    /* .set_tensor    = */
+    [](ggml_backend_buffer_t, ggml_tensor *tensor, const void *data, size_t offset, size_t size) {
+        std::memcpy(static_cast<uint8_t *>(tensor->data) + offset, data, size);
+    },
+    /* .get_tensor    = */
+    [](ggml_backend_buffer_t, const ggml_tensor *tensor, void *data, size_t offset, size_t size) {
+        std::memcpy(data, static_cast<const uint8_t *>(tensor->data) + offset, size);
+    },
+    /* .set_tensor_2d = */ nullptr,
+    /* .get_tensor_2d = */ nullptr,
+    /* .cpy_tensor    = */ nullptr,
+    /* .clear         = */ [](ggml_backend_buffer_t, uint8_t) {},
+    /* .reset         = */ nullptr,
+};
+
+const ggml_backend_buffer_type_i mapped_buffer_type_interface = {
+    /* .get_name         = */ [](ggml_backend_buffer_type_t) { return "EQT_Mapped"; },
+    /* .alloc_buffer     = */
+    [](ggml_backend_buffer_type_t type, size_t size) -> ggml_backend_buffer_t {
+        auto *reservation = new Reservation;
+        if (size) {
+            reservation->size = round_up(size, 64 * 1024);
+            reservation->base = reserve(reservation->size);
+            if (!reservation->base) {
+                delete reservation;
+                return nullptr;
+            }
+        }
+        return ggml_backend_buffer_init(type, mapped_buffer_interface, reservation, size);
+    },
+    /* .alloc_buffer_n   = */ nullptr,
+    /* .get_alignment    = */ [](ggml_backend_buffer_type_t) -> size_t { return page; },
+    /* .get_max_size     = */ nullptr,
+    /* .get_alloc_size   = */
+    [](ggml_backend_buffer_type_t, const ggml_tensor *tensor) { return ggml_nbytes(tensor) + page; },
+    /* .get_alloc_size_n = */ nullptr,
+    /* .is_host          = */ [](ggml_backend_buffer_type_t) { return true; },
+};
+
 enum class Node { other, topk, residual };
 Node classify(const char *name, int &layer) {
     const char *suffix = nullptr;
@@ -185,6 +251,74 @@ bool parse_tensor_name(const char *name, const char *suffix, int &layer) {
     }
     layer = static_cast<int>(value);
     return true;
+}
+} // namespace
+
+namespace {
+// CPUs of the lowest capacity class on a heterogeneous SoC (the little cores); empty when unknown or uniform.
+std::vector<int> lowest_capacity_cpus() {
+    std::vector<std::pair<int, int>> capacities;
+#ifdef __linux__
+    for (int cpu = 0; cpu < 64; ++cpu) {
+        const std::string path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cpu_capacity";
+        std::FILE *file = std::fopen(path.c_str(), "r");
+        if (!file) {
+            continue;
+        }
+        int capacity = 0;
+        if (std::fscanf(file, "%d", &capacity) == 1) {
+            capacities.emplace_back(cpu, capacity);
+        }
+        std::fclose(file);
+    }
+#endif
+    std::vector<int> result;
+    if (capacities.empty()) {
+        return result;
+    }
+    int lowest = capacities.front().second, highest = lowest;
+    for (const auto &[cpu, capacity] : capacities) {
+        lowest = std::min(lowest, capacity);
+        highest = std::max(highest, capacity);
+    }
+    for (const auto &[cpu, capacity] : capacities) {
+        if (capacity == lowest && lowest < highest) {
+            result.push_back(cpu);
+        }
+    }
+    return result;
+}
+
+void pin_to(const std::vector<int> &cpus) {
+#ifdef __linux__
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    for (const int cpu : cpus) {
+        CPU_SET(cpu, &set);
+    }
+    sched_setaffinity(0, sizeof(set), &set); // a failure keeps the thread unpinned
+#else
+    (void)cpus;
+#endif
+}
+
+// Returns the word once it differs from `old`, or after a short wait. On AArch64 the core waits in WFE until
+// another core writes the word's cache line (or the kernel's periodic event stream fires), without a syscall.
+uint32_t wait_word_change(const std::atomic<uint32_t> &word, uint32_t old) {
+#if defined(__aarch64__)
+    uint32_t value;
+    __asm__ __volatile__("ldaxr %w0, [%1]" : "=&r"(value) : "r"(&word) : "memory");
+    if (value == old) {
+        __asm__ __volatile__("wfe" ::: "memory");
+    }
+#else
+    for (int i = 0; i < 64 && word.load(std::memory_order_acquire) == old; ++i) {
+#if defined(__x86_64__) || defined(_M_X64)
+        _mm_pause();
+#endif
+    }
+#endif
+    return word.load(std::memory_order_acquire);
 }
 } // namespace
 
@@ -390,6 +524,8 @@ ExpertStore::ExpertStore(const std::string &path, ExpertOptions options, const s
         throw std::runtime_error("No CPU backend registered");
     }
     buffer_type_.reset(new ggml_backend_buffer_type{buffer_type_interface, cpu, this});
+    mapped_type_.reset(new ggml_backend_buffer_type{mapped_buffer_type_interface, cpu, this});
+    path_ = path;
     if (!options_.trace_path.empty()) {
         trace_.open(options_.trace_path, std::ios::binary | std::ios::trunc);
         if (!trace_) {
@@ -402,6 +538,20 @@ ExpertStore::~ExpertStore() {
     if (set_expert_address_) {
         set_expert_address_(nullptr, nullptr);
     }
+    if (set_expert_ready_) {
+        set_expert_ready_(nullptr, nullptr);
+    }
+    if (predictor_.joinable()) {
+        {
+            std::lock_guard lock(predict_mutex_);
+            predict_stopping_ = true;
+        }
+        predict_ready_.notify_all();
+        predictor_.join();
+    }
+    awake_stopping_.store(true);
+    demand_signal_.fetch_add(1);
+    demand_signal_.notify_all();
     {
         std::lock_guard lock(mutex_);
         stopping_ = true;
@@ -415,6 +565,11 @@ ExpertStore::~ExpertStore() {
     if (arena_) {
         release(arena_, arena_size_);
     }
+#ifndef _WIN32
+    if (map_fd_ >= 0) {
+        close(map_fd_);
+    }
+#endif
 }
 
 ggml_backend_buffer_type *ExpertStore::buffer_type() {
@@ -423,6 +578,43 @@ ggml_backend_buffer_type *ExpertStore::buffer_type() {
 
 bool ExpertStore::owns(const ggml_tensor *tensor) const {
     return tensor->buffer && ggml_backend_buffer_get_type(tensor->buffer) == buffer_type_.get();
+}
+
+ggml_backend_buffer_type *ExpertStore::mapped_buffer_type() {
+    return mapped_type_.get();
+}
+
+bool ExpertStore::maps(const ggml_tensor *tensor) const {
+#ifdef _WIN32
+    (void)tensor;
+    return false;
+#else
+    return tensor->buffer && ggml_backend_buffer_get_type(tensor->buffer) == mapped_type_.get();
+#endif
+}
+
+bool ExpertStore::map_tensor(ggml_tensor *tensor) const {
+    const uint64_t offset = source_offset(ggml_get_name(tensor));
+    auto *begin = reinterpret_cast<uint8_t *>(round_down(reinterpret_cast<uintptr_t>(tensor->data), page));
+    const size_t size = round_up(offset % page + ggml_nbytes(tensor), page);
+#ifdef _WIN32
+    return commit(begin, size);
+#else
+    auto &fd = const_cast<int &>(map_fd_);
+    if (fd < 0) {
+        fd = open(path_.c_str(), O_RDONLY | O_CLOEXEC);
+        if (fd < 0) {
+            return false;
+        }
+    }
+    // The offset's page remainder equals the tensor's, so the mapping starts on the tensor's first page.
+    void *mapped = mmap(begin, size, PROT_READ, MAP_PRIVATE | MAP_FIXED, fd, static_cast<off_t>(round_down(offset, page)));
+    if (mapped == MAP_FAILED) {
+        return false;
+    }
+    madvise(mapped, size, MADV_RANDOM);
+    return true;
+#endif
 }
 
 ExpertStore::Layer *ExpertStore::layer_at(int index) const {
@@ -563,8 +755,14 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
     if (options_.slots) {
         setup_slots();
     }
+    const int reserved = std::min(options_.demand_threads, options_.io_threads - 1);
+    little_cpus_ = lowest_capacity_cpus();
+    const int awake = little_cpus_.size() >= 2 ? std::min(options_.awake_demand_threads, reserved) : 0;
     for (int i = 0; i < options_.io_threads; ++i) {
-        workers_.emplace_back([this] { worker(); });
+        workers_.emplace_back([this, demand_only = i < reserved, awake = i < awake] { worker(demand_only, awake); });
+    }
+    if (options_.prefetch && predictable_layers_ > 0) {
+        predictor_ = std::thread([this] { predictor(); });
     }
 }
 
@@ -607,16 +805,36 @@ void ExpertStore::setup_slots() {
         throw std::runtime_error("Cannot reserve the expert slot arena");
     }
     set_expert_address_(&ExpertStore::expert_address, this);
+    set_expert_ready_ = reinterpret_cast<decltype(set_expert_ready_)>(
+        ggml_backend_reg_get_proc_address(reg, "ggml_cpu_set_expert_ready"));
+    if (set_expert_ready_) {
+        set_expert_ready_(&ExpertStore::expert_ready, this);
+        overlap_reads_ = options_.overlap_reads;
+    }
+}
+
+const ExpertStore::BankRef *ExpertStore::bank_of(const ggml_tensor *weights) const {
+    const ggml_tensor *base = weights->view_src ? weights->view_src : weights;
+    const auto it = std::lower_bound(bank_index_.begin(), bank_index_.end(), base,
+                                     [](const BankRef &ref, const ggml_tensor *t) {
+                                         return std::less<const ggml_tensor *>()(ref.tensor, t);
+                                     });
+    return it == bank_index_.end() || it->tensor != base ? nullptr : &*it;
+}
+
+bool ExpertStore::expert_ready(const ggml_tensor *weights, int64_t expert, void *opaque) {
+    const auto &store = *static_cast<const ExpertStore *>(opaque);
+    const BankRef *ref = store.bank_of(weights);
+    if (!ref || weights->view_src || expert < 0 || expert >= ref->layer->experts) {
+        return true;
+    }
+    return store.layer_ready(*ref, expert);
 }
 
 const void *ExpertStore::expert_address(const ggml_tensor *weights, int64_t expert, void *opaque) {
     const auto &store = *static_cast<const ExpertStore *>(opaque);
-    const ggml_tensor *base = weights->view_src ? weights->view_src : weights;
-    const auto it = std::lower_bound(store.bank_index_.begin(), store.bank_index_.end(), base,
-                                     [](const BankRef &ref, const ggml_tensor *t) {
-                                         return std::less<const ggml_tensor *>()(ref.tensor, t);
-                                     });
-    if (it == store.bank_index_.end() || it->tensor != base) {
+    const BankRef *it = store.bank_of(weights);
+    if (!it) {
         return nullptr; // not a streamed bank
     }
     const Bank &bank = it->layer->banks[it->bank];
@@ -626,7 +844,42 @@ const void *ExpertStore::expert_address(const ggml_tensor *weights, int64_t expe
     if (e < 0 || e >= it->layer->experts || !it->layer->entries[e].slot) {
         GGML_ABORT("MUL_MAT_ID read a streamed expert that is not resident");
     }
+    store.wait_bank(*it, static_cast<int>(e));
     return store.data_of(*it->layer, it->bank, static_cast<int>(e)) + offset % bank.stride;
+}
+
+bool ExpertStore::layer_ready(const BankRef &ref, int64_t expert) const {
+    const auto &entry = ref.layer->entries[expert];
+    return entry.slot && (entry.ready.load(std::memory_order_acquire) >> ref.bank & 1);
+}
+
+// Called by compute threads inside MUL_MAT_ID. A bank still being read blocks only the threads that reach it.
+// They spin like GGML's own barriers: sleeping idles the big cores, and the governor's lower clocks then slowed
+// every following operation of the token about twofold (measured on the Galaxy). A failed read sets the bit too,
+// and the graph is aborted.
+void ExpertStore::wait_bank(const BankRef &ref, int expert) const {
+    auto &entry = ref.layer->entries[expert];
+    const uint32_t bit = uint32_t{1} << ref.bank;
+    uint32_t ready = entry.ready.load(std::memory_order_acquire);
+    if (!(ready & bit)) {
+        const auto start = Clock::now();
+        for (uint32_t spins = 0; !((ready = entry.ready.load(std::memory_order_acquire)) & bit); ++spins) {
+            // A read that takes this long is stalled; stop burning the core while it finishes.
+            if ((spins & 1023) == 0 && Clock::now() - start > std::chrono::milliseconds(20)) {
+                entry.ready.wait(ready, std::memory_order_acquire);
+                continue;
+            }
+#if defined(__aarch64__)
+            __asm__ __volatile__("yield");
+#elif defined(__x86_64__) || defined(_M_X64)
+            _mm_pause();
+#endif
+        }
+        compute_wait_ns_ += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start).count());
+    }
+    if (entry.failed.load()) {
+        aborted_.store(true);
+    }
 }
 
 uint8_t *ExpertStore::data_of(const Layer &layer, int bank_index, int expert) const {
@@ -676,6 +929,7 @@ void ExpertStore::release_slot(Layer &layer, int expert) {
 // A prompt can leave many warm slots of several sizes behind; decoding recycles its own evictions, so the free
 // pages are returned once when decoding starts and reused slots fault in again only if needed.
 void ExpertStore::set_decode_phase(bool decode) {
+    wait_predictor();
     if (decode && !decode_phase_ && options_.slots) {
         for (auto &slots : slot_classes_) {
             for (uint8_t *slot : slots.warm) {
@@ -686,6 +940,15 @@ void ExpertStore::set_decode_phase(bool decode) {
         }
     }
     decode_phase_ = decode;
+    awake_decode_.store(decode);
+    if (!decode) {
+        demand_signal_.fetch_add(1);
+        demand_signal_.notify_all();
+    }
+}
+
+void ExpertStore::set_awake_allowed(bool allowed) {
+    awake_allowed_.store(allowed);
 }
 
 // One job reads a contiguous file range of one bank into its experts' slots. Direct reads take each expert's
@@ -728,6 +991,7 @@ void ExpertStore::read_slots(const Job &job) const {
 void ExpertStore::begin_request() {
     end_request();
     stats_ = {};
+    compute_wait_ns_.store(0);
     stats_.peak_resident_bytes = resident_bytes_;
     ++requests_;
     if (trace_) {
@@ -736,6 +1000,7 @@ void ExpertStore::begin_request() {
 }
 
 void ExpertStore::end_request() {
+    wait_predictor();
     {
         std::unique_lock lock(mutex_);
         job_done_.wait(lock, [this] { return inflight_jobs_.load() == 0; });
@@ -783,11 +1048,35 @@ bool ExpertStore::observe(ggml_tensor *tensor, bool ask, void *opaque) {
     if (kind != Node::topk) {
         return true;
     }
-    if (layer < static_cast<int>(store.residuals_.size()) && store.residuals_[layer]) {
-        store.predict(layer, store.residuals_[layer]);
+    store.wait_predictor();
+    const ggml_tensor *residual = layer < static_cast<int>(store.residuals_.size()) ? store.residuals_[layer] : nullptr;
+    if (layer < static_cast<int>(store.residuals_.size())) {
         store.residuals_[layer] = nullptr;
     }
-    return store.ensure(layer, tensor);
+    const bool usable = residual && residual->type == GGML_TYPE_F32 && ggml_is_contiguous(residual);
+    if (!usable || !store.predictor_.joinable()) {
+        if (usable) {
+            store.predict(layer, static_cast<const float *>(residual->data), residual->ne[1], residual->nb[1]);
+        }
+        return store.ensure(layer, tensor);
+    }
+    // The residual stays allocated only until the post-MoE add, which the graph may reach before the
+    // predictor runs, so it is copied (8 KiB per row) first.
+    const size_t width = static_cast<size_t>(residual->ne[0]);
+    store.predict_input_.resize(width * residual->ne[1]);
+    for (int64_t row = 0; row < residual->ne[1]; ++row) {
+        std::memcpy(store.predict_input_.data() + row * width, static_cast<const char *>(residual->data) + row * residual->nb[1],
+                    width * sizeof(float));
+    }
+    const bool ok = store.ensure(layer, tensor);
+    {
+        std::lock_guard lock(store.predict_mutex_);
+        store.predict_layer_ = layer;
+        store.predict_rows_ = residual->ne[1];
+        store.predict_pending_ = true;
+    }
+    store.predict_ready_.notify_one();
+    return ok;
 }
 
 bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
@@ -876,7 +1165,9 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
         stats_.decode_misses += missing_.size();
         stats_.decode_read_bytes += missing_.size() * layer.entry_bytes;
     }
-    load_runs(layer, missing_, true, options_.coalesce_gap);
+    // Overlapped reads never bridge resident experts: compute may read those while the run is in flight.
+    const bool overlap = overlap_reads_ && rows <= max_lookahead_rows;
+    load_runs(layer, missing_, true, overlap ? 0 : options_.coalesce_gap);
     if (rows > max_lookahead_rows && options_.prefill_prefetch_mib > 0) {
         if (auto *next = layer_at(layer_index + 1); next && !next->banks.empty()) {
             prefetch_whole_layer(*next);
@@ -887,6 +1178,11 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
             issue_prefetch(*next);
         }
         prefetch_layer_ = -1;
+    }
+    if (overlap) {
+        stats_.overlapped_layers += decode && !missing_.empty();
+        stats_.peak_resident_bytes = std::max(stats_.peak_resident_bytes, resident_bytes_);
+        return true;
     }
     const auto wait_start = Clock::now();
     for (const int expert : demand_) {
@@ -902,10 +1198,43 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
     return true;
 }
 
-void ExpertStore::predict(int layer_index, const ggml_tensor *hidden) {
+void ExpertStore::predictor() {
+    for (;;) {
+        int layer = -1;
+        int64_t rows = 0;
+        {
+            std::unique_lock lock(predict_mutex_);
+            predict_ready_.wait(lock, [this] { return predict_stopping_ || predict_pending_; });
+            if (predict_stopping_) {
+                return;
+            }
+            layer = predict_layer_;
+            rows = predict_rows_;
+        }
+        const size_t width = rows ? predict_input_.size() / static_cast<size_t>(rows) : 0;
+        predict(layer, predict_input_.data(), rows, width * sizeof(float));
+        if (prefetch_layer_ >= 0 && !cancelled_.load()) {
+            if (auto *next = layer_at(prefetch_layer_)) {
+                issue_prefetch(*next);
+            }
+        }
+        prefetch_layer_ = -1;
+        {
+            std::lock_guard lock(predict_mutex_);
+            predict_pending_ = false;
+        }
+        predict_done_.notify_all();
+    }
+}
+
+void ExpertStore::wait_predictor() {
+    std::unique_lock lock(predict_mutex_);
+    predict_done_.wait(lock, [this] { return !predict_pending_; });
+}
+
+void ExpertStore::predict(int layer_index, const float *rows, int64_t count_rows, size_t row_bytes) {
     auto *next = layer_at(layer_index + 1);
-    if (!next || !next->router || !next->norm || hidden->type != GGML_TYPE_F32 ||
-        !ggml_is_contiguous(hidden) || hidden->ne[0] != next->width) {
+    if (!next || !next->router || !next->norm || count_rows <= 0 || row_bytes < next->width * sizeof(float)) {
         return;
     }
     const auto start = Clock::now();
@@ -916,8 +1245,8 @@ void ExpertStore::predict(int layer_index, const ggml_tensor *hidden) {
     // layer l+1's RMS weight; a small batch (speculative verification) prefetches the union of its rows.
     // It only drives speculative reads; routing still uses the exact top-k. Candidates are issued in score
     // order, so extra candidates beyond top-k are read last.
-    for (int64_t row = 0; row < hidden->ne[1]; ++row) {
-        const auto *x = reinterpret_cast<const float *>(static_cast<const char *>(hidden->data) + row * hidden->nb[1]);
+    for (int64_t row = 0; row < count_rows; ++row) {
+        const auto *x = reinterpret_cast<const float *>(reinterpret_cast<const char *>(rows) + row * row_bytes);
         const float scale = 1.0f / std::sqrt(simd::sum_squares(x, width) / width + norm_epsilon_);
         simd::scale_mul(x, next->norm, scale, scratch_.data(), width);
         simd::gemv_rows(next->router, scratch_.data(), scores_.data(), next->experts, width);
@@ -990,6 +1319,7 @@ bool ExpertStore::begin_load(Layer &layer, int expert, bool demand) {
             }
         }
     }
+    entry.ready.store(0);
     entry.pending.store(static_cast<int>(layer.banks.size()));
     for (const auto &bank : layer.banks) {
         (demand ? stats_.demand_read_bytes : stats_.prefetch_read_bytes) += bank.stride;
@@ -1005,8 +1335,11 @@ void ExpertStore::queue_reads(Layer &layer, int first, int count, uint64_t membe
     {
         std::lock_guard lock(mutex_);
         for (int bank = 0; bank < banks; ++bank) {
-            (demand ? demand_queue_ : prefetch_queue_).push_back({&layer, bank, first, count, members});
+            (demand ? demand_queue_ : prefetch_queue_).push_back({&layer, bank, first, count, members, Clock::now()});
         }
+    }
+    if (demand) {
+        demand_signal_.fetch_add(1, std::memory_order_release);
     }
     queue_ready_.notify_all();
 }
@@ -1114,6 +1447,7 @@ void ExpertStore::evict(Layer &layer, int expert) {
     stats_.evictions += !entry.failed.load();
     entry.state = State::absent;
     entry.prefetched = false;
+    entry.ready.store(0);
     --layer.resident;
     resident_bytes_ -= layer.entry_bytes;
 }
@@ -1164,24 +1498,53 @@ bool ExpertStore::wait(Layer &layer, int expert) {
     return true;
 }
 
-void ExpertStore::worker() {
+void ExpertStore::worker(bool demand_only, bool awake) {
+    if (awake) {
+        pin_to(little_cpus_);
+    }
     std::vector<uint8_t> bounce;
     if (file_->direct()) {
         bounce.assign(2 * page, 0);
     }
+    uint32_t signal = demand_signal_.load();
     for (;;) {
         Job job{};
-        {
-            std::unique_lock lock(mutex_);
-            queue_ready_.wait(
-                lock, [this] { return stopping_ || !demand_queue_.empty() || !prefetch_queue_.empty(); });
+        bool demand = false;
+        bool taken = false;
+        // Awake while decoding: wait for the counter to change without a futex sleep, then try the queue. A job
+        // another thread took leaves this one awake.
+        if (awake && awake_decode_.load(std::memory_order_relaxed) && awake_allowed_.load(std::memory_order_relaxed) &&
+            !awake_stopping_.load(std::memory_order_relaxed)) {
+            const uint32_t now = wait_word_change(demand_signal_, signal);
+            if (now == signal) {
+                continue;
+            }
+            signal = now;
+            std::lock_guard lock(mutex_);
             if (stopping_) {
                 return;
             }
-            auto &queue = demand_queue_.empty() ? prefetch_queue_ : demand_queue_;
+            if (demand_queue_.empty()) {
+                continue;
+            }
+            job = demand_queue_.front();
+            demand_queue_.pop_front();
+            demand = taken = true;
+        }
+        if (!taken) {
+            std::unique_lock lock(mutex_);
+            queue_ready_.wait(lock, [this, demand_only] {
+                return stopping_ || !demand_queue_.empty() || (!demand_only && !prefetch_queue_.empty());
+            });
+            if (stopping_) {
+                return;
+            }
+            demand = !demand_queue_.empty();
+            auto &queue = demand ? demand_queue_ : prefetch_queue_;
             job = queue.front();
             queue.pop_front();
         }
+        const auto read_start = Clock::now();
         const auto &bank = job.layer->banks[job.bank];
         bool failed = false;
         try {
@@ -1201,12 +1564,20 @@ void ExpertStore::worker() {
                 if (failed) {
                     entry.failed.store(true);
                 }
+                entry.ready.fetch_or(uint32_t{1} << job.bank);
+                entry.ready.notify_all();
                 entry.pending.fetch_sub(1);
             }
         }
         inflight_jobs_.fetch_sub(1);
         {
             std::lock_guard lock(mutex_);
+            if (demand) {
+                // Queue time is measured by the submitter's clock in queue_reads(); this is the read itself.
+                stats_.demand_read_ms += since(read_start);
+                stats_.demand_queue_ms += std::chrono::duration<double, std::milli>(read_start - job.queued).count();
+                ++stats_.demand_jobs;
+            }
         }
         job_done_.notify_all();
     }
@@ -1250,10 +1621,13 @@ Json ExpertStore::configuration() const {
         {"direct_io", options_.direct_io},
         {"prefetch", options_.prefetch ? "router_lookahead_1" : "none"},
         {"prefetch_extra", options_.prefetch_extra},
+        {"demand_io_threads", std::min(options_.demand_threads, options_.io_threads - 1)},
+        {"awake_demand_io_threads", little_cpus_.size() >= 2 ? std::min(options_.awake_demand_threads, std::min(options_.demand_threads, options_.io_threads - 1)) : 0},
         {"coalesce_kib", options_.coalesce_kib},
         {"coalesce_gap", options_.coalesce_gap},
         {"prefill_prefetch_mib", options_.prefill_prefetch_mib},
         {"slots", options_.slots},
+        {"overlap_reads", overlap_reads_},
         {"prefetch_layers", predictable_layers_},
         {"simd", simd::implementation()},
         {"trace", !options_.trace_path.empty()}};
@@ -1279,6 +1653,11 @@ Json ExpertStore::statistics() const {
             {"decode_misses", stats_.decode_misses},
             {"decode_read_bytes", stats_.decode_read_bytes},
             {"decode_io_wait_ms", stats_.decode_io_wait_ms},
+            {"overlapped_layers", stats_.overlapped_layers},
+            {"demand_jobs", stats_.demand_jobs},
+            {"demand_job_queue_ms", stats_.demand_queue_ms},
+            {"demand_job_read_ms", stats_.demand_read_ms},
+            {"compute_wait_thread_ms", compute_wait_ns_.load() / 1e6},
             {"predict_ms", stats_.predict_ms},
             {"evict_ms", stats_.evict_ms},
             {"slot_cold_reuses", stats_.slot_cold_reuses},

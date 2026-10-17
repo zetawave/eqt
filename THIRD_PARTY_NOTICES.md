@@ -1,6 +1,6 @@
 # Third-party notices
 
-Equity's original source is MIT licensed under `LICENSE`. Model weights have separate terms and are not included in this repository or APK.
+Equity's original source is licensed under the GNU AGPLv3 (`LICENSE`), with a commercial license available on request (see `README.md`). Model weights have separate terms and are not included in this repository or APK.
 
 | Component | Revision / version | Terms and retained notices |
 |---|---|---|

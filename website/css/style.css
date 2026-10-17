@@ -564,6 +564,10 @@ section[id] { scroll-margin-top: 74px; }
 .chart-row:nth-child(6) .chart-bar { transition-delay: 0.32s; }
 .chart-row:nth-child(7) .chart-bar { transition-delay: 0.40s; }
 .chart-row:nth-child(8) .chart-bar { transition-delay: 0.48s; }
+.chart-row:nth-child(9) .chart-bar { transition-delay: 0.56s; }
+.chart-row:nth-child(10) .chart-bar { transition-delay: 0.64s; }
+.chart-row:nth-child(11) .chart-bar { transition-delay: 0.72s; }
+.chart-row:nth-child(12) .chart-bar { transition-delay: 0.80s; }
 .chart-row.is-final .chart-bar {
   background: linear-gradient(90deg, var(--teal), var(--violet));
   box-shadow: 0 0 26px rgba(139, 92, 246, 0.4);

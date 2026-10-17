@@ -282,3 +282,30 @@ Formulas (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`) are taken out before Markdow
 JLaTeXMath (used by Markwon's LaTeX plugin) was not chosen because it is GPL v2 with a linking exception; KaTeX would need a WebView per message. AndroidMath is fetched from JitPack, restricted to its group; its POM's runtime AppCompat, test and JitPack placeholder dependencies are excluded, and its `libc++_shared.so` is byte-identical to the NDK 28 one the engine ships. R8 keeps its JNI-resolved classes; the minified release build compiles.
 
 Checked on the Galaxy with an injected answer covering every element above. User messages stay plain text.
+
+## D024: Decode time accounted, six threads, overlapped expert reads — 2026-10-16
+
+A per-op wall-time profile (temporary GGML diagnostic, thread 0, single-token graphs) split one UD-IQ2_M token (2 GiB expert cache, four threads, cool phone, 128 greedy tokens) into: 38.2 ms host time waiting for missed experts, 4.7 ms lookahead prediction and ~6 ms other host work between the 41 graph segments; 41.7 ms expert GEMVs (IQ2_XXS 23.7, IQ3_XXS 16.2); 55.1 ms dense GEMVs (Q5_K 29.1, Q4_K output head 12.4, Q6_K 10.5, F32 routers 3.1); 19.6 ms barrier waits over 2,207 nodes; ~18 ms small ops. Total 183.5 ms (5.45 tokens/s). Per token the model reads ~1.33 GB of dense weights and ~0.29 GB of experts.
+
+`eqt-kernel-bench` on the Galaxy (weights beyond the caches): K-quants reach 33 GB/s with four threads and 37–38 GB/s with six, close to the CPU's DRAM ceiling (Q8_0 39.5 GB/s); IQ2_XXS/IQ3_XXS are compute-bound at 10–11 GB/s (four) and 14–15 GB/s (six); eight threads including little cores add nothing.
+
+Kept, each with identical token sequences on the Galaxy and bitwise-equal host streaming checks (29/29):
+
+- **Six compute threads** (all big cores; app default 6): 5.45 → 6.85 tokens/s, barrier waits 20 → 4 ms. The earlier "four is best" (D011) predates slots and no longer holds.
+- **Overlapped expert reads.** In decode, `ensure()` queues missing experts without waiting. A GGML hook (patch 0002) makes MUL_MAT_ID compute ready experts first; the address hook waits only for the bank it reads (per-bank ready bits). Waits spin: sleeping idled the big cores and the governor's lower clocks slowed every later op about twofold (1.72 tokens/s). Host time between segments 47 → 10 ms; 6.85 → 7.63 tokens/s (cool start).
+- **Lookahead on a predictor thread**: the residual is copied (8 KiB) and the next layer's router is scored off the decode thread; cache state keeps one writer because every decode-thread entry point waits for the predictor. Segment gaps 10 → 4–6 ms; 7.64 → 8.01 tokens/s in the cleanest pair.
+- **Token embedding mapped from the file** (streaming loads): one 1.4 KB row is read per token, so the table no longer occupies anonymous RAM. RSS −332 MiB on UD-IQ2_M (table 333 MiB) and −515 MiB by size on UD-Q4_K_M; the app's admission gives that memory to the expert cache.
+- **Four I/O threads reserved for demanded reads**: less waiting in MUL_MAT_ID (146–155 against 172–179 thread-ms per token); 8.22 against 7.82 tokens/s in the cleanest pair.
+
+Best cool-start result: 8.22 tokens/s (121.7 ms per token) against 5.45 at the start of the session. Thermal state and background activity (Play Store updates, system_server) moved single runs by up to 15%; the second pair of each A/B was disturbed and is reported, not dropped. No sustained or in-app measurement of the combined build exists yet.
+
+Rejected: speculative reads in the Linux idle I/O class (6.58 against 6.94 at matched temperature) and a cap of four speculative reads in flight (5.67): both delayed prefetches more than they helped demand reads.
+
+Measured but not yet acted on: demanded reads still wait ~0.45 ms before starting (thread wake-up) and take 1.3–1.8 ms. Awake demand threads (WFE on the queue counter, pinned to little cores) are implemented, default off (`awake_demand_io_threads`), unmeasured.
+
+In the app the same build first decoded at 4.24 tokens/s. Two app-side causes, both fixed:
+
+- **Cache too small.** Admission kept 1,024 MiB of margin on top of a sum that already matched the measured peak RSS, and reserved 512 MiB of encoder work for images (measured: 35 MiB), so the expert cache fell to its 508 MiB minimum and images were switched off. CLI at 512/1,024/1,536 MiB: 6.37/6.81/7.57 tokens/s (74/81/85% hits). The margin is now 384 MiB and image work 128 MiB.
+- **UI competing for the big cores.** During generation the UI thread used 47% and the RenderThread 20% of a core at higher priority than the six compute threads, whose barriers then waited for the preempted one. The status dot animated permanently, a typing animation ran during the prompt, and the answer was re-laid out every 60 ms. Now: no animation while answering, updates every 200 ms; the UI thread uses about 6%.
+
+Same prompt in the app afterwards: 6.87 tokens/s, 88% hits, 2,038 MiB cache with images on, 4,684 MiB peak, thermal status 1 at the start. The cache size follows the free memory at load.

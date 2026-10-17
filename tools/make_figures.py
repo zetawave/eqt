@@ -20,7 +20,9 @@ FORMAT = "svg"
 GALAXY = ROOT / "results/2026-10-06/galaxy"
 TARGET_TOKENS_PER_SECOND = 5.0
 
-# Comparable steps only: Qwen3.6-35B-A3B UD-Q4_K_M, 64 forced greedy tokens, identical routing per arm.
+# Qwen3.6-35B-A3B, forced greedy tokens, identical routing per arm: UD-Q4_K_M with 64 tokens, then UD-IQ2_M (*),
+# and from the 2026-10-16 session 128 tokens with a 2 GiB cache. Runs a record marks as excluded are left out.
+SESSION = "../../2026-10-16/galaxy/decode-session.json"
 STEPS = [
     ("1 GiB cache\nbuffered, 4 I/O", "target-io-sweep.json", "buf_t4"),
     ("direct I/O\n16 I/O threads", "target-io-sweep.json", "dio_t16"),
@@ -29,6 +31,10 @@ STEPS = [
     ("+ zero-copy\ndirect reads", "target-zero-copy.json", "direct_zero_copy"),
     ("+ 2-bit experts\n(UD-IQ2_M)*", "../../2026-10-07/galaxy/iq2m-sweep.json", "plain_c2048"),
     ("+ expert slots\n(UD-IQ2_M)*", "../../2026-10-08/galaxy/slots-decode.json", "slots"),
+    ("+ six\nthreads*", SESSION, "six_threads"),
+    ("+ overlapped\nexpert reads*", SESSION, "overlap"),
+    ("+ predictor\nthread*", SESSION, "predictor"),
+    ("+ mapped embed.,\ndemand I/O*", SESSION, "mapped_embeddings_demand_io"),
 ]
 
 THEMES = {
@@ -39,10 +45,24 @@ THEMES = {
 
 def rows(record, arm):
     data = json.loads((GALAXY / record).read_text(encoding="utf-8"))
-    selected = [r for r in data["rows"] if r.get("arm") == arm and "decode_ms" in r]
+    selected = [r for r in data["rows"] if r.get("arm") == arm and "decode_ms" in r and not r.get("excluded")]
     if not selected:
         raise ValueError(f"No rows for {arm} in {record}")
     return selected
+
+
+def conditions(selected):
+    thermal = sorted({r[k] for r in selected for k in ("thermal_before", "thermal_after") if r.get(k) is not None})
+    skin = [r[k] for r in selected for k in ("skin_before", "skin_after") if r.get(k) is not None]
+    if skin:
+        return f"skin {min(skin):.0f}–{max(skin):.0f} °C"
+    return f"thermal {thermal[0]}–{thermal[-1]}" if len(thermal) > 1 else f"thermal {thermal[0]}"
+
+
+def blocked_ms(row):
+    # Before overlapped reads the decode thread waited (decode_io_wait_ms); after, compute threads wait inside the
+    # expert products, counted per thread, so their average approximates the blocked wall time.
+    return row["decode_io_wait_ms"] + (row.get("compute_wait_thread_ms") or 0) / row.get("threads", 1)
 
 
 def style(ax, theme):
@@ -68,12 +88,11 @@ def title(fig, theme, text, subtitle):
 
 
 def progress(theme, name):
-    fig, ax = figure(theme, 10, 4.6)
+    fig, ax = figure(theme, 13, 4.8)
     labels, means = [], []
     for index, (label, record, arm) in enumerate(STEPS):
         values = [r["decode_tokens_per_second"] for r in rows(record, arm)]
-        thermal = sorted({r["thermal_before"] for r in rows(record, arm)} | {r["thermal_after"] for r in rows(record, arm)})
-        labels.append(f"{label}\nthermal {thermal[0]}–{thermal[-1]}" if len(thermal) > 1 else f"{label}\nthermal {thermal[0]}")
+        labels.append(f"{label}\n{conditions(rows(record, arm))}")
         means.append(mean(values))
         ax.bar(index, means[-1], width=0.55, color=theme["s1"], zorder=2)
         ax.scatter([index] * len(values), values, s=22, color=theme["text"], zorder=3, linewidths=0)
@@ -82,23 +101,23 @@ def progress(theme, name):
     ax.text(len(STEPS) - 0.55, TARGET_TOKENS_PER_SECOND + 0.08, "5 tokens/s target", ha="right",
             color=theme["muted"], fontsize=9)
     ax.set_xticks(range(len(STEPS)), labels, color=theme["muted"], fontsize=8.5)
-    ax.set_ylim(0, 6.6)
+    ax.set_ylim(0, 9.4)
     ax.set_ylabel("decode tokens/s", color=theme["muted"], fontsize=9)
     title(fig, theme, "Qwen3.6-35B-A3B (22 GB) streamed on a Galaxy S24+ (Exynos 2400)",
-          "Mean of 2–3 alternating runs (dots) · 64 greedy tokens · *different quantization, quality evaluated separately")
+          "Mean of 1–4 runs (dots) · 64 greedy tokens, 128 from six threads on · *UD-IQ2_M, quality evaluated separately")
     fig.subplots_adjust(left=0.07, right=0.98, top=0.82, bottom=0.2)
     fig.savefig(OUT / f"{name}-{theme_name(theme)}.{FORMAT}", facecolor=theme["surface"])
     plt.close(fig)
 
 
 def breakdown(theme, name):
-    fig, ax = figure(theme, 9, 4.2)
+    fig, ax = figure(theme, 9, 5.2)
     ax.grid(axis="y", visible=False)
     ax.grid(axis="x", color=theme["grid"], linewidth=0.8)
     for index, (label, record, arm) in enumerate(STEPS):
         selected = rows(record, arm)
         tokens = len(selected[0]["tokens"])
-        wait = mean(r["decode_io_wait_ms"] for r in selected) / tokens
+        wait = mean(blocked_ms(r) for r in selected) / tokens
         other = mean(r["decode_ms"] for r in selected) / tokens - wait
         y = len(STEPS) - 1 - index
         # Surface-colored edges leave the 2 px gap between stacked segments.
@@ -117,8 +136,8 @@ def breakdown(theme, name):
     for text in legend.get_texts():
         text.set_color(theme["text"])
     title(fig, theme, "Where a decoded token's time goes",
-          "Decode thread blocked on storage versus everything else; prefetch reads overlap compute when they hit")
-    fig.subplots_adjust(left=0.24, right=0.97, top=0.74, bottom=0.14)
+          "Blocked on expert reads (decode thread; from overlapped reads on, compute threads' average) vs everything else")
+    fig.subplots_adjust(left=0.27, right=0.97, top=0.74, bottom=0.14)
     fig.savefig(OUT / f"{name}-{theme_name(theme)}.{FORMAT}", facecolor=theme["surface"])
     plt.close(fig)
 

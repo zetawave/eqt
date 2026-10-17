@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.ext.SdkExtensions
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -42,7 +43,7 @@ object Attachments {
                 if (!cursor.isNull(1)) size = cursor.getLong(1)
             }
         }
-        val mime = resolver.getType(uri) ?: ""
+        val mime = resolver.getType(uri)?.takeIf { it.isNotBlank() } ?: guessType(context, uri, name)
         ChatStore.staging.mkdirs()
         return when {
             mime.startsWith("image/") -> {
@@ -51,6 +52,27 @@ object Attachments {
             }
             mime == "application/pdf" || name.endsWith(".pdf", ignoreCase = true) -> pdf(context, uri, name, vision)
             else -> listOf(text(context, uri, name, mime, size))
+        }
+    }
+
+    /**
+     * For sources that report no type (file URIs, some providers): the extension first, then the leading bytes, so a
+     * photo is never read as text.
+     */
+    private fun guessType(context: Context, uri: Uri, name: String): String {
+        MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase())?.let { return it }
+        val head = ByteArray(12)
+        val count = runCatching { context.contentResolver.openInputStream(uri)?.use { it.read(head) } ?: 0 }.getOrDefault(0)
+        fun starts(vararg bytes: Int) = count >= bytes.size && bytes.indices.all { head[it] == bytes[it].toByte() }
+        fun ascii(at: Int, text: String) = count >= at + text.length && text.indices.all { head[at + it] == text[it].code.toByte() }
+        return when {
+            starts(0xFF, 0xD8, 0xFF) -> "image/jpeg"
+            starts(0x89, 0x50, 0x4E, 0x47) -> "image/png"
+            ascii(0, "GIF8") -> "image/gif"
+            ascii(0, "RIFF") && ascii(8, "WEBP") -> "image/webp"
+            ascii(4, "ftyp") && (ascii(8, "heic") || ascii(8, "heix") || ascii(8, "mif1")) -> "image/heif"
+            ascii(0, "%PDF") -> "application/pdf"
+            else -> ""
         }
     }
 

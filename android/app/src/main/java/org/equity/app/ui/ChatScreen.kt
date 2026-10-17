@@ -167,7 +167,12 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
         val file = capture?.let(::File)
         capture = null
         if (file != null) {
-            if (taken) import(listOf(Uri.fromFile(file))) { file.delete() } else file.delete()
+            // The provider URI reports image/jpeg; a file:// URI reports no type at all.
+            if (taken && file.length() > 0) {
+                import(listOf(FileProvider.getUriForFile(context, "${context.packageName}.files", file))) { file.delete() }
+            } else {
+                file.delete()
+            }
         }
     }
     val takePhoto: () -> Unit = {
@@ -284,15 +289,18 @@ private fun ChatHeader(engine: EngineState, title: String?, onOpenChats: () -> U
 @Composable
 fun StatusDot(phase: Phase) {
     val colors = MaterialTheme.colorScheme
-    val busy = phase == Phase.Loading || phase == Phase.Generating || phase == Phase.Unloading
-    val pulse = rememberInfiniteTransition(label = "pulse")
-    val alpha by pulse.animateFloat(1f, 0.35f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "alpha")
     val color = when (phase) {
         Phase.Ready -> colors.primary
         Phase.Empty -> colors.outline
         else -> colors.tertiary
     }
-    Box(Modifier.size(8.dp).alpha(if (busy) alpha else 1f).background(color, CircleShape))
+    // Only loading pulses. Any running animation redraws the screen every frame, and while an answer is written
+    // each frame takes a big core from the compute threads.
+    val alpha = if (phase == Phase.Loading || phase == Phase.Unloading) {
+        val pulse = rememberInfiniteTransition(label = "pulse")
+        pulse.animateFloat(1f, 0.35f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "alpha").value
+    } else 1f
+    Box(Modifier.size(8.dp).alpha(alpha).background(color, CircleShape))
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -375,7 +383,9 @@ private fun AssistantMessage(message: Message) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxWidth().padding(end = 12.dp)) {
         if (message.streaming && message.text.isEmpty()) {
-            TypingDots()
+            // Static: an animation here would compete with the prompt's evaluation for the big cores.
+            Text("Reading your message…", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp))
         } else {
             SelectionContainer {
                 MarkdownText(
@@ -396,21 +406,6 @@ private fun AssistantMessage(message: Message) {
                         modifier = Modifier.size(16.dp))
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun TypingDots() {
-    val transition = rememberInfiniteTransition(label = "typing")
-    Row(Modifier.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        repeat(3) { index ->
-            val alpha by transition.animateFloat(
-                initialValue = 0.25f, targetValue = 1f,
-                animationSpec = infiniteRepeatable(tween(500, delayMillis = index * 160), RepeatMode.Reverse),
-                label = "dot$index",
-            )
-            Box(Modifier.size(8.dp).alpha(alpha).background(MaterialTheme.colorScheme.primary, CircleShape))
         }
     }
 }

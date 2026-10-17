@@ -10,16 +10,16 @@ It is a research inference engine specialised in one model family, the **Qwen3.5
 
 All numbers are measured on the Galaxy and recorded in [`results/`](results/).
 
-- **A model twice the phone's RAM runs.** Qwen3.6-35B-A3B (UD-Q4_K_M, 22.7 GB) and its 2.7-bit UD-IQ2_M build (11.9 GB) stream on a stock phone with a peak RSS of about 4.7 GiB. Routing is exact: streamed inference is bitwise identical to resident inference on the verification fixtures.
-- **Over 5 tokens/s in short runs.** UD-IQ2_M decodes at 5.5 tokens/s on average (5.8 at best) over 64 tokens on a cool phone.
-- **About 3.5 tokens/s sustained.** Over 10 minutes on battery, the phone's stock thermal management settles decode at about 3.5 tokens/s, at about 1.07 J per token.
+- **A model twice the phone's RAM runs.** Qwen3.6-35B-A3B (UD-Q4_K_M, 22.7 GB) and its 2.7-bit UD-IQ2_M build (11.9 GB) stream on a stock phone; with a 2 GiB expert cache the app peaks at about 4.6 GiB RSS. Routing is exact: streamed inference is bitwise identical to resident inference on the verification fixtures.
+- **Over 5 tokens/s in the app, on both builds, in short answers.** On a cool phone the app answers at 7.4 tokens/s with UD-IQ2_M and 5.1 tokens/s with UD-Q4_K_M (the owner's readings of the app's stats line, ~200-token answers). The engine alone reaches 8.2 tokens/s with UD-IQ2_M (128 tokens, 2 GiB cache), up from 5.45 at the start of the latest session.
+- **Sustained speed is not yet re-measured.** The last 10-minute run on battery, with an older build, settled at about 3.5 tokens/s (about 1.07 J per token) as the phone heated. The 5 tokens/s *sustained* target is therefore not demonstrated yet.
 - **Quality held on a first check.** On a 27-item, automatically checked set (Italian, instructions, reasoning, code, knowledge, long context), UD-IQ2_M and UD-Q4_K_M both score 26/27, and the 2.7-bit build is about 33% faster. The set is small, so UD-Q4_K_M stays the reference.
 - **Long context works.** Context is limited only by the model (262,144 tokens). A 7,857-token needle-in-a-haystack prompt is answered correctly, and a 3,803-token prompt prefills in 164 s, down from 522 s.
 - **Optimizations are exact.** Every speedup is either bitwise exact or differs only in float rounding (at most 3.4·10⁻⁷ relative), and is A/B-tested with identical output tokens. The 5 tokens/s *sustained* goal is an experimental target, not a promise; quality and context are never traded for speed.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/figures/decode-progress-dark.svg">
-  <img alt="Decode tokens per second for Qwen3.6-35B-A3B on the Galaxy across optimization steps, from 2.52 to 5.54" src="docs/figures/decode-progress-light.svg">
+  <img alt="Decode tokens per second for Qwen3.6-35B-A3B on the Galaxy across optimization steps, from 2.52 to 8.22" src="docs/figures/decode-progress-light.svg">
 </picture>
 
 | Prompt processing, UD-IQ2_M | Before | Now |
@@ -29,8 +29,9 @@ All numbers are measured on the Galaxy and recorded in [`results/`](results/).
 
 ## How it works
 
-- **Shared weights stay resident; experts stream.** About 1.7–2.4 GiB of attention and shared weights stay in RAM. Routed experts, 9–19 GB, are read with direct I/O into a bounded cache of reusable, page-aligned slots. GGML's expert matrix product finds each expert's slot through a hook added by Equity. Reloads take no page faults.
-- **Prediction and overlap.** A lookahead router prefetches the next layer's experts while the current layer computes. Prompt batches read adjacent experts in single coalesced reads and load whole layers ahead.
+- **Shared weights stay resident; experts stream.** About 1.4–1.9 GiB of attention and shared weights stay in RAM; the token embedding table is mapped from the file, since each token reads one row. Routed experts, 9–19 GB, are read with direct I/O into a bounded cache of reusable, page-aligned slots. GGML's expert matrix product finds each expert's slot through a hook added by Equity. Reloads take no page faults.
+- **Prediction and overlap.** A lookahead router, run on its own thread, prefetches the next layer's experts while the current layer computes. When an expert is still missing, the experts already in memory are computed first and each thread waits only for the part of the missing expert it reads. Prompt batches read adjacent experts in single coalesced reads and load whole layers ahead.
+- **All six big cores,** with the thread pool shrunk automatically when Android restricts a backgrounded app to the little cores.
 - **Kernels for this CPU.**
   - Decode and speculative verification use exact 2×2 dotprod tiles.
   - Prompts use GGML's tiled GEMM, enabled on ARM with Equity's own i8mm microkernel.
@@ -42,6 +43,10 @@ All numbers are measured on the Galaxy and recorded in [`results/`](results/).
   <source media="(prefers-color-scheme: dark)" srcset="docs/figures/models-dark.svg">
   <img alt="Model file size versus process peak RSS against the phone's RAM" src="docs/figures/models-light.svg">
 </picture>
+
+## The app
+
+Chats are saved on the phone, with photos, camera captures, text files and PDFs as attachments (image input uses the Qwen3.6 vision projector, an optional download). Answers render Markdown and LaTeX, and keep being written with Equity in the background, with a notification when they are done.
 
 ## Documents
 
@@ -72,7 +77,7 @@ Inference is offline. Acquiring weights is an explicit operation (`tools/acquire
 
 ## Acknowledgements
 
-Equity builds on [llama.cpp and GGML](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and contributors, pinned with two recorded patches. The streaming design was informed by [DwarfStar/ds4](https://github.com/antirez/ds4) by antirez and by published work on expert offloading. Model weights belong to their publishers under their own licenses. Development is AI-assisted; every claim is tied to a measurement record.
+Equity builds on [llama.cpp and GGML](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and contributors, pinned with two recorded patches. Streaming weights from flash is not new: the design was informed by [DwarfStar/ds4](https://github.com/antirez/ds4) by antirez and by published work such as Apple's *LLM in a Flash*, Mixtral offloading (Eliseev & Mazur), EdgeMoE and PowerInfer-2. Equity's part is an exact implementation of these ideas for one model family on a stock phone. Model weights belong to their publishers under their own licenses. Development is AI-assisted; every claim is tied to a measurement record.
 
 ## License & Commercial Licensing
 

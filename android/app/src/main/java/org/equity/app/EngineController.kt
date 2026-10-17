@@ -26,7 +26,8 @@ data class Settings(
     val systemPrompt: String = "You are Equity, a helpful assistant running privately on this phone. Answer in the user's language, clearly and concisely.",
     val maxTokens: Int = 512,
     val temperature: Float = 0f,
-    val threads: Int = 4,
+    // The six big cores (one X4, five A720) on the Exynos 2400: 26% faster decoding than four, measured.
+    val threads: Int = 6,
     val context: Int = 4096,
     /** 0 selects the expert-cache budget from available RAM at load time. */
     val expertCacheMiB: Int = 0,
@@ -95,8 +96,16 @@ object EngineController {
     // Images shown to the model per request: older images in a chat are described in text instead, so a long
     // conversation does not re-encode every photo on each turn.
     private const val MAX_CONTEXT_IMAGES = 4
-    // Vision encoder working memory on top of the projector weights while images are encoded.
-    private const val VISION_WORK_MIB = 512
+    // Vision encoder working memory on top of the projector weights while images are encoded (its compute buffer
+    // measured 35 MiB at 1024x1024 on the Galaxy).
+    private const val VISION_WORK_MIB = 128
+    // Free memory left to the rest of the phone once a streamed model is loaded. The admission sum below matched
+    // the measured peak RSS of a decode (3,088 MiB predicted 3,126 with a 512 MiB cache), so no further margin
+    // is needed; Android also reclaims cached apps and swaps before it would stop the foreground app.
+    private const val SYSTEM_RESERVE_MIB = 384
+    // Answer text reaches the screen at most this often: every update re-lays out the Markdown on the UI thread,
+    // which then takes a big core from the compute threads (about two thirds of a core at 60 ms, measured).
+    private const val UPDATE_INTERVAL_MS = 200L
 
     private fun update(change: (EngineState) -> EngineState) = flow.update(change)
 
@@ -233,9 +242,9 @@ object EngineController {
         // and the prompt-time prefetch allowance are never needed at the same time.
         val transientMiB = maxOf(prefillMiB, visionMiB)
         val cache = settings.expertCacheMiB.takeIf { it > 0 }
-            ?: (available - residentMiB - workMiB - transientMiB - 1024).coerceIn(512, 3072)
-        require(residentMiB + cache + transientMiB + workMiB + 512 <= available) {
-            "This model needs about ${residentMiB + cache + transientMiB + workMiB + 512} MiB of free memory and " +
+            ?: (available - residentMiB - workMiB - transientMiB - SYSTEM_RESERVE_MIB).coerceIn(512, 3072)
+        require(residentMiB + cache + transientMiB + workMiB + SYSTEM_RESERVE_MIB <= available) {
+            "This model needs about ${residentMiB + cache + transientMiB + workMiB + SYSTEM_RESERVE_MIB} MiB of free memory and " +
                 "$available MiB are available. Close some apps and try again."
         }
         // Measured defaults (docs/decisions.md D018, D020): coalesced expert reads, next-layer prefetch for prompts;
@@ -346,7 +355,7 @@ object EngineController {
                     output.write(chunk)
                     tokens++
                     val now = SystemClock.elapsedRealtime()
-                    if (now - lastUpdate >= 60) {
+                    if (now - lastUpdate >= UPDATE_INTERVAL_MS) {
                         lastUpdate = now
                         // Partial answers reach disk every few seconds, so a killed process loses little.
                         val save = now - lastSave >= 3000

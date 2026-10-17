@@ -1,0 +1,133 @@
+{
+ "scope": "Readings of the Equity app (debug build) on the Galaxy S24+, Qwen3.6-35B-A3B, greedy, thinking off, 6 threads, context 4096. Short natural-EOS answers, not sustained runs. Stats line and Settings > Diagnostics of the app.",
+ "observations": [
+  {
+   "when": "2026-10-17",
+   "source": "owner, app stats line",
+   "build": "D024 engine, admission margin 1024 MiB, UI animating",
+   "model": "UD-IQ2_M",
+   "prompt": "Di che colore è il cielo?",
+   "decode_tokens_per_second": 4.2,
+   "generated_tokens": 207,
+   "ttft_s": 3.8
+  },
+  {
+   "when": "2026-10-17",
+   "source": "Claude, app diagnostics (same answer as above)",
+   "build": "same",
+   "model": "UD-IQ2_M",
+   "decode_tokens_per_second": 4.24,
+   "expert_cache_mib": 508,
+   "expert_cache_hit_rate": 0.77,
+   "peak_rss_mib": 3299,
+   "images": "off: not enough free memory"
+  },
+  {
+   "when": "2026-10-17",
+   "source": "Claude, app diagnostics",
+   "build": "admission margin 384 MiB, no animation while answering, 200 ms updates",
+   "model": "UD-IQ2_M",
+   "prompt": "Explain how a mixture-of-experts model works, simply.",
+   "thermal_status_before": 1,
+   "decode_tokens_per_second": 6.87,
+   "expert_cache_mib": 2038,
+   "expert_cache_hit_rate": 0.88,
+   "peak_rss_mib": 4684,
+   "images": "on",
+   "ui_thread_cpu_share": {
+    "before": "46.6% main + 20.0% RenderThread",
+    "after": "6.4% main"
+   }
+  },
+  {
+   "when": "2026-10-17",
+   "source": "owner, app stats line, cool phone, no other apps",
+   "build": "same as above",
+   "model": "UD-IQ2_M",
+   "decode_tokens_per_second": 7.39
+  },
+  {
+   "when": "2026-10-17",
+   "source": "owner, app stats line, right after the previous answer, same question",
+   "build": "same as above",
+   "model": "UD-Q4_K_M",
+   "decode_tokens_per_second": 5.1
+  },
+  {
+   "when": "2026-10-17",
+   "source": "owner run; exported from Settings > Diagnostics (results/2026-10-17/app-run-2048-tokens.json)",
+   "build": "admission margin 384 MiB, no animation while answering, 200 ms updates",
+   "model": "UD-IQ2_M",
+   "prompt": "Scrivimi un testo su Harry Potter di 2000 parole",
+   "decode_tokens_per_second": 6.4,
+   "generated_tokens": 2048,
+   "termination": "length",
+   "ttft_s": 3.1,
+   "note": "320 s of continuous decoding; thermal status 0 -> 4 (severe); speed flat at 5.8-6.0 tokens/s over the last 100 s; energy not measured",
+   "power": "PC USB port",
+   "thermal_status_before": 0,
+   "thermal_status_after": 4,
+   "expert_cache_mib": 2400,
+   "expert_cache_hit_rate": 0.917,
+   "peak_rss_mib": 5271,
+   "speed_by_30_s": [
+    {
+     "from_s": 0,
+     "to_s": 30,
+     "tokens_per_second": 7.72
+    },
+    {
+     "from_s": 30,
+     "to_s": 60,
+     "tokens_per_second": 7.11
+    },
+    {
+     "from_s": 60,
+     "to_s": 90,
+     "tokens_per_second": 6.72
+    },
+    {
+     "from_s": 90,
+     "to_s": 120,
+     "tokens_per_second": 6.26
+    },
+    {
+     "from_s": 120,
+     "to_s": 150,
+     "tokens_per_second": 6.31
+    },
+    {
+     "from_s": 150,
+     "to_s": 180,
+     "tokens_per_second": 6.36
+    },
+    {
+     "from_s": 180,
+     "to_s": 210,
+     "tokens_per_second": 6.18
+    },
+    {
+     "from_s": 210,
+     "to_s": 241,
+     "tokens_per_second": 5.86
+    },
+    {
+     "from_s": 241,
+     "to_s": 271,
+     "tokens_per_second": 6.01
+    },
+    {
+     "from_s": 271,
+     "to_s": 301,
+     "tokens_per_second": 5.94
+    },
+    {
+     "from_s": 301,
+     "to_s": 320,
+     "tokens_per_second": 5.8
+    }
+   ]
+  }
+ ],
+ "not_measured": "a 10-minute run on battery with energy per token for this build; the last such record is results/2026-10-08/galaxy/sustained-ud-iq2m-slots-battery.json (3.70 tokens/s mean over 649 s, older build)"
+}

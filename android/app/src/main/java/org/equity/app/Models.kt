@@ -60,7 +60,10 @@ data class CatalogModel(
     val license: String,
     /** Routed experts stream from storage; only shared weights stay resident. */
     val streamed: Boolean,
-    /** Approximate resident weight footprint in MiB, used for RAM admission. */
+    /**
+     * Approximate resident weight footprint in MiB, used for RAM admission. For streamed models it excludes the
+     * routed experts and the token embedding table, which the engine maps from the file.
+     */
     val residentMiB: Int,
     /** KV cache plus recurrent state per 1024 context tokens, in MiB (F16 cache). */
     val contextMiBPer1k: Int,
@@ -99,7 +102,7 @@ object Catalog {
             repository = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF", revision = "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
             file = "Qwen3.6-35B-A3B-UD-IQ2_M.gguf", sizeBytes = 11_882_969_376L,
             sha256 = "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
-            license = "Apache-2.0", streamed = true, residentMiB = 1760, contextMiBPer1k = 40,
+            license = "Apache-2.0", streamed = true, residentMiB = 1430, contextMiBPer1k = 40,
             projector = qwen36Projector,
         ),
         CatalogModel(
@@ -111,7 +114,7 @@ object Catalog {
             repository = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF", revision = "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
             file = "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", sizeBytes = 22_663_387_424L,
             sha256 = "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
-            license = "Apache-2.0", streamed = true, residentMiB = 2448, contextMiBPer1k = 40,
+            license = "Apache-2.0", streamed = true, residentMiB = 1935, contextMiBPer1k = 40,
             projector = qwen36Projector,
         ),
     )

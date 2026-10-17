@@ -217,6 +217,9 @@ struct TensorLoader {
         }
         const uint64_t offset = gguf_get_data_offset(meta) + gguf_get_tensor_offset(meta, id);
         const size_t size = ggml_nbytes(tensor);
+        if (store->maps(tensor)) {
+            return; // file-backed, loaded on use
+        }
         if (store->owns(tensor)) {
             store->add_bank(tensor, offset);
             return;
@@ -466,10 +469,17 @@ std::string render_chat(const std::string &source, const Json &messages, bool th
     return jinja::render_string_parts(runtime.gather_string_parts(runtime.execute(program)));
 }
 
+// A graph stops when the user cancels or when a compute thread found a failed expert read.
+struct AbortSource {
+    const std::atomic_bool *cancelled = nullptr;
+    const ExpertStore *store = nullptr;
+};
+
 struct Engine::State {
     // Members are destroyed in reverse order: context and model release expert buffers before the store
     // joins its I/O workers and frees the buffer type those buffers reference.
     std::unique_ptr<ExpertStore> store;
+    AbortSource abort;
     std::unique_ptr<gguf_context, decltype(&gguf_free)> meta{nullptr, gguf_free};
     std::unique_ptr<ggml_context, decltype(&ggml_free)> shapes{nullptr, ggml_free};
     std::unique_ptr<llama_model, decltype(&llama_model_free)> model{nullptr, llama_model_free};
@@ -511,6 +521,10 @@ struct Engine::State {
         }
         const int allowed = allowed_cpus();
         const int wanted = allowed > 0 ? std::min(threads, allowed) : threads;
+        // Awake I/O threads need CPUs of their own next to the compute threads.
+        if (store) {
+            store->set_awake_allowed(allowed <= 0 || allowed >= threads + 2);
+        }
         if (wanted == pool_threads) {
             return;
         }
@@ -605,6 +619,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     uint64_t resident_bytes = size;
     ExpertOptions expert_options;
     std::unordered_map<std::string, uint64_t> routed_offsets;
+    uint64_t mapped_bytes = 0; // file-backed tensors, never resident as a whole
     if (streaming) {
         ggml_context *shapes = nullptr;
         state->meta.reset(gguf_init_from_file(path.c_str(), {/*no_alloc =*/true, /*ctx =*/&shapes}));
@@ -619,6 +634,9 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
             if (std::regex_search(name, routed)) {
                 routed_bytes += gguf_get_tensor_size(state->meta.get(), i);
                 routed_offsets[name] = gguf_get_data_offset(state->meta.get()) + gguf_get_tensor_offset(state->meta.get(), i);
+            } else if (std::strcmp(name, "token_embd.weight") == 0 && options.value("map_embeddings", true)) {
+                routed_offsets[name] = gguf_get_data_offset(state->meta.get()) + gguf_get_tensor_offset(state->meta.get(), i);
+                mapped_bytes = gguf_get_tensor_size(state->meta.get(), i);
             }
         }
         if (!routed_bytes) {
@@ -627,6 +645,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         expert_options.budget_bytes =
             static_cast<uint64_t>(integer(options, "expert_cache_mib", 1024, 1, 16384)) << 20;
         expert_options.io_threads = integer(options, "io_threads", 4, 1, 16);
+        expert_options.demand_threads = integer(options, "demand_io_threads", 4, 0, 15);
+        expert_options.awake_demand_threads = integer(options, "awake_demand_io_threads", 0, 0, 4);
         expert_options.direct_io = options.value("direct_io", false);
         expert_options.prefetch = options.value("prefetch", false);
         expert_options.prefetch_extra = integer(options, "prefetch_extra", 0, 0, 32);
@@ -634,11 +654,12 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         expert_options.coalesce_gap = integer(options, "coalesce_gap", 1, 0, 8);
         expert_options.prefill_prefetch_mib = integer(options, "prefill_prefetch_mib", 0, 0, 4096);
         expert_options.slots = options.value("expert_slots", true);
+        expert_options.overlap_reads = options.value("overlap_reads", true);
         expert_options.trace_path = options.value("expert_trace", std::string());
         if (options.contains("expert_layer_weights")) {
             expert_options.layer_weights = options.at("expert_layer_weights").get<std::vector<double>>();
         }
-        resident_bytes = size - routed_bytes + expert_options.budget_bytes +
+        resident_bytes = size - routed_bytes - mapped_bytes + expert_options.budget_bytes +
                          (static_cast<uint64_t>(expert_options.prefill_prefetch_mib) << 20);
     } else if (options.contains("expert_cache_mib") || options.value("prefetch", false)) {
         throw std::invalid_argument("Expert cache options require expert_streaming=true");
@@ -700,7 +721,9 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         state->store = std::make_unique<ExpertStore>(path, expert_options, cancelled_);
         state->store->set_source_offsets(std::move(routed_offsets));
         const llama_model_tensor_buft_override overrides[] = {
-            {routed_bank_pattern, state->store->buffer_type()}, {nullptr, nullptr}};
+            {routed_bank_pattern, state->store->buffer_type()},
+            {mapped_bytes ? "^token_embd\\.weight$" : nullptr, state->store->mapped_buffer_type()},
+            {nullptr, nullptr}};
         // Metadata mode: no file mapping and no MAP_POPULATE of the 20+ GB artifact.
         model_params.load_mode = LLAMA_LOAD_MODE_NONE;
         model_params.tensor_buft_overrides = overrides;
@@ -748,8 +771,12 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     params.offload_kqv = false;
     params.op_offload = false;
     params.no_perf = false;
-    params.abort_callback = [](void *opaque) { return static_cast<std::atomic_bool *>(opaque)->load(); };
-    params.abort_callback_data = &cancelled_;
+    state->abort = {&cancelled_, state->store.get()};
+    params.abort_callback = [](void *opaque) {
+        const auto *abort = static_cast<const AbortSource *>(opaque);
+        return abort->cancelled->load() || (abort->store && abort->store->aborted());
+    };
+    params.abort_callback_data = &state->abort;
     if (mtp) {
         if (llama_model_n_layer_nextn(state->model.get()) <= 0) {
             throw std::runtime_error("Model has no MTP (nextn) layer; use an artifact that includes it");
@@ -851,6 +878,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                    {"memory_budget_mib", budget},
                    {"memory_budget_kind", "admission_only"},
                    {"mmap", options.value("mmap", true)},
+                   {"mapped_tensor_bytes", mapped_bytes},
                    {"expert_cache_bytes",
                     state->store ? state->store->configuration()["effective_budget_bytes"] : Json(nullptr)},
                    {"expert_streaming", state->store ? state->store->configuration() : Json(nullptr)},
