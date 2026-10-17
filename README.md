@@ -48,6 +48,8 @@ All numbers are measured on the Galaxy and recorded in [`results/`](results/).
 
 Chats are saved on the phone, with photos, camera captures, text files and PDFs as attachments (image input uses the Qwen3.6 vision projector, an optional download). Answers render Markdown and LaTeX, and keep being written with Equity in the background, with a notification when they are done.
 
+An optional GPU mode (Settings › Processor › CPU + GPU) reads long prompts, chat history and images on the phone's GPU through GGML's Vulkan backend, while answers are still written by the CPU: on the Galaxy a 929-token prompt takes 14.6 s instead of 24.5, and the first word after a photo arrives after 24 s instead of 69 ([D025](docs/decisions.md)). Decoding on this GPU was measured and is not faster: it shares the CPU's memory bus.
+
 ## Documents
 
 | | |

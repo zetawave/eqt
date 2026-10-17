@@ -34,6 +34,14 @@
 
 **Features requested and not started:** additional per-chat configuration.
 
+## GPU session: 2026-10-17 — GPU mode for prompts and images (D025)
+
+- Settings › Performance › Processor: "CPU + GPU" reads prompts, chat history and images on the Xclipse 940 through GGML's Vulkan backend (`libggml-vulkan.so`, built when Visual Studio's C++ environment is present; `scripts/android-app.ps1` sets it up). Answers are still written by the CPU path, unchanged.
+- UD-IQ2_M on the Galaxy: 929-token prompt 24.5 → 14.6 s; first token after one image 69.2 → 23.9 s; short prompts unchanged. Record: `results/2026-10-17/galaxy/gpu-mode.json`.
+- Decoding on the GPU was measured and rejected: shared memory bus, slower GEMV shaders, per-layer round trips (D025).
+- Not verified: the in-app GPU mode beyond loading and a smoke test, UD-Q4_K_M in GPU mode, a quality evaluation of GPU-read prompts, sustained runs.
+- Every chat turn still re-reads the whole conversation (no prefix or recurrent-state reuse across turns): the next large prompt-time saving for both modes.
+
 ## Decode session: 2026-10-16 — 5.45 → 8.22 tokens/s on UD-IQ2_M (D024)
 
 - Per-op profile of a token, kernel roofline, and four exact changes: six threads, overlapped expert reads (patch 0002 ready-first MUL_MAT_ID hook), lookahead on a predictor thread, file-mapped token embedding (−332/−515 MiB RSS), reserved demand I/O threads. Tokens identical in every Galaxy run; host streaming 29/29 bitwise; text requests bitwise equal to `main`.

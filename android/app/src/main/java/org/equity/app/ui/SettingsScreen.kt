@@ -107,6 +107,13 @@ fun SettingsScreen(engine: EngineState) {
         }
 
         Section("Performance", "Applies the next time a model is loaded.") {
+            Text("Processor", style = MaterialTheme.typography.labelLarge)
+            Choice(listOf(false, true), settings.gpu, { if (it) "CPU + GPU" else "CPU" }) { value ->
+                SettingsStore.update(context) { it.copy(gpu = value) }
+            }
+            Text("CPU + GPU reads long prompts, chat history and images faster on the GPU and uses a little more memory. " +
+                "Answers are written by the CPU either way.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("CPU threads", style = MaterialTheme.typography.labelLarge)
             Choice(listOf(2, 4, 6), settings.threads, { "$it" }) { value -> SettingsStore.update(context) { it.copy(threads = value) } }
             Text("Context window", style = MaterialTheme.typography.labelLarge)

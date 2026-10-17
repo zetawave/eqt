@@ -12,6 +12,10 @@ val signing = Properties().apply {
     rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
+// GPU mode build (see externalNativeBuild below): scripts/android-app.ps1 sets this when Visual Studio's C++
+// environment is available on Windows; other hosts have a native C++ compiler.
+val vulkan = providers.gradleProperty("equity.vulkan").orNull == "true" || !System.getProperty("os.name").startsWith("Windows")
+
 android {
     namespace = "org.equity.app"
     compileSdk = 36
@@ -29,6 +33,13 @@ android {
             targets += "eqt_jni"
             // GGML CPU backends are dlopen'ed modules, not link dependencies; list them so they are packaged.
             targets += listOf("8.0_1", "8.2_1", "8.2_2", "8.6_1", "9.0_1", "9.2_1", "9.2_2").map { "ggml-cpu-android_armv$it" }
+            // GPU mode: GGML's Vulkan backend, also a dlopen'ed module. Its shader generator is built for the host,
+            // which on Windows needs Visual Studio's C++ environment (scripts/android-app.ps1 sets it up); without
+            // one the app builds without the GPU mode and says so when it is selected.
+            if (vulkan) {
+                arguments += "-DEQT_VULKAN=ON"
+                targets += "ggml-vulkan"
+            }
         } }
     }
     signingConfigs {

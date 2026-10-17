@@ -31,6 +31,8 @@ data class Settings(
     val context: Int = 4096,
     /** 0 selects the expert-cache budget from available RAM at load time. */
     val expertCacheMiB: Int = 0,
+    /** Prompts and images are read on the GPU (Vulkan); answers are still generated on the CPU. */
+    val gpu: Boolean = false,
 )
 
 object SettingsStore {
@@ -47,6 +49,7 @@ object SettingsStore {
             threads = p.getInt("threads", d.threads),
             context = p.getInt("context", d.context),
             expertCacheMiB = p.getInt("expert_cache", d.expertCacheMiB),
+            gpu = p.getBoolean("gpu", d.gpu),
         )
     }
 
@@ -56,7 +59,8 @@ object SettingsStore {
         context.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
             .putString("system", next.systemPrompt).putInt("max_tokens", next.maxTokens)
             .putFloat("temperature", next.temperature).putInt("threads", next.threads)
-            .putInt("context", next.context).putInt("expert_cache", next.expertCacheMiB).apply()
+            .putInt("context", next.context).putInt("expert_cache", next.expertCacheMiB)
+            .putBoolean("gpu", next.gpu).apply()
     }
 }
 
@@ -103,6 +107,10 @@ object EngineController {
     // the measured peak RSS of a decode (3,088 MiB predicted 3,126 with a 512 MiB cache), so no further margin
     // is needed; Android also reclaims cached apps and swaps before it would stop the foreground app.
     private const val SYSTEM_RESERVE_MIB = 384
+    // GPU mode on the Galaxy (929-token prompt, batch 2048): compute buffers 140 MiB above batch 512, and up to
+    // 310 MiB of GPU staging while a prompt is read, released before the answer is written. Measured peak RSS.
+    private const val GPU_WORK_MIB = 192
+    private const val GPU_STAGING_MIB = 384
     // Answer text reaches the screen at most this often: every update re-lays out the Markdown on the UI thread,
     // which then takes a big core from the compute threads (about two thirds of a core at 60 ms, measured).
     private const val UPDATE_INTERVAL_MS = 200L
@@ -225,22 +233,28 @@ object EngineController {
         val available = availableMiB(context)
         // Context state and compute buffers are allocated at load; admitting without them invites the low-memory killer.
         // Prompt batches of 512 tokens take the tiled GEMM path and need larger compute buffers.
-        val workMiB = contextMiBPer1k * settings.context / 1024 + 512
-        val options = JSONObject().put("context", settings.context).put("batch", 512).put("threads", settings.threads)
+        // GPU mode reads prompts in batches of 2048 tokens (fewer passes over the streamed experts, fuller GPU
+        // tiles): larger compute buffers, plus staging for one GPU operation that is released after each prompt.
+        val gpuWorkMiB = if (settings.gpu) GPU_WORK_MIB else 0
+        val gpuStagingMiB = if (settings.gpu) GPU_STAGING_MIB else 0
+        val workMiB = contextMiBPer1k * settings.context / 1024 + 512 + gpuWorkMiB
+        val options = JSONObject().put("context", settings.context).put("batch", if (settings.gpu) 2048 else 512)
+            .put("threads", settings.threads)
+        if (settings.gpu) options.put("gpu", true)
         if (!streamed) {
             val fileMiB = (fileBytes shr 20).toInt()
-            require(fileMiB + workMiB + 512 + visionMiB <= available) {
-                "This model needs about ${fileMiB + workMiB + 512 + visionMiB} MiB of free memory and $available MiB are available. " +
+            require(fileMiB + workMiB + 512 + maxOf(visionMiB, gpuStagingMiB) <= available) {
+                "This model needs about ${fileMiB + workMiB + 512 + maxOf(visionMiB, gpuStagingMiB)} MiB of free memory and $available MiB are available. " +
                     "Close some apps or choose a smaller context in Settings."
             }
-            return options.put("mmap", true).put("memory_budget_mib", maxOf(2048, fileMiB + 1024))
+            return options.put("mmap", true).put("memory_budget_mib", maxOf(2048, fileMiB + 1024) + gpuWorkMiB + gpuStagingMiB)
         }
         // Expert cache from free RAM after shared weights, compute buffers, the transient next-layer allowance used
         // while reading prompts, and system headroom.
         val prefillMiB = 512
         // Images are encoded before the prompt is read and the projector is released before it, so image memory
         // and the prompt-time prefetch allowance are never needed at the same time.
-        val transientMiB = maxOf(prefillMiB, visionMiB)
+        val transientMiB = maxOf(prefillMiB + gpuStagingMiB, visionMiB)
         val cache = settings.expertCacheMiB.takeIf { it > 0 }
             ?: (available - residentMiB - workMiB - transientMiB - SYSTEM_RESERVE_MIB).coerceIn(512, 3072)
         require(residentMiB + cache + transientMiB + workMiB + SYSTEM_RESERVE_MIB <= available) {
@@ -252,7 +266,7 @@ object EngineController {
         return options.put("mmap", false).put("expert_streaming", true).put("expert_cache_mib", cache)
             .put("io_threads", 16).put("direct_io", true).put("prefetch", true)
             .put("coalesce_kib", 2048).put("coalesce_gap", 1).put("prefill_prefetch_mib", prefillMiB)
-            .put("memory_budget_mib", residentMiB + cache + prefillMiB + 1536)
+            .put("memory_budget_mib", residentMiB + cache + prefillMiB + 1536 + gpuWorkMiB + gpuStagingMiB)
     }
 
     private fun loadNative(path: String, options: JSONObject, hash: String?, note: String?) {
@@ -261,12 +275,21 @@ object EngineController {
             val percent = bytes.decodeToString().toIntOrNull()
             update { it.copy(loadPercent = percent, status = "Loading ${percent ?: 0}%") }
         }
+        var gpuNote: String? = null
         val info = try {
             JSONObject(NativeBridge.load(path.toByteArray(), options.toString().toByteArray(), progress).decodeToString())
         } catch (error: IllegalStateException) {
-            // Storage without O_DIRECT support falls back to buffered reads, and says so.
-            if (!options.optBoolean("direct_io") || error.message?.contains("O_DIRECT") != true) throw error
-            options.put("direct_io", false)
+            when {
+                // Storage without O_DIRECT support falls back to buffered reads, and says so.
+                options.optBoolean("direct_io") && error.message?.contains("O_DIRECT") == true -> options.put("direct_io", false)
+                // A phone without a usable Vulkan GPU, or a build without the GPU backend, runs on the CPU.
+                options.optBoolean("gpu") && error.message?.let { "GPU" in it || "Vulkan" in it } == true -> {
+                    options.remove("gpu")
+                    options.put("batch", 512)
+                    gpuNote = "GPU unavailable"
+                }
+                else -> throw error
+            }
             JSONObject(NativeBridge.load(path.toByteArray(), options.toString().toByteArray(), progress).decodeToString())
         }
         modelHash = hash
@@ -274,6 +297,7 @@ object EngineController {
         val streaming = info.optJSONObject("expert_streaming")
         val configuration = buildString {
             append("CPU ").append(info.optString("cpu_variant").removePrefix("android_"))
+            info.optJSONObject("gpu")?.let { append(" + GPU ").append(it.optString("device")) }
             append(" · ${info.getInt("threads")} threads · ${info.getInt("context")} context")
             if (streaming != null) {
                 append(" · ${streaming.getLong("effective_budget_bytes") shr 20} MiB expert cache")
@@ -281,6 +305,7 @@ object EngineController {
             }
             if (vision) append(" · images")
             note?.let { append(" · ").append(it) }
+            gpuNote?.let { append(" · ").append(it) }
         }
         update {
             it.copy(phase = Phase.Ready, loadPercent = null, lastResult = null, lastSpeed = null,

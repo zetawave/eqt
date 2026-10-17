@@ -1,8 +1,8 @@
 diff --git a/ggml/include/ggml-cpu.h b/ggml/include/ggml-cpu.h
-index dc6453c..04bd0cb 100644
+index dc6453c..3591ce8 100644
 --- a/ggml/include/ggml-cpu.h
 +++ b/ggml/include/ggml-cpu.h
-@@ -138,6 +138,17 @@ extern "C" {
+@@ -138,6 +138,23 @@ extern "C" {
  
      GGML_BACKEND_API void ggml_backend_cpu_set_use_ref(ggml_backend_t backend_cpu, bool use_ref);
  
@@ -16,6 +16,12 @@ index dc6453c..04bd0cb 100644
 +    // Each expert writes its own output rows, so the order does not change results. Same threading rules.
 +    typedef bool (*ggml_cpu_expert_ready_t)(const struct ggml_tensor * weights, int64_t expert, void * user);
 +    GGML_BACKEND_API void ggml_cpu_set_expert_ready(ggml_cpu_expert_ready_t fn, void * user);
++    // Lets the host compute selected nodes elsewhere, e.g. on a GPU. Every compute thread calls the hook for each
++    // node; returning true skips the CPU kernels, and dst must hold the result by the time the hook returns on
++    // thread 0 (the node's barrier then publishes it). The decision must depend on the node only, so that all
++    // threads of a node agree. One per process; it must not change while a graph computes.
++    typedef bool (*ggml_cpu_external_compute_t)(struct ggml_tensor * dst, int ith, int nth, void * user);
++    GGML_BACKEND_API void ggml_cpu_set_external_compute(ggml_cpu_external_compute_t fn, void * user);
 +
      GGML_BACKEND_API ggml_backend_reg_t ggml_backend_cpu_reg(void);
  
@@ -293,7 +299,7 @@ index 5dd9ec8..fc88ab0 100644
  #if defined(_MSC_VER)
  
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
-index 7c274c0..4cffcac 100644
+index 7c274c0..e47f83b 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.c
 +++ b/ggml/src/ggml-cpu/ggml-cpu.c
 @@ -322,7 +322,11 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
@@ -392,7 +398,7 @@ index 7c274c0..4cffcac 100644
  
          if (nth >= nchunk0 * nchunk1) {
              break;
-@@ -1503,44 +1523,96 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
+@@ -1503,44 +1523,104 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
      ggml_vec_dot_t    const vec_dot      = type_traits_cpu[type].vec_dot;
      enum ggml_type    const vec_dot_type = type_traits_cpu[type].vec_dot_type;
  
@@ -501,6 +507,14 @@ index 7c274c0..4cffcac 100644
  
 -                memcpy(&dst_col[iir0], tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
 -            }
++static ggml_cpu_external_compute_t external_compute_fn   = NULL;
++static void *                      external_compute_user = NULL;
++
++void ggml_cpu_set_external_compute(ggml_cpu_external_compute_t fn, void * user) {
++    external_compute_fn   = fn;
++    external_compute_user = user;
++}
++
 +const char * ggml_cpu_expert_data(const struct ggml_tensor * weights, int64_t expert) {
 +    if (expert_address_fn) {
 +        const void * data = expert_address_fn(weights, expert, expert_address_user);
@@ -512,7 +526,7 @@ index 7c274c0..4cffcac 100644
  }
  
  static void * incr_ptr_aligned(void ** p, size_t size, size_t align) {
-@@ -1600,6 +1672,9 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1600,6 +1680,9 @@ static void ggml_compute_forward_mul_mat_id(
      char (*atomic_current_chunk)[CACHE_LINE_SIZE] = // [n_as]
          incr_ptr_aligned(&wdata_cur, CACHE_LINE_SIZE * n_as, CACHE_LINE_SIZE);
  
@@ -522,7 +536,7 @@ index 7c274c0..4cffcac 100644
      // Tiled matmul (see tiled.h); per-thread work buffers, 0 bytes when disabled. The
      // reservation is unconditional, the per expert eligibility is decided at dispatch time
      char * tiled_scratch = incr_ptr_aligned(&wdata_cur, ggml_tiled_wdata_size(nth, dst), 64);
-@@ -1658,6 +1733,30 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1658,6 +1741,30 @@ static void ggml_compute_forward_mul_mat_id(
                  matrix_row_counts[i02] += 1;
              }
          }
@@ -553,7 +567,7 @@ index 7c274c0..4cffcac 100644
      }
  
      // reset current_chunk
-@@ -1668,19 +1767,16 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1668,19 +1775,16 @@ static void ggml_compute_forward_mul_mat_id(
  
      ggml_barrier(params->threadpool);
  
@@ -576,7 +590,18 @@ index 7c274c0..4cffcac 100644
          const void * wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;
          const size_t row_size = ggml_row_size(vec_dot_type, ne10);
  
-@@ -2908,6 +3004,8 @@ struct ggml_cplan ggml_graph_plan(
+@@ -1744,6 +1848,10 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
+         return;
+     }
+ 
++    if (external_compute_fn && external_compute_fn(tensor, params->ith, params->nth, external_compute_user)) {
++        return;
++    }
++
+     // extra_buffer op?
+     if (ggml_cpu_extra_compute_forward(params, tensor)) {
+         return;
+@@ -2908,6 +3016,8 @@ struct ggml_cplan ggml_graph_plan(
                          cur += n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping) + sizeof(int64_t);
                          // atomic_current_chunk
                          cur += CACHE_LINE_SIZE*n_as + CACHE_LINE_SIZE;
@@ -586,10 +611,10 @@ index 7c274c0..4cffcac 100644
                          cur = GGML_PAD(cur, 64);
                          cur += ggml_tiled_wdata_size(n_tasks, node);
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
-index 81ff5d7..623fd5f 100644
+index 81ff5d7..6b053f6 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.cpp
 +++ b/ggml/src/ggml-cpu/ggml-cpu.cpp
-@@ -690,6 +690,12 @@ static void * ggml_backend_cpu_get_proc_address(ggml_backend_reg_t reg, const ch
+@@ -690,6 +690,15 @@ static void * ggml_backend_cpu_get_proc_address(ggml_backend_reg_t reg, const ch
      if (strcmp(name, "ggml_backend_cpu_set_threadpool") == 0) {
          return (void *)ggml_backend_cpu_set_threadpool;
      }
@@ -598,6 +623,9 @@ index 81ff5d7..623fd5f 100644
 +    }
 +    if (strcmp(name, "ggml_cpu_set_expert_ready") == 0) {
 +        return (void *)ggml_cpu_set_expert_ready;
++    }
++    if (strcmp(name, "ggml_cpu_set_external_compute") == 0) {
++        return (void *)ggml_cpu_set_external_compute;
 +    }
  
      return NULL;

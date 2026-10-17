@@ -11,6 +11,22 @@ $root = Split-Path $PSScriptRoot -Parent
 $android = Join-Path $root 'android'
 & "$PSScriptRoot/bootstrap.ps1"
 
+# GPU mode: GGML's Vulkan shader generator is compiled for this PC with Visual Studio's C++ tools.
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+if (!$env:VCToolsInstallDir -and (Test-Path $vswhere)) {
+    $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if ($vs) {
+        cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') { Set-Item "env:$($Matches[1])" $Matches[2] }
+        }
+    }
+}
+# A running Gradle daemon keeps the environment it started with, so GPU builds use a fresh one.
+$gradleFlags = if ($env:VCToolsInstallDir) { @('--no-daemon', '-Pequity.vulkan=true') } else {
+    Write-Warning 'Visual Studio C++ tools not found: building without the GPU mode.'
+    @()
+}
+
 if ($Variant -eq 'Release') {
     $properties = Join-Path $android 'keystore.properties'
     if (!(Test-Path $properties)) {
@@ -27,7 +43,7 @@ if ($Variant -eq 'Release') {
     }
 }
 
-& "$android/gradlew.bat" -p $android "assemble$Variant"
+& "$android/gradlew.bat" -p $android @gradleFlags "assemble$Variant"
 if ($LASTEXITCODE) { throw "Gradle assemble$Variant failed" }
 $apk = Join-Path $android "app/build/outputs/apk/$($Variant.ToLowerInvariant())/app-$($Variant.ToLowerInvariant()).apk"
 Write-Output "APK: $apk"

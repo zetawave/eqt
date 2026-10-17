@@ -1,4 +1,6 @@
 /third_party/llama.cpp/
+/third_party/vulkan-headers/
+/third_party/spirv-headers/
 /build/
 /models/
 /.cache/

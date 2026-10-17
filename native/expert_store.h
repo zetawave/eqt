@@ -90,6 +90,11 @@ class ExpertStore {
     std::string error() const;
     // True after a failed read was observed by a compute thread; the engine's abort callback stops the graph.
     bool aborted() const { return aborted_.load(); }
+    // Address of resident expert `expert` of a streamed bank, waiting for its read if needed; nullptr when the
+    // tensor is not a streamed bank. For copying experts elsewhere (GPU staging) from inside a graph compute.
+    const void *expert_data(const ggml_tensor *bank, int64_t expert) const {
+        return expert_address(bank, expert, const_cast<ExpertStore *>(this));
+    }
 
   private:
     enum class State : uint8_t { absent, loading, resident };

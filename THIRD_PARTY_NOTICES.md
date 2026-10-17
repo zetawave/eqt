@@ -4,8 +4,10 @@ Equity's original source is licensed under the GNU AGPLv3 (`LICENSE`), with a co
 
 | Component | Revision / version | Terms and retained notices |
 |---|---|---|
-| llama.cpp, GGML and the selected upstream Jinja/JSON support sources | `6c59c40076c00eab49754dc955d7652d93f9e125` plus `patches/llama.cpp/0001-*.patch` | MIT, `licenses/llama.cpp-MIT.txt`; original source notices remain intact in the checkout. The recorded patch is a modification under the same license. |
+| llama.cpp, GGML and the selected upstream Jinja/JSON support sources | `6c59c40076c00eab49754dc955d7652d93f9e125` plus `patches/llama.cpp/*.patch` | MIT, `licenses/llama.cpp-MIT.txt`; original source notices remain intact in the checkout. The recorded patch is a modification under the same license. |
 | nlohmann JSON, vendored by the pinned llama.cpp checkout | Version in that checkout | MIT, `licenses/nlohmann-json-MIT.txt`. |
+| Vulkan-Headers (C++ Vulkan headers compiled into GGML's Vulkan backend, the GPU mode) | `vulkan-sdk-1.4.363.0`, `6802bb4733b63ed5efd3adb308a6c885ef180ea1` | Apache-2.0 OR MIT, used under MIT, `licenses/Vulkan-Headers-MIT.txt`. |
+| SPIRV-Headers (compiled into GGML's Vulkan backend) | `vulkan-sdk-1.4.363.0`, `496543121ce6419f23d6fa5d7194ba66c36212d2` | MIT-style Khronos license, `licenses/SPIRV-Headers-MIT.txt`. |
 | Libraries vendored by llama.cpp and linked into its `mtmd` image-input library | Versions in that checkout | xxHash: BSD 2-Clause, `licenses/xxHash-BSD-2-Clause.txt`. rotate-bits: MIT, `licenses/rotate-bits-MIT.txt`. stb_image, miniaudio, SHA-1 and SHA-256: public domain (miniaudio alternatively MIT-0); their source notices remain in the checkout. |
 | Inter typeface (variable) | google/fonts `ofl/inter` | SIL Open Font License 1.1, `licenses/Inter-OFL.txt`; bundled in the APK. |
 | AndroidX (Compose BOM 2025.04.01, Activity, Lifecycle, WorkManager 2.10.0) | Versions in `android/app/build.gradle.kts` | Apache 2.0; notices retained in the dependency artifacts. |

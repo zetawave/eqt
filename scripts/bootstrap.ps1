@@ -41,3 +41,20 @@ $mismatch = @($expected.Keys + $actual_diff.Keys | Sort-Object -Unique | Where-O
 if ($mismatch) { throw "Dependency differs from revision + recorded patches ($($mismatch -join '; ')); record or revert changes explicitly." }
 if (git -C $dest ls-files --others --exclude-standard) { throw 'Dependency has untracked files.' }
 Write-Output "llama.cpp $actual + $($patches.Count) patch(es)"
+
+# Header-only dependencies of the GPU mode (GGML's Vulkan backend), at pinned revisions.
+foreach ($name in 'vulkan_headers', 'spirv_headers') {
+    $pin = $lock.$name
+    $path = Join-Path $root $pin.path
+    if (!(Test-Path "$path/.git")) {
+        git init $path
+        if ($LASTEXITCODE) { throw 'git init failed' }
+        git -C $path remote add origin $pin.url
+        git -C $path fetch --depth 1 origin $pin.revision
+        if ($LASTEXITCODE) { throw "Dependency fetch failed: $name" }
+        git -C $path checkout --detach FETCH_HEAD
+    }
+    if ((git -C $path rev-parse HEAD) -ne $pin.revision) { throw "Dependency revision mismatch: $name" }
+    if (git -C $path status --porcelain) { throw "Dependency has local changes: $name" }
+    Write-Output "$name $($pin.revision)"
+}

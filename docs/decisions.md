@@ -309,3 +309,21 @@ In the app the same build first decoded at 4.24 tokens/s. Two app-side causes, b
 - **UI competing for the big cores.** During generation the UI thread used 47% and the RenderThread 20% of a core at higher priority than the six compute threads, whose barriers then waited for the preempted one. The status dot animated permanently, a typing animation ran during the prompt, and the answer was re-laid out every 60 ms. Now: no animation while answering, updates every 200 ms; the UI thread uses about 6%.
 
 Same prompt in the app afterwards: 6.87 tokens/s, 88% hits, 2,038 MiB cache with images on, 4,684 MiB peak, thermal status 1 at the start. The cache size follows the free memory at load.
+
+## D025: GPU mode for prompts and images; decoding stays on the CPU — 2026-10-17
+
+Question: does the Xclipse 940 GPU (Vulkan, GGML's backend) make Qwen3.6-35B-A3B faster on the Galaxy? Record: `results/2026-10-17/galaxy/gpu-mode.json`.
+
+Decoding: no. The GPU reads DRAM at the CPU's ceiling (row sum 39.3 GB/s; CPU Q8_0 GEMV 39.4) over the same memory bus: CPU and GPU together reach 39.2 GB/s on Q5_K, no more than the CPU alone. GGML's matrix-vector shaders read K-quants at 19–25 GB/s (best of nine tunings) against the CPU's 31–39. Only the compute-bound IQ expert kernels add up (IQ2_XXS 24.8 GB/s together against 11.1), but they are about a quarter of a token, and a streamed decode needs the routed experts on the CPU every layer: 40 CPU–GPU round trips per token at 0.2–0.4 ms each (measured) cost more than the ~12 ms they could save. The driver reports no cooperative matrix and no accelerated int8 dot products, so GGML's integer shaders do not apply (a current glslc was built and checked).
+
+Prompts and images: yes. Prompt-sized GEMMs run at 0.74–1.37 TFLOPS on the GPU against 0.34–0.46 on six cores. The GPU mode, selected in Settings ("CPU + GPU", next model load), keeps the CPU graph and computes chosen nodes on the GPU through a hook in GGML's CPU backend (patch 0002): every compute thread calls it, thread 0 copies the node's sources into staging host memory imported into Vulkan (CPU-cached, so results read back at memory speed), the others wait in WFE, and the result lands in the CPU tensor. Weights stay in their CPU buffers and the expert slots; a routed product stages only the experts its tokens use. No model copy is made for the GPU; staging is freed after each prompt.
+
+Measured choices (929-token prompt unless noted):
+
+- Waiting threads: sleeping 23.1 s (the governor lowered CPU clocks for the following small operations), spinning 21.6 s (it took power from the GPU: GPU time 10.1 → 12.8 s), WFE 19.5 s. Kept WFE.
+- Batch 2048 in GPU mode: 16.5 s (fewer passes over the streamed experts, fuller GPU tiles). The CPU path gains nothing from it (24.0 against 24.5 s) and keeps 512.
+- DeltaNet recurrences and conv-state concatenations on the GPU: 2.1 → 0.5 s and 1.3 → 0.3 s; total 14.5 s. Flash attention on the GPU was rejected (0.7 → 7.0 s without matrix cores). Sizing MUL_MAT_ID tiles by rows per expert was rejected (no gain).
+- Thresholds: dense products and nodes from 128 tokens, routed products from 640. Smaller prompts lost time to staging and synchronization (35 tokens: 4.2 → 5.4 s; routed products at 425 tokens: 4.9 s either way).
+- Images: the vision encoder runs on the GPU without flash attention (33.5 → 8.8 s), and the whole prompt (text tokens and image rows) is read in shared mixed batches, one pass over the experts instead of one per text chunk.
+
+Result, CPU path against GPU mode: 35 tokens 4.20 → 4.12 s (nothing offloaded); 237 tokens 6.87 → 6.38 s; 929 tokens 24.5 → 14.6 s (1.68x); one 1024x768 image, first token 69.2 → 23.9 s (2.9x). Decode speed is unchanged (CPU). Peak RSS +0.4–0.45 GiB while a long prompt is read. First-token logits against the CPU path at the same batch size: same top-1 and top-10, KL 1.8e-3 (text) and 2.7e-2 (image), first 8 tokens equal; a full quality evaluation of the GPU mode is still to do. The CPU path is unchanged: the hook is not installed, and the model never uses the Vulkan device.

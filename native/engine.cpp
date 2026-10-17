@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "expert_store.h"
+#include "gpu_offload.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 #include "jinja/parser.h"
@@ -473,12 +474,16 @@ std::string render_chat(const std::string &source, const Json &messages, bool th
 struct AbortSource {
     const std::atomic_bool *cancelled = nullptr;
     const ExpertStore *store = nullptr;
+    const GpuOffload *gpu = nullptr;
 };
 
 struct Engine::State {
     // Members are destroyed in reverse order: context and model release expert buffers before the store
     // joins its I/O workers and frees the buffer type those buffers reference.
     std::unique_ptr<ExpertStore> store;
+    // Uses the store's experts; removed before it.
+    std::unique_ptr<GpuOffload> gpu;
+    bool gpu_vision_flash_attn = false;
     AbortSource abort;
     std::unique_ptr<gguf_context, decltype(&gguf_free)> meta{nullptr, gguf_free};
     std::unique_ptr<ggml_context, decltype(&ggml_free)> shapes{nullptr, ggml_free};
@@ -620,6 +625,30 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     ExpertOptions expert_options;
     std::unordered_map<std::string, uint64_t> routed_offsets;
     uint64_t mapped_bytes = 0; // file-backed tensors, never resident as a whole
+    const bool gpu = options.value("gpu", false);
+    GpuOptions gpu_options;
+    gpu_options.min_rows = integer(options, "gpu_min_rows", gpu_options.min_rows, 1, 1 << 20);
+    gpu_options.min_expert_rows = integer(options, "gpu_min_expert_rows", gpu_options.min_expert_rows, 1, 1 << 20);
+    gpu_options.copy_threads = integer(options, "gpu_copy_threads", gpu_options.copy_threads, 0, 16);
+    if (options.contains("gpu_wait")) {
+        const std::string wait = options.at("gpu_wait").get<std::string>();
+        if (wait != "sleep" && wait != "spin" && wait != "wfe") {
+            throw std::invalid_argument("gpu_wait must be sleep, spin or wfe");
+        }
+        gpu_options.wait = wait == "sleep" ? GpuOptions::Wait::sleep
+                           : wait == "spin" ? GpuOptions::Wait::spin
+                                            : GpuOptions::Wait::wfe;
+    }
+    uint64_t largest_weight = 0;
+    auto note_weight = [&](const gguf_context *meta) {
+        for (int64_t i = 0; i < gguf_get_n_tensors(meta); ++i) {
+            // The embedding is read by row and the output head runs on prompts' last token only: neither is staged.
+            const char *name = gguf_get_tensor_name(meta, i);
+            if (std::strcmp(name, "token_embd.weight") != 0 && std::strcmp(name, "output.weight") != 0) {
+                largest_weight = std::max<uint64_t>(largest_weight, gguf_get_tensor_size(meta, i));
+            }
+        }
+    };
     if (streaming) {
         ggml_context *shapes = nullptr;
         state->meta.reset(gguf_init_from_file(path.c_str(), {/*no_alloc =*/true, /*ctx =*/&shapes}));
@@ -673,6 +702,20 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         }
     }
     const ContextCost context_cost_estimate = context_cost(streaming ? state->meta.get() : header.get());
+    if (gpu) {
+        // Staging for one operation at a time; the GPU never holds a copy of the model.
+        const gguf_context *meta = streaming ? state->meta.get() : header.get();
+        note_weight(meta);
+        const int64_t arch_key = gguf_find_key(meta, "general.architecture");
+        const std::string arch_name =
+            arch_key >= 0 && gguf_get_kv_type(meta, arch_key) == GGUF_TYPE_STRING ? gguf_get_val_str(meta, arch_key) : "";
+        auto value = [&](const char *suffix, int64_t fallback) {
+            const int64_t found = arch_name.empty() ? -1 : gguf_integer(meta, arch_name + suffix);
+            return found > 0 ? found : fallback;
+        };
+        resident_bytes += GpuOffload::staging_estimate(largest_weight, batch_size, value(".embedding_length", 4096),
+                                                       static_cast<int>(value(".expert_used_count", 1)));
+    }
     header.reset();
     if (context_cost_estimate.trained > 0 && context_size > context_cost_estimate.trained) {
         throw std::invalid_argument("context exceeds the model's trained context of " +
@@ -694,6 +737,10 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     } progress_state{cancelled_, progress};
     auto model_params = llama_model_default_params();
     model_params.n_gpu_layers = 0;
+    // The model and its contexts use the CPU backend only, also after a GPU-mode load registered the Vulkan
+    // backend in this process; the GPU path computes products through the CPU backend's hook instead.
+    static ggml_backend_dev_t no_devices[] = {nullptr};
+    model_params.devices = no_devices;
     model_params.load_mode = options.value("mmap", true) ? LLAMA_LOAD_MODE_MMAP : LLAMA_LOAD_MODE_NONE;
     model_params.lazy_mode = LLAMA_LAZY_MODE_OFF;
     const bool mtp = options.value("mtp", false);
@@ -771,10 +818,15 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     params.offload_kqv = false;
     params.op_offload = false;
     params.no_perf = false;
-    state->abort = {&cancelled_, state->store.get()};
+    if (gpu) {
+        state->gpu = std::make_unique<GpuOffload>(gpu_options, state->store.get());
+        state->gpu_vision_flash_attn = options.value("gpu_vision_flash_attn", false);
+    }
+    state->abort = {&cancelled_, state->store.get(), state->gpu.get()};
     params.abort_callback = [](void *opaque) {
         const auto *abort = static_cast<const AbortSource *>(opaque);
-        return abort->cancelled->load() || (abort->store && abort->store->aborted());
+        return abort->cancelled->load() || (abort->store && abort->store->aborted()) ||
+               (abort->gpu && abort->gpu->failed());
     };
     params.abort_callback_data = &state->abort;
     if (mtp) {
@@ -863,7 +915,11 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     state->projector_path = projector;
     state->image_max_tokens = image_max_tokens;
     state->threads = threads;
-    state->info = {{"backend", "cpu"},
+    if (state->gpu) {
+        state->gpu->install();
+    }
+    state->info = {{"backend", state->gpu ? "cpu+vulkan" : "cpu"},
+                   {"gpu", state->gpu ? state->gpu->configuration() : Json(nullptr)},
                    {"architecture", arch},
                    {"model_file_bytes", size},
                    {"model_tensor_bytes", llama_model_size(state->model.get())},
@@ -952,7 +1008,12 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     } else {
         const auto media_start = Clock::now();
         auto media_params = mtmd_context_params_default();
-        media_params.use_gpu = false;
+        media_params.use_gpu = s.gpu != nullptr;
+        if (s.gpu && !s.gpu_vision_flash_attn) {
+            // Without matrix cores the Vulkan flash-attention shader is the slow path on mobile GPUs (measured on
+            // the Xclipse 940 for the decoder); the encoder then uses plain matrix products for attention.
+            media_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
+        }
         media_params.print_timings = false;
         // The encoder spins at barriers like the decoder; it uses at most the CPUs Android allows right now.
         const int allowed = allowed_cpus();
@@ -1045,6 +1106,9 @@ Json Engine::generate(const Json &request, const Emit &emit) {
             }
         }
     } request_scope(s.store.get());
+    if (s.gpu) {
+        s.gpu->begin_request();
+    }
     std::unique_ptr<llama_sampler, decltype(&llama_sampler_free)> sampler(
         llama_sampler_chain_init(llama_sampler_chain_default_params()), llama_sampler_free);
     if (temperature == 0) {
@@ -1163,12 +1227,27 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         llama_pos position = 0;
         std::vector<mtmd_decoder_pos> relative;
         std::vector<llama_pos> rows;
+        // GPU mode reads the whole prompt in shared batches of text tokens and image rows: every batch is one pass
+        // over the streamed experts, and the short text chunks around an image cost a pass each otherwise.
+        struct MixedEntry {
+            llama_token token;
+            const float *embedding;
+            llama_pos positions[4];
+        };
+        std::vector<MixedEntry> mixed;
+        const bool mix = s.gpu != nullptr;
+        const auto mixed_start = Clock::now();
         for (size_t c = 0; c < mtmd_input_chunks_size(chunks.get()) && ready; ++c) {
             const auto *chunk = mtmd_input_chunks_get(chunks.get(), c);
             if (mtmd_input_chunk_get_type(chunk) == MTMD_INPUT_CHUNK_TYPE_TEXT) {
                 size_t length = 0;
                 const llama_token *ids = mtmd_input_chunk_get_tokens_text(chunk, &length);
-                for (size_t i = 0; i < length && ready; i += s.batch_size) {
+                if (mix) {
+                    for (size_t i = 0; i < length; ++i) {
+                        mixed.push_back({ids[i], nullptr, {position + static_cast<llama_pos>(i), 0, 0, 0}});
+                    }
+                }
+                for (size_t i = 0; i < length && ready && !mix; i += s.batch_size) {
                     const int part = static_cast<int>(std::min<size_t>(s.batch_size, length - i));
                     ready = evaluate(ids + i, part, position + static_cast<llama_pos>(i));
                 }
@@ -1197,7 +1276,13 @@ Json Engine::generate(const Json &request, const Emit &emit) {
                     rows[static_cast<size_t>(r) * sections] = position + r;
                 }
             }
-            for (int first = 0; first < length && ready; first += s.batch_size) {
+            if (mix) {
+                for (int r = 0; r < length; ++r) {
+                    const llama_pos *row = rows.data() + static_cast<size_t>(r) * sections;
+                    mixed.push_back({LLAMA_TOKEN_NULL, embedding.data() + r * width, {row[0], row[1], row[2], row[3]}});
+                }
+            }
+            for (int first = 0; first < length && ready && !mix; first += s.batch_size) {
                 llama_batch_ext_clear(s.batch.get());
                 for (int r = first; r < std::min(length, first + s.batch_size); ++r) {
                     const int idx = llama_batch_ext_add_embd(s.batch.get(), 0, {embedding.data() + r * width, 1, width});
@@ -1210,6 +1295,25 @@ Json Engine::generate(const Json &request, const Emit &emit) {
             position += mtmd_input_chunk_get_n_pos(chunk);
             image_ms += milliseconds(image_start);
         }
+        const int entries = static_cast<int>(mixed.size());
+        for (int first = 0; first < entries && ready; first += s.batch_size) {
+            llama_batch_ext_clear(s.batch.get());
+            for (int e = first; e < std::min(entries, first + s.batch_size); ++e) {
+                const MixedEntry &entry = mixed[e];
+                if (entry.embedding) {
+                    const int idx = llama_batch_ext_add_embd(s.batch.get(), 0, {entry.embedding, 1, width});
+                    if (idx < 0 || !llama_batch_ext_set_pos(s.batch.get(), idx, entry.positions)) {
+                        throw std::runtime_error("Invalid native image batch");
+                    }
+                } else {
+                    add(s.batch.get(), entry.token, entry.positions[0], e == entries - 1);
+                }
+            }
+            ready = run(s.context.get(), s.batch.get());
+        }
+        if (mix) {
+            image_ms = milliseconds(mixed_start);
+        }
         if (ready && position != positions) {
             throw std::runtime_error("Image prompt positions disagree with mtmd");
         }
@@ -1218,6 +1322,10 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     }
     const double prefill_ms = milliseconds(prefill_start);
     const bool prefill_complete = ready;
+    if (s.gpu) {
+        // Decoding stays on the CPU: the staging memory goes back to the expert cache's neighbours.
+        s.gpu->release_staging();
+    }
     if (s.store) {
         s.store->set_decode_phase(true);
     }
@@ -1385,6 +1493,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"expert_cache_misses", expert_stats.is_null() ? Json(nullptr) : expert_stats["misses"]},
         {"expert_io_wait_ms", expert_stats.is_null() ? Json(nullptr) : expert_stats["io_wait_ms"]},
         {"expert_cache", expert_stats},
+        {"gpu_offload", s.gpu ? s.gpu->statistics() : Json(nullptr)},
         {"speculative", speculative ? Json{{"verification_steps", steps},
                                            {"drafted_tokens", drafted},
                                            {"accepted_tokens", accepted_total},
