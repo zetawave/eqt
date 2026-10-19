@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "whitespace_stream_status_visible": true,
+  "live_token_counter_updates": true,
+  "visible_unicode_stream_recomposes": true,
+  "blank_completion_message": true,
+  "notification_matches_visibility": true,
+  "configuration_next_to_attachment": true,
+  "single_configuration_modal": true,
+  "reasoning_stream_preview": true,
+  "reasoning_collapsed_with_duration": true,
+  "reasoning_expands": true,
+  "reasoning_without_answer_message": true,
+  "thinking_notification": true,
+  "think_chip_follows_model_support": true,
+  "model_inference_executed": false,
+  "chat_or_settings_modified": false
+}

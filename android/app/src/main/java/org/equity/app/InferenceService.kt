@@ -131,6 +131,12 @@ object Notifications {
             state.phase == Phase.Loading -> builder.setContentTitle("Loading ${state.modelName ?: "model"}")
                 .setContentText(state.status)
                 .setProgress(100, state.loadPercent ?: 0, state.loadPercent == null)
+            generation != null && generation.tokens > 0 && generation.thinking -> {
+                val seconds = (SystemClock.elapsedRealtime() - generation.startedAt) / 1000.0
+                builder.setContentTitle("Equity is thinking")
+                    .setContentText("%d tokens · %s".format(Locale.US, generation.tokens, elapsed(seconds)))
+                    .setProgress(0, 0, true)
+            }
             generation != null && generation.tokens > 0 -> {
                 val seconds = (SystemClock.elapsedRealtime() - generation.startedAt) / 1000.0
                 builder.setContentTitle(if (generation.hasVisibleText) "Equity is writing an answer" else "Equity is generating tokens")

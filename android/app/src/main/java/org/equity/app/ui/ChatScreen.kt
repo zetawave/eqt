@@ -16,15 +16,18 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,6 +37,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -49,9 +53,12 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Button
@@ -59,6 +66,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -73,6 +81,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -85,7 +94,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
@@ -108,7 +124,9 @@ import org.equity.app.EngineController
 import org.equity.app.EngineState
 import org.equity.app.Message
 import org.equity.app.Phase
+import org.equity.app.SettingsStore
 import org.equity.app.hasVisibleContent
+import java.util.Locale
 import java.io.File
 
 private val Suggestions = listOf(
@@ -130,6 +148,7 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
     var importing by remember { mutableIntStateOf(0) }
     var viewing by remember { mutableStateOf<File?>(null) }
     var configuring by remember { mutableStateOf(false) }
+    val settings by SettingsStore.state.collectAsState()
     val vision by rememberUpdatedState(engine.vision)
     val chat = chats.current
     val messages = chat?.messages.orEmpty()
@@ -243,6 +262,9 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
             onFile = { documents.launch(arrayOf("*/*")) },
             onConfigure = { configuring = true },
             steeringEnabled = chats.steering.enabled,
+            thinking = settings.thinking && engine.thinkingSupported,
+            thinkingSupported = engine.thinkingSupported,
+            onToggleThinking = { SettingsStore.update(context) { it.copy(thinking = !it.thinking) } },
             onView = { viewing = it },
             onSend = { send(input) },
             onStop = { EngineController.stop() },
@@ -390,10 +412,17 @@ internal fun AssistantMessage(message: Message, generatedTokens: Int? = null) {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxWidth().padding(end = 12.dp)) {
-        if (!message.text.hasVisibleContent()) {
+        // The closing tag records the reasoning time, so a streaming answer without one is still reasoning.
+        val reasoning = message.reasoning
+        val reasoningNow = reasoning != null && message.streaming && message.reasoningMs == null
+        if (reasoning != null) ReasoningBlock(reasoning, reasoningNow, message.reasoningMs, generatedTokens)
+        if (reasoningNow) {
+            // The reasoning block is the progress indicator.
+        } else if (!message.text.hasVisibleContent()) {
             // Static: an animation here would compete with the prompt's evaluation for the big cores.
             val sampled = (generatedTokens ?: 0) > 0 || message.text.isNotEmpty()
             Text(when {
+                !message.streaming && reasoning != null -> "The model stopped while reasoning, before writing an answer."
                 !message.streaming -> "The model finished without producing visible text."
                 sampled -> "Generating tokens; no visible text yet"
                 else -> "Reading your message…"
@@ -426,6 +455,61 @@ internal fun AssistantMessage(message: Message, generatedTokens: Int? = null) {
     }
 }
 
+/**
+ * The model's reasoning above its answer: collapsed to a header, with only the newest lines fading in while it is
+ * written; tapping the header shows all of it.
+ */
+@Composable
+private fun ReasoningBlock(reasoning: String, inProgress: Boolean, reasoningMs: Long?, generatedTokens: Int?) {
+    val colors = MaterialTheme.colorScheme
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        Row(
+            Modifier.clip(RoundedCornerShape(12.dp)).clickable { expanded = !expanded }.padding(vertical = 6.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Psychology, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(when {
+                inProgress -> "Thinking…" + (generatedTokens?.takeIf { it > 0 }?.let { " · $it tokens" } ?: "")
+                reasoningMs != null -> "Thought for %.1f s".format(Locale.US, reasoningMs / 1000.0)
+                else -> "Reasoning"
+            }, style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+            Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                contentDescription = if (expanded) "Hide reasoning" else "Show reasoning",
+                tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        }
+        when {
+            expanded -> Row(Modifier.height(IntrinsicSize.Min).padding(start = 12.dp, top = 2.dp)) {
+                Box(Modifier.width(2.dp).fillMaxHeight().background(colors.outlineVariant))
+                SelectionContainer {
+                    Text(reasoning.ifEmpty { "…" }, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 10.dp))
+                }
+            }
+            inProgress && reasoning.isNotEmpty() -> ReasoningPreview(reasoning)
+        }
+    }
+}
+
+/** The newest reasoning lines, bottom-aligned and fading upward, so the line being written stays readable. */
+@Composable
+private fun ReasoningPreview(reasoning: String) {
+    // Only the tail is laid out: enough characters to fill the preview at any phone width.
+    val tail = reasoning.takeLast(480)
+    Box(
+        Modifier.fillMaxWidth().height(52.dp).padding(start = 16.dp).clipToBounds()
+            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+            .drawWithContent {
+                drawContent()
+                drawRect(Brush.verticalGradient(0f to Color.Transparent, 0.7f to Color.Black), blendMode = BlendMode.DstIn)
+            },
+    ) {
+        Text(tail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.BottomStart).wrapContentHeight(Alignment.Bottom, unbounded = true))
+    }
+}
+
 @Composable
 private fun Composer(
     value: String,
@@ -440,6 +524,9 @@ private fun Composer(
     onFile: () -> Unit,
     onConfigure: () -> Unit,
     steeringEnabled: Boolean,
+    thinking: Boolean,
+    thinkingSupported: Boolean,
+    onToggleThinking: () -> Unit,
     onView: (File) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -475,9 +562,32 @@ private fun Composer(
                         if (importing) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                     }
                 }
-                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(start = 4.dp, end = 6.dp, bottom = 6.dp)) {
+                TextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    enabled = ready || generating,
+                    placeholder = {
+                        Text(when {
+                            engine.phase == Phase.Empty -> "Load a model to start"
+                            answeringElsewhere -> "Equity is answering in another chat"
+                            else -> "Message Equity"
+                        })
+                    },
+                    maxLines = 6,
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, end = 6.dp, bottom = 6.dp)) {
                     Box {
-                        IconButton(onClick = { menu = true }, enabled = ready || generating, modifier = Modifier.padding(bottom = 2.dp)) {
+                        IconButton(onClick = { menu = true }, enabled = ready || generating) {
                             Icon(Icons.Outlined.AttachFile, contentDescription = "Attach")
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = colors.surfaceContainerHighest) {
@@ -501,33 +611,21 @@ private fun Composer(
                             )
                         }
                     }
-                    IconButton(onClick = onConfigure, modifier = Modifier.padding(bottom = 2.dp)) {
+                    IconButton(onClick = onConfigure) {
                         Icon(Icons.Outlined.Tune, contentDescription = "Chat configuration",
                             tint = if (steeringEnabled) colors.primary else colors.onSurfaceVariant)
                     }
-                    TextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        enabled = ready || generating,
-                        placeholder = {
-                            Text(when {
-                                engine.phase == Phase.Empty -> "Load a model to start"
-                                answeringElsewhere -> "Equity is answering in another chat"
-                                else -> "Message Equity"
-                            })
-                        },
-                        maxLines = 6,
-                        textStyle = MaterialTheme.typography.bodyLarge,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent,
-                        ),
-                        modifier = Modifier.weight(1f),
+                    // Applies to the next message; disabled when the loaded model's template has no thinking mode.
+                    FilterChip(
+                        selected = thinking,
+                        onClick = onToggleThinking,
+                        enabled = thinkingSupported,
+                        label = { Text("Think") },
+                        leadingIcon = { Icon(Icons.Outlined.Psychology, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.padding(start = 2.dp),
                     )
+                    Spacer(Modifier.weight(1f))
                     if (generating) {
                         FilledIconButton(
                             onClick = onStop,

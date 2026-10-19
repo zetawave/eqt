@@ -2,6 +2,7 @@
 #include "expert_store.h"
 #include "gpu_offload.h"
 #include "steering.h"
+#include <string_view>
 #include "ggml-cpu.h"
 #include "gguf.h"
 #include "jinja/parser.h"
@@ -949,6 +950,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                                        : Json(nullptr)},
                    {"steering", false},
                    {"steering_supported", true},
+                   // Qwen-style templates switch reasoning with this variable; others have no thinking mode.
+                   {"thinking_supported", state->chat_template.find("enable_thinking") != std::string::npos},
                    {"model_sha256", options.value("model_sha256", Json(nullptr))},
                    {"embedding_size", llama_model_n_embd(state->model.get())},
                    {"decoder_blocks", llama_model_n_layer(state->model.get())},
@@ -988,6 +991,9 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         throw std::invalid_argument("temperature must be in [0, 2]");
     }
     const bool thinking = request.value("thinking", false);
+    if (thinking && !s.info.value("thinking_supported", false)) {
+        throw std::invalid_argument("This model's chat template has no thinking mode");
+    }
     const bool ignore_eos = request.value("ignore_eos", false);
     const auto *vocab = llama_model_get_vocab(s.model.get());
     const auto prompt = render_chat(s.chat_template, input.messages, thinking,
@@ -1424,6 +1430,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     Json first_visible = nullptr;
     std::string text;
     std::string reason = ready ? "length" : "cancelled";
+    // With thinking, the answer follows the closing tag; tokens up to and including it are reasoning.
+    static constexpr std::string_view think_end = "</think>";
+    size_t reasoning_tokens = 0;
+    Json reasoning_ms = nullptr;
+    Json first_answer = nullptr;
     // Records one sampled token; false when EOS or the output limit ends generation.
     auto push = [&](llama_token token) {
         if (!ignore_eos && llama_vocab_is_eog(vocab, token)) {
@@ -1441,6 +1452,18 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         last_token = Clock::now();
         text += chunk;
         generated.push_back(token);
+        if (thinking) {
+            if (reasoning_ms.is_null()) {
+                // The tag may arrive split across pieces: search only where the newest piece could complete it.
+                const size_t from = text.size() - std::min(text.size(), chunk.size() + think_end.size());
+                if (text.find(think_end, from) != std::string::npos) {
+                    reasoning_ms = milliseconds(decode_start);
+                    reasoning_tokens = generated.size();
+                }
+            } else if (first_answer.is_null() && chunk.find_first_not_of(" \n\r\t") != std::string::npos) {
+                first_answer = milliseconds(start);
+            }
+        }
         if (emit) {
             emit(chunk);
         }
@@ -1527,6 +1550,10 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         s.store->set_decode_phase(false);
     }
     const double decode_ms = milliseconds(decode_start);
+    const bool reasoning_complete = !reasoning_ms.is_null();
+    if (thinking && !reasoning_complete) {
+        reasoning_tokens = generated.size();
+    }
     const Json decode_cpu = counter_delta(decode_cpu_start, process_cpu());
     const double total_ms = milliseconds(start);
     Json expert_stats = nullptr;
@@ -1558,7 +1585,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"prefill_tokens_per_second", prefill_complete ? Json(count * 1000 / prefill_ms) : Json(nullptr)},
         {"ttft_ms", ttft},
         {"first_visible_piece_ms", first_visible},
-        {"first_answer_content_ms", nullptr},
+        {"first_answer_content_ms", thinking ? first_answer : first_visible},
         {"decode_ms", decode_ms},
         {"total_ms", total_ms},
         {"decode_tokens_per_second", generated.size() * 1000.0 / decode_ms},
@@ -1570,8 +1597,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"memory_before", memory_before},
         {"memory_after", process_memory()},
         {"decode_process_cpu", decode_cpu},
-        {"reasoning_tokens", nullptr},
-        {"answer_tokens", nullptr},
+        {"reasoning_tokens", thinking ? Json(reasoning_tokens) : Json(nullptr)},
+        {"answer_tokens", thinking ? Json(generated.size() - reasoning_tokens) : Json(nullptr)},
+        // Decoding time until the closing tag; the whole decode when the limit or a stop came first.
+        {"reasoning_ms", thinking ? (reasoning_complete ? reasoning_ms : Json(decode_ms)) : Json(nullptr)},
+        {"reasoning_complete", thinking ? Json(reasoning_complete) : Json(nullptr)},
         {"expert_cache_hits", expert_stats.is_null() ? Json(nullptr) : expert_stats["hits"]},
         {"expert_cache_misses", expert_stats.is_null() ? Json(nullptr) : expert_stats["misses"]},
         {"expert_io_wait_ms", expert_stats.is_null() ? Json(nullptr) : expert_stats["io_wait_ms"]},

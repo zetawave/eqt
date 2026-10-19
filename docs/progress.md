@@ -32,6 +32,13 @@
 4. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
 5. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
 
+## Thinking mode: 2026-10-19
+
+- The engine reports `thinking_supported` when the model's chat template has `enable_thinking`, and rejects thinking requests otherwise. With thinking on, tokens through `</think>` are reasoning. Results report `reasoning_tokens`, `answer_tokens`, `reasoning_ms` (decode time to the tag), `reasoning_complete` and `first_answer_content_ms`; these were previously null placeholders (`docs/benchmarking.md`). The tag is matched only where the newest piece can complete it. Sampling and prompts without thinking are unchanged.
+- The composer now has the text field above a tool row: Attach, Chat configuration, a **Think** chip (saved preference; disabled when the loaded template has no thinking mode) and Send/Stop. Reasoning is stored apart from the answer and never sent back as context. While it streams, a collapsed block shows "Thinking… · N tokens" and only the newest lines, fading upward. Afterwards it collapses to "Thought for X s" and expands on tap. The answer follows below; stats include the reasoning time. The progress notification says "Equity is thinking". A response that ends while reasoning explains that no answer was written.
+- `eqt-thinking-check` (Qwen3-0.6B, temperature 0.6, seed 42) passed: 1,124 reasoning and 124 answer tokens, the correct answer after `</think>`, identical seeded repeats, an unfinished 4-token limit and a cancelled run with consistent fields. Qwen3.5-0.8B did not close its reasoning within 1,536 tokens greedy or at 0.6 (repetitive self-checking); this was treated as a small-model limitation and not investigated further. On the Galaxy, the `chat-ui` case covers the streaming preview, completed header, expansion, reasoning-without-answer message, notification and the chip's model-dependent state with synthetic messages. The user observed thinking working on the 35B IQ2_M model in the app; no on-device thinking speed or quality was measured.
+- Thinking uses the Settings temperature (default 0, greedy) and output limit (default 512). Qwen recommends temperature 0.6 for thinking, and reasoning consumes output tokens, so long reasoning can end before an answer.
+
 ## Chat configuration and blank output: 2026-10-17
 
 - Read-only inspection of a reported blank answer found 2,062 line-feed characters and zero visible characters; its saved stats reported 2,048 generated tokens. The observed cursor-only display was consistent with whitespace-only model output. The original response was preserved and its prompt was not replayed.

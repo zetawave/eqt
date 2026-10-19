@@ -47,11 +47,13 @@ internal class ChatUiChecks(private val instrumentation: Instrumentation) {
 
     private fun awaitText(text: String) = awaitNode { it.text?.contains(text) == true }
 
-    private fun click(node: AccessibilityNodeInfo) {
+    private fun clickable(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
         var target = node
         while (!target.isClickable) target = requireNotNull(target.parent)
-        check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        return target
     }
+
+    private fun click(node: AccessibilityNodeInfo) = check(clickable(node).performAction(AccessibilityNodeInfo.ACTION_CLICK))
 
     fun run(): String = with(instrumentation) {
         val app = targetContext.applicationContext
@@ -59,6 +61,7 @@ internal class ChatUiChecks(private val instrumentation: Instrumentation) {
         val message = mutableStateOf(Message(1, false, "", streaming = true))
         val tokens = mutableIntStateOf(0)
         val composer = mutableStateOf(false)
+        val engine = mutableStateOf(EngineState(phase = Phase.Ready, modelName = "UI fixture"))
         val folder = File(app.filesDir, "bench").apply { mkdirs() }
         fun screenshot(name: String) {
             uiAutomation.waitForIdle(500, 5_000)
@@ -71,8 +74,7 @@ internal class ChatUiChecks(private val instrumentation: Instrumentation) {
                 activity.setContent {
                     EquityTheme {
                         Surface(Modifier.fillMaxSize().navigationBarsPadding()) {
-                            if (composer.value) ChatScreen(EngineState(phase = Phase.Ready, modelName = "UI fixture"),
-                                ChatsState(), onOpenModels = {}, onOpenChats = {})
+                            if (composer.value) ChatScreen(engine.value, ChatsState(), onOpenModels = {}, onOpenChats = {})
                             else Box(Modifier.statusBarsPadding().padding(16.dp)) {
                                 AssistantMessage(message.value, tokens.intValue)
                             }
@@ -96,6 +98,28 @@ internal class ChatUiChecks(private val instrumentation: Instrumentation) {
             runOnMainSync { message.value = message.value.copy(text = "\n".repeat(64), streaming = false) }
             awaitText("The model finished without producing visible text.")
 
+            // Reasoning: a fading preview while it is written, then a collapsed header with its duration.
+            runOnMainSync {
+                message.value = Message(2, false, "", streaming = true,
+                    reasoning = "First add the tens: 10 + 20 = 30.\nThen the units: 7 + 5 = 12.\nSo the sum is 42.")
+                tokens.intValue = 25
+            }
+            awaitText("Thinking… · 25 tokens")
+            awaitText("So the sum is 42.")
+            screenshot("chat-thinking-stream-ui.png")
+            runOnMainSync { message.value = message.value.copy(text = "**42**", streaming = false, reasoningMs = 12_300) }
+            awaitText("Thought for 12.3 s")
+            awaitText("42")
+            check(find { it.text?.contains("So the sum is 42.") == true } == null)
+            click(awaitNode { it.contentDescription?.toString() == "Show reasoning" })
+            awaitText("First add the tens")
+            screenshot("chat-thinking-done-ui.png")
+            runOnMainSync { message.value = message.value.copy(text = "") }
+            awaitText("The model stopped while reasoning, before writing an answer.")
+            val thinkingNotification = Notifications.progress(app, EngineState(phase = Phase.Generating,
+                generation = Generation("ui-fixture", 2, SystemClock.elapsedRealtime(), tokens = 25, thinking = true)))
+            check(thinkingNotification.extras.getCharSequence(Notification.EXTRA_TITLE).toString() == "Equity is thinking")
+
             val generation = Generation("ui-fixture", 1, SystemClock.elapsedRealtime(), tokens = 18)
             val notification = Notifications.progress(app, EngineState(phase = Phase.Generating, generation = generation))
             check(notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString().contains("no visible text yet"))
@@ -109,6 +133,10 @@ internal class ChatUiChecks(private val instrumentation: Instrumentation) {
             val configurationBounds = Rect().also(configuration::getBoundsInScreen)
             val attachmentBounds = Rect().also(attachment::getBoundsInScreen)
             check(configurationBounds.left >= attachmentBounds.right)
+            // The chip follows the model: disabled without a thinking template. It is not clicked (that saves a setting).
+            check(!clickable(awaitNode { it.text?.toString() == "Think" }).isEnabled)
+            runOnMainSync { engine.value = engine.value.copy(thinkingSupported = true) }
+            awaitNode { it.text?.toString() == "Think" && clickable(it).isEnabled }
             screenshot("chat-composer-ui.png")
             click(configuration)
             awaitText("Directional steering")
@@ -121,8 +149,11 @@ internal class ChatUiChecks(private val instrumentation: Instrumentation) {
                 .put("live_token_counter_updates", true).put("visible_unicode_stream_recomposes", true)
                 .put("blank_completion_message", true).put("notification_matches_visibility", true)
                 .put("configuration_next_to_attachment", true).put("single_configuration_modal", true)
+                .put("reasoning_stream_preview", true).put("reasoning_collapsed_with_duration", true)
+                .put("reasoning_expands", true).put("reasoning_without_answer_message", true)
+                .put("thinking_notification", true).put("think_chip_follows_model_support", true)
                 .put("model_inference_executed", false).put("chat_or_settings_modified", false).toString(2))
-            "blank/visible streaming UI, live counter, notification state and composer configuration modal"
+            "blank/visible streaming UI, live counter, reasoning block, notification state, Think chip and composer configuration modal"
         } finally {
             runOnMainSync { activity.finish() }
         }

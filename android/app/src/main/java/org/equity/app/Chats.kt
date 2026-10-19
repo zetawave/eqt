@@ -34,10 +34,32 @@ data class Message(
     /** Stopped before the end; shown, but the turn is not sent back to the model as context. */
     val stopped: Boolean = false,
     val steering: String? = null,
+    /** The model's reasoning before [text] when thinking was on; never sent back as context. */
+    val reasoning: String? = null,
+    /** How long the model reasoned, once known. */
+    val reasoningMs: Long? = null,
 )
 
 internal fun String.hasVisibleContent(): Boolean = any {
     !it.isWhitespace() && !Character.isISOControl(it) && Character.getType(it) != Character.FORMAT.toInt()
+}
+
+/** A thinking response split at its closing tag; [closed] once the answer has started. */
+internal data class ThinkingSplit(val reasoning: String, val answer: String, val closed: Boolean)
+
+private const val THINK_START = "<think>"
+private const val THINK_END = "</think>"
+
+internal fun splitThinking(raw: String): ThinkingSplit {
+    val start = raw.trimStart()
+    if (THINK_START.startsWith(start)) return ThinkingSplit("", "", false)
+    // Qwen3.5/3.6 templates open the block in the prompt; Qwen3 models write the opening tag themselves.
+    val body = start.removePrefix(THINK_START)
+    val end = body.indexOf(THINK_END)
+    if (end >= 0) return ThinkingSplit(body.substring(0, end).trim(), body.substring(end + THINK_END.length).trimStart(), true)
+    // A closing tag still arriving is not shown as reasoning.
+    val partial = (THINK_END.length - 1 downTo 1).firstOrNull { body.endsWith(THINK_END.substring(0, it)) } ?: 0
+    return ThinkingSplit(body.dropLast(partial).trim(), "", false)
 }
 
 data class Chat(
@@ -217,7 +239,8 @@ object ChatStore {
             }
             messages.put(JSONObject().put("id", m.id).put("user", m.fromUser).put("text", m.text)
                 .put("attachments", attachments).put("streaming", m.streaming).put("stats", m.stats ?: JSONObject.NULL)
-                .put("failed", m.failed).put("stopped", m.stopped).put("steering", m.steering ?: JSONObject.NULL))
+                .put("failed", m.failed).put("stopped", m.stopped).put("steering", m.steering ?: JSONObject.NULL)
+                .put("reasoning", m.reasoning ?: JSONObject.NULL).put("reasoning_ms", m.reasoningMs ?: JSONObject.NULL))
         }
         return JSONObject().put("version", 1).put("id", chat.id).put("title", chat.title)
             .put("steering_enabled", chat.steering.enabled).put("steering_strength", chat.steering.strength.toDouble())
@@ -239,6 +262,8 @@ object ChatStore {
                 streaming = m.optBoolean("streaming"), stats = if (m.isNull("stats")) null else m.getString("stats"),
                 failed = m.optBoolean("failed"), stopped = m.optBoolean("stopped"),
                 steering = if (m.isNull("steering")) null else m.getString("steering"),
+                reasoning = if (m.isNull("reasoning")) null else m.getString("reasoning"),
+                reasoningMs = if (m.isNull("reasoning_ms")) null else m.getLong("reasoning_ms"),
             )
         }
         val strength = json.optDouble("steering_strength", 1.0).toFloat()

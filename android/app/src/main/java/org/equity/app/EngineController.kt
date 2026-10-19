@@ -34,6 +34,8 @@ data class Settings(
     val expertCacheMiB: Int = 0,
     /** Prompts and images are read on the GPU (Vulkan); answers are still generated on the CPU. */
     val gpu: Boolean = false,
+    /** The model reasons before answering, when its chat template supports it. */
+    val thinking: Boolean = false,
 )
 
 object SettingsStore {
@@ -51,6 +53,7 @@ object SettingsStore {
             context = p.getInt("context", d.context),
             expertCacheMiB = p.getInt("expert_cache", d.expertCacheMiB),
             gpu = p.getBoolean("gpu", d.gpu),
+            thinking = p.getBoolean("thinking", d.thinking),
         )
     }
 
@@ -61,7 +64,7 @@ object SettingsStore {
             .putString("system", next.systemPrompt).putInt("max_tokens", next.maxTokens)
             .putFloat("temperature", next.temperature).putInt("threads", next.threads)
             .putInt("context", next.context).putInt("expert_cache", next.expertCacheMiB)
-            .putBoolean("gpu", next.gpu).apply()
+            .putBoolean("gpu", next.gpu).putBoolean("thinking", next.thinking).apply()
     }
 }
 
@@ -69,7 +72,7 @@ enum class Phase { Empty, Loading, Ready, Generating, Unloading }
 
 /** The answer being written: its chat, its message and how many tokens have arrived. */
 data class Generation(val chatId: String, val answerId: Long, val startedAt: Long, val tokens: Int = 0,
-                      val hasVisibleText: Boolean = false)
+                      val hasVisibleText: Boolean = false, val thinking: Boolean = false)
 
 data class EngineState(
     val phase: Phase = Phase.Empty,
@@ -90,6 +93,8 @@ data class EngineState(
     val architecture: String? = null,
     val embeddingSize: Int? = null,
     val decoderBlocks: Int? = null,
+    /** The loaded model's chat template has a thinking mode. */
+    val thinkingSupported: Boolean = false,
     val steeringProfile: SteeringProfile? = null,
     val steeringNote: String? = null,
     val steeringImportMessage: String? = null,
@@ -459,7 +464,8 @@ object EngineController {
                 lastResult = null, lastSpeed = null, configuration = configuration,
                 status = if (growing) "Reading your message…" else "Ready", vision = vision)
                 .copy(modelSha256 = hash, architecture = info.getString("architecture"),
-                    embeddingSize = info.getInt("embedding_size"), decoderBlocks = info.getInt("decoder_blocks"))
+                    embeddingSize = info.getInt("embedding_size"), decoderBlocks = info.getInt("decoder_blocks"),
+                    thinkingSupported = info.optBoolean("thinking_supported"))
         }
     }
 
@@ -544,10 +550,11 @@ object EngineController {
         }
         val app = context.applicationContext
         val settings = SettingsStore.state.value
+        val thinking = settings.thinking && engine.thinkingSupported
         val (chat, answerId) = ChatStore.startTurn(chatId, text, attachments)
         update {
             it.copy(phase = Phase.Generating, status = "Reading your message…", error = null,
-                generation = Generation(chat.id, answerId, SystemClock.elapsedRealtime()))
+                generation = Generation(chat.id, answerId, SystemClock.elapsedRealtime(), thinking = thinking))
         }
         InferenceService.start(app)
         task {
@@ -558,11 +565,15 @@ object EngineController {
             var lastUpdate = 0L
             var lastSave = SystemClock.elapsedRealtime()
             var tokens = 0
+            // Live reasoning time, from the first generated token to the closing tag (to update granularity);
+            // the engine's measurement replaces it when the answer is complete.
+            var firstTokenAt = 0L
+            var reasoningMs: Long? = null
             val result = try {
                 val messages = JSONArray().put(JSONObject().put("role", "system").put("content", settings.systemPrompt))
                 requestMessages(chat, engine.vision).forEach { messages.put(it) }
                 request.put("messages", messages).put("max_tokens", settings.maxTokens)
-                    .put("temperature", settings.temperature.toDouble()).put("seed", 42).put("thinking", false)
+                    .put("temperature", settings.temperature.toDouble()).put("seed", 42).put("thinking", thinking)
                     .put("ignore_eos", false)
                 if (steering.enabled) {
                     request.put("model_sha256", engine.modelSha256)
@@ -572,23 +583,33 @@ object EngineController {
                     output.write(chunk)
                     tokens++
                     val now = SystemClock.elapsedRealtime()
+                    if (tokens == 1) firstTokenAt = now
                     if (now - lastUpdate >= UPDATE_INTERVAL_MS) {
                         lastUpdate = now
                         // Partial answers reach disk every few seconds, so a killed process loses little.
                         val save = now - lastSave >= 3000
                         if (save) lastSave = now
                         val partial = decodeComplete(output.toByteArray())
-                        val visible = partial.hasVisibleContent()
-                        ChatStore.updateMessage(chat.id, answerId, save) { it.copy(text = partial) }
-                        update { s -> s.copy(status = if (visible) "Writing…" else "Generating tokens; no visible text yet",
-                            generation = s.generation?.copy(tokens = tokens, hasVisibleText = visible)) }
+                        val split = if (thinking) splitThinking(partial) else ThinkingSplit("", partial, true)
+                        if (thinking && split.closed && reasoningMs == null) reasoningMs = now - firstTokenAt
+                        val visible = split.answer.hasVisibleContent()
+                        ChatStore.updateMessage(chat.id, answerId, save) {
+                            it.copy(text = split.answer, reasoning = split.reasoning.takeIf { thinking }, reasoningMs = reasoningMs)
+                        }
+                        update { s -> s.copy(status = when {
+                                !split.closed -> "Thinking…"
+                                visible -> "Writing…"
+                                else -> "Generating tokens; no visible text yet"
+                            }, generation = s.generation?.copy(tokens = tokens, hasVisibleText = visible, thinking = !split.closed)) }
                     }
                 })
             } catch (error: Exception) {
                 val failure = error.message ?: error.javaClass.simpleName
+                val partial = decodeComplete(output.toByteArray())
+                val split = if (thinking) splitThinking(partial) else ThinkingSplit("", partial, true)
                 ChatStore.updateMessage(chat.id, answerId, true) {
-                    it.copy(streaming = false, failed = true,
-                        text = decodeComplete(output.toByteArray()).ifEmpty { "Generation failed.\n\n$failure" },
+                    it.copy(streaming = false, failed = true, text = split.answer.ifEmpty { "Generation failed.\n\n$failure" },
+                        reasoning = split.reasoning.takeIf { thinking && it.isNotEmpty() }, reasoningMs = reasoningMs,
                         stats = failure.takeIf { output.size() > 0 })
                 }
                 update { s ->
@@ -604,24 +625,29 @@ object EngineController {
                 .put("thermal_status_before", thermalBefore ?: JSONObject.NULL)
                 .put("thermal_status_after", if (Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else JSONObject.NULL)
                 .put("finished_in_background", !AppVisibility.visible)
-            val answer = json.getString("text").ifEmpty { "(no answer)" }
+            val split = if (thinking) splitThinking(json.getString("text")) else null
+            // Reasoning that used every token leaves no answer; the message explains that instead of a placeholder.
+            val answer = split?.answer ?: json.getString("text").ifEmpty { "(no answer)" }
+            val thoughtMs = if (thinking) json.getDouble("reasoning_ms").toLong() else null
             val termination = json.getString("termination")
             val speed = json.getDouble("decode_tokens_per_second")
             val stats = buildString {
                 append("%.1f tok/s".format(Locale.US, speed))
                 append(" · ${json.getInt("generated_tokens")} tokens")
                 if (!json.isNull("ttft_ms")) append(" · first token %.1f s".format(Locale.US, json.getDouble("ttft_ms") / 1000))
+                if (thoughtMs != null) append(" · thought %.1f s".format(Locale.US, thoughtMs / 1000.0))
                 if (termination == "cancelled") append(" · stopped")
                 if (termination == "length") append(" · length limit")
                 if (!json.isNull("steering")) append(" · steering %+.2f".format(Locale.US, steering.strength))
             }
             val stopped = termination == "cancelled"
             ChatStore.updateMessage(chat.id, answerId, true) { it.copy(text = answer, streaming = false, stats = stats, stopped = stopped,
-                steering = json.optJSONObject("steering")?.toString()) }
+                steering = json.optJSONObject("steering")?.toString(), reasoning = split?.reasoning, reasoningMs = thoughtMs) }
             update { s ->
                 s.copy(phase = Phase.Ready, status = "Ready", lastResult = json.toString(2), lastSpeed = speed, generation = null)
             }
-            if (!AppVisibility.visible) Notifications.answerFinished(app, chat.id, chat.title, answer, failed = false, stopped = stopped)
+            if (!AppVisibility.visible) Notifications.answerFinished(app, chat.id, chat.title,
+                answer.ifEmpty { "The model stopped while reasoning, before writing an answer." }, failed = false, stopped = stopped)
         }
         return true
     }
