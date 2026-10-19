@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "expert_store.h"
 #include "gpu_offload.h"
+#include "steering.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 #include "jinja/parser.h"
@@ -947,6 +948,11 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                                               {"draft_p_min", draft_p_min}, {"sampling", "greedy only"}}
                                        : Json(nullptr)},
                    {"steering", false},
+                   {"steering_supported", true},
+                   {"model_sha256", options.value("model_sha256", Json(nullptr))},
+                   {"embedding_size", llama_model_n_embd(state->model.get())},
+                   {"decoder_blocks", llama_model_n_layer(state->model.get())},
+                   {"architecture", metadata(state->model.get(), "general.architecture")},
                    {"vision", projector.empty() ? Json(nullptr)
                                                 : Json{{"projector_bytes", std::filesystem::file_size(projector)},
                                                        {"image_max_tokens", image_max_tokens},
@@ -1057,6 +1063,80 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     }
     if (count + maximum > s.context_size) {
         throw ContextOverflowError(count, maximum, s.context_size);
+    }
+    Json steering_info = nullptr;
+    struct SteeringScope {
+        llama_context *context;
+        bool active = false;
+        ~SteeringScope() {
+            if (active) {
+                llama_set_adapter_cvec(context, nullptr, 0, 0, -1, -1);
+                llama_set_adapter_cvec_ablation(context, nullptr, 0, 0, 0.0f, -1, -1);
+            }
+        }
+    } steering_scope{s.context.get()};
+    if (request.contains("steering") && !request.at("steering").is_null()) {
+        const auto &options = request.at("steering");
+        const double strength = options.at("strength").get<double>();
+        if (!std::isfinite(strength) || strength < steering_minimum || strength > steering_maximum || strength == 0) {
+            throw std::invalid_argument("Steering strength must be nonzero and within [-1, 2]");
+        }
+        const auto vector = read_steering(options.at("path"), options.at("metadata"));
+        const std::string model_hash = request.at("model_sha256").get<std::string>();
+        if (vector.metadata.at("model_sha256") != model_hash ||
+            (s.info.at("model_sha256").is_null() || s.info.at("model_sha256") != model_hash) ||
+            vector.embedding != llama_model_n_embd(s.model.get()) ||
+            vector.layer >= llama_model_n_layer(s.model.get()) ||
+            (vector.blocks.size() > 1 && vector.blocks.back() != llama_model_n_layer(s.model.get()) - 1) ||
+            vector.metadata.at("architecture") != s.info.at("architecture")) {
+            throw std::invalid_argument("Steering vector is incompatible with the loaded model");
+        }
+        const int blocks = llama_model_n_layer(s.model.get());
+        steering_info = vector.metadata;
+        steering_info["strength"] = strength;
+        steering_scope.active = true;
+        if (strength > 0) {
+            // Toward the positive side: add the unnormalized mean difference at its own block, where `strength`
+            // 1 moves the residual stream by one mean negative-to-positive separation.
+            const size_t entries = static_cast<size_t>(blocks - 1) * vector.embedding;
+            if (entries > 4 * 1024 * 1024) throw std::invalid_argument("Steering workspace exceeds 16 MiB");
+            std::vector<float> dense(entries, 0.0f);
+            const float *direction = vector.row(vector.layer);
+            for (int i = 0; i < vector.embedding; ++i) {
+                const float value = static_cast<float>(direction[i] * strength);
+                if (!std::isfinite(value)) throw std::invalid_argument("Scaled steering vector overflows");
+                dense[static_cast<size_t>(vector.layer - 1) * vector.embedding + i] = value;
+            }
+            if (llama_set_adapter_cvec(s.context.get(), dense.data(), dense.size(), vector.embedding,
+                                       vector.layer, vector.layer) != 0) {
+                throw std::runtime_error("Cannot apply steering vector");
+            }
+            steering_info["mode"] = "addition";
+            steering_info["blocks"] = Json::array({vector.layer});
+            steering_info["workspace_bytes"] = dense.size() * sizeof(float);
+        } else {
+            // Away from the positive side: subtracting a fixed vector pushes residuals of every token, including
+            // ones with no component along it, outside their range. Projecting a unit direction out of each block
+            // output (its own direction when the vector has one per block) removes only the existing component;
+            // -1 removes it entirely. Block 0 has no direction and is left unchanged (a zero row).
+            std::vector<float> units(static_cast<size_t>(blocks) * vector.embedding, 0.0f);
+            for (int block = 1; block < blocks; ++block) {
+                const float *direction = vector.row(vector.blocks.size() == 1 ? vector.layer : block);
+                if (direction == nullptr) throw std::invalid_argument("Steering vector lacks a decoder block");
+                double squared = 0;
+                for (int i = 0; i < vector.embedding; ++i) squared += static_cast<double>(direction[i]) * direction[i];
+                const double norm = std::sqrt(squared);
+                for (int i = 0; i < vector.embedding; ++i)
+                    units[static_cast<size_t>(block) * vector.embedding + i] = static_cast<float>(direction[i] / norm);
+            }
+            if (llama_set_adapter_cvec_ablation(s.context.get(), units.data(), units.size(), vector.embedding,
+                                                static_cast<float>(-strength), 1, blocks - 1) != 0) {
+                throw std::runtime_error("Cannot apply steering ablation");
+            }
+            steering_info["mode"] = "ablation";
+            steering_info["blocks"] = Json::array({1, blocks - 1});
+            steering_info["workspace_bytes"] = units.size() * sizeof(float);
+        }
     }
     // Every image is encoded before the prompt is evaluated and the projector is released at once: its weights
     // and encoder buffers are never resident together with the prompt's expert prefetch or during decoding.
@@ -1206,7 +1286,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     };
     // The MTP head pairs every prompt token with a target hidden state; image embeddings have no token to pair,
     // so prompts with images decode without drafting.
-    const bool use_draft = s.draft && !has_media;
+    const bool use_draft = s.draft && !has_media && !steering_scope.active;
     const bool speculative = use_draft && temperature == 0 && count >= 2;
     if (use_draft) {
         llama_memory_clear(llama_get_memory(s.draft.get()), true);
@@ -1457,6 +1537,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     Json result = {
         {"schema_version", 1},
         {"configuration", s.info},
+        {"steering", steering_info},
         {"sampling",
          {{"temperature", temperature},
           {"top_k", temperature > 0 ? 20 : 0},

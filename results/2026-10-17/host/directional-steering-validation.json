@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-17",
+  "scope": "local Windows x86-64 functional/numerical checks",
+  "device_tested": false,
+  "behavioral_quality_evaluated": false,
+  "cases": {
+    "dense": {
+      "passed": true,
+      "streaming": false,
+      "mtp_fallback_checked": false,
+      "rejected_invalid_requests": 7,
+      "positive_max_logit_delta": 0.7441549301147461,
+      "sign_max_logit_delta": 1.1577343940734863,
+      "off_recovery_bitwise": true,
+      "cancellation_recovery": true,
+      "reload_recovery": true
+    },
+    "hybrid": {
+      "passed": true,
+      "streaming": false,
+      "rejected_invalid_requests": 6,
+      "positive_max_logit_delta": 9.3191499710083,
+      "sign_max_logit_delta": 15.705597877502441,
+      "off_recovery_bitwise": true,
+      "cancellation_recovery": true,
+      "reload_recovery": true
+    },
+    "moe-streamed": {
+      "passed": true,
+      "streaming": true,
+      "rejected_invalid_requests": 6,
+      "positive_max_logit_delta": 0.0013835430145263672,
+      "sign_max_logit_delta": 0.0020182132720947266,
+      "off_recovery_bitwise": true,
+      "cancellation_recovery": true,
+      "reload_recovery": true
+    },
+    "mtp-streamed": {
+      "passed": true,
+      "streaming": true,
+      "mtp_fallback_checked": true,
+      "rejected_invalid_requests": 6,
+      "positive_max_logit_delta": 0.0013835430145263672,
+      "sign_max_logit_delta": 0.0020182132720947266,
+      "off_recovery_bitwise": true,
+      "cancellation_recovery": true,
+      "reload_recovery": true
+    }
+  },
+  "actual_iq2m_vector_import_validation": "passed",
+  "corrupt_nonfinite_zero_and_incompatible_imports": "rejected",
+  "debug_apk_sha256": "6084ae13cc5049e2da11bfbdf6d61a3482c0e55bcc91fe266acbbf5dbe59cfcc",
+  "vulkan_packaged": true,
+  "debug_apk_built": true,
+  "instrumentation_apk_built": true,
+  "android_lint_errors": 0,
+  "device_instrumentation_executed": false,
+  "source_sha256": {
+    "native/engine.cpp": "15393a084c37e662e64799192dc9189f3908c7c5046020e63979cb92a4f152a7",
+    "native/steering.cpp": "cdc94dab2479ead6dcec73dcba036a737ef05a2b7184df03ea959fea170056b7",
+    "native/jni.cpp": "ed09527da1723b6ed562a4d9276ca1e7c012fd8bc5655e17f5def41ea52faec9",
+    "android/app/src/main/java/org/equity/app/Steering.kt": "d5891c855c64980cba85010b14de39b1cadb4cd47d1d7c885af736bec7b628cc",
+    "android/app/src/main/java/org/equity/app/EngineController.kt": "4dae8d06f560540bcddf2aff17db0ae687bfa176c0f6a1b73415df1674dd7fba",
+    "android/app/src/main/java/org/equity/app/Chats.kt": "4223b0449188c29864747042cc175ab7cfecae1067a71a746888c901d8a554b5"
+  }
+}

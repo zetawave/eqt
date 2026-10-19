@@ -13,6 +13,11 @@
         "file": "patches/llama.cpp/0002-ggml-cpu-exact-tiles-and-paired-experts.patch",
         "sha256": "fe11e97537d515d87a7ed0992b23eef70feffc84b94ed0c1575cc86520c060d3",
         "purpose": "ggml-cpu (AArch64 dotprod): 2x2 tiles for Q5_K/IQ2_XXS/IQ3_XXS bitwise equal to one-column dot products; MUL_MAT pairs columns for odd batches; MUL_MAT_ID pairs tokens routed to the same expert; tiled GEMM path enabled on AArch64 i8mm with a USMMLA microkernel; NEON simd_gemm for SVE builds; MUL_MAT_ID expert-address hook for slot-addressed expert caches; MUL_MAT_ID processes experts reported ready by an optional hook first, so an expert cache can overlap a pending read with the other experts' work (same results); an external compute hook lets the host run selected nodes elsewhere (Equity's GPU mode computes prompt-sized products and DeltaNet nodes on the GPU; unused unless installed)"
+      },
+      {
+        "file": "patches/llama.cpp/0003-cvec-directional-ablation.patch",
+        "sha256": "4b38c179b34359f69b02fd02163db9c08ab8e9bb2b19048112f5102b3af4f56d",
+        "purpose": "llama_set_adapter_cvec_ablation: optional in-graph directional ablation in the control-vector adapter (each selected block output h becomes h - s*d*(d^T h) for that block's unit direction d), used by Equity's negative steering strengths; unused unless set"
       }
     ]
   },

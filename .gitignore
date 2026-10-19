@@ -19,3 +19,5 @@
 /android/keystore/
 *.jks
 *.keystore
+/dir-steer
+/local-tools

@@ -47,6 +47,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.equity.app.BuildConfigInfo
 import org.equity.app.EngineState
+import org.equity.app.EngineController
+import org.equity.app.ChatStore
+import org.equity.app.Phase
 import org.equity.app.SettingsStore
 import org.json.JSONObject
 import java.util.Locale
@@ -59,10 +62,14 @@ private val Lengths = listOf(128, 256, 512, 1024, 2048)
 fun SettingsScreen(engine: EngineState) {
     val context = LocalContext.current
     val settings by SettingsStore.state.collectAsStateWithLifecycle()
+    val chats by ChatStore.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var licenses by remember { mutableStateOf<List<String>?>(null) }
     var licenseText by remember { mutableStateOf<Pair<String, String>?>(null) }
     var exported by remember { mutableStateOf<String?>(null) }
+    val steeringImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) EngineController.importSteering(context, uris)
+    }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         val text = engine.lastResult
         if (uri != null && text != null) scope.launch {
@@ -104,6 +111,30 @@ fun SettingsScreen(engine: EngineState) {
                 valueRange = 0f..1.2f,
                 steps = 11,
             )
+        }
+
+        Section("Directional steering", "A separate vector for the exact model; enabled per chat.") {
+            SteeringControls(engine, chats.steering)
+            Text(engine.steeringNote ?: if (engine.steeringProfile != null) "Compatible vector imported for the loaded model."
+                else "Load a model to see its compatible vector.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(enabled = !engine.busy, onClick = { steeringImporter.launch(arrayOf("*/*")) }) {
+                Text("Import vector + JSON")
+            }
+            Text("Select the generated vector .gguf and its matching .gguf.json together. Model weights and datasets are not needed.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            engine.steeringImportMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            if (engine.steeringOperation) {
+                Text(engine.status, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { EngineController.stop() }) { Text("Cancel") }
+            }
+            if (engine.phase == Phase.Ready && engine.modelSha256 == null) {
+                OutlinedButton(onClick = { EngineController.verifySteeringModel(context) }) { Text("Verify local model") }
+                Text("Reads and reloads the local model once to check its exact fingerprint.", style = MaterialTheme.typography.bodySmall)
+            }
+            if (engine.steeringProfile != null) {
+                TextButton(enabled = !engine.busy, onClick = { EngineController.removeSteering(context) }) { Text("Remove vector") }
+            }
         }
 
         Section("Performance", "Applies the next time a model is loaded.") {

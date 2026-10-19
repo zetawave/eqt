@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Menu
@@ -107,6 +108,7 @@ import org.equity.app.EngineController
 import org.equity.app.EngineState
 import org.equity.app.Message
 import org.equity.app.Phase
+import org.equity.app.hasVisibleContent
 import java.io.File
 
 private val Suggestions = listOf(
@@ -127,6 +129,7 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
     val pending = remember { mutableStateListOf<Attachment>() }
     var importing by remember { mutableIntStateOf(0) }
     var viewing by remember { mutableStateOf<File?>(null) }
+    var configuring by remember { mutableStateOf(false) }
     val vision by rememberUpdatedState(engine.vision)
     val chat = chats.current
     val messages = chat?.messages.orEmpty()
@@ -217,7 +220,9 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
                 ) {
                     items(messages, key = { it.id }) { message ->
                         if (message.fromUser) UserMessage(chat!!.id, message, onView = { viewing = it })
-                        else AssistantMessage(message)
+                        else AssistantMessage(message, engine.generation?.takeIf {
+                            it.chatId == chats.currentId && it.answerId == message.id
+                        }?.tokens)
                     }
                 }
             }
@@ -236,12 +241,15 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
             onPhotos = { photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             onCamera = takePhoto,
             onFile = { documents.launch(arrayOf("*/*")) },
+            onConfigure = { configuring = true },
+            steeringEnabled = chats.steering.enabled,
             onView = { viewing = it },
             onSend = { send(input) },
             onStop = { EngineController.stop() },
         )
     }
     viewing?.let { ImageViewer(it) { viewing = null } }
+    if (configuring) ChatConfigurationDialog(engine, chats.steering) { configuring = false }
 }
 
 @Composable
@@ -377,15 +385,23 @@ private fun UserMessage(chatId: String, message: Message, onView: (File) -> Unit
 }
 
 @Composable
-private fun AssistantMessage(message: Message) {
+internal fun AssistantMessage(message: Message, generatedTokens: Int? = null) {
     val colors = MaterialTheme.colorScheme
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxWidth().padding(end = 12.dp)) {
-        if (message.streaming && message.text.isEmpty()) {
+        if (!message.text.hasVisibleContent()) {
             // Static: an animation here would compete with the prompt's evaluation for the big cores.
-            Text("Reading your message…", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
+            val sampled = (generatedTokens ?: 0) > 0 || message.text.isNotEmpty()
+            Text(when {
+                !message.streaming -> "The model finished without producing visible text."
+                sampled -> "Generating tokens; no visible text yet"
+                else -> "Reading your message…"
+            }, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp))
+            if (message.streaming && generatedTokens != null && generatedTokens > 0) {
+                Text("$generatedTokens tokens", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+            }
         } else {
             SelectionContainer {
                 MarkdownText(
@@ -422,6 +438,8 @@ private fun Composer(
     onPhotos: () -> Unit,
     onCamera: () -> Unit,
     onFile: () -> Unit,
+    onConfigure: () -> Unit,
+    steeringEnabled: Boolean,
     onView: (File) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -482,6 +500,10 @@ private fun Composer(
                                 onClick = { menu = false; onFile() },
                             )
                         }
+                    }
+                    IconButton(onClick = onConfigure, modifier = Modifier.padding(bottom = 2.dp)) {
+                        Icon(Icons.Outlined.Tune, contentDescription = "Chat configuration",
+                            tint = if (steeringEnabled) colors.primary else colors.onSurfaceVariant)
                     }
                     TextField(
                         value = value,

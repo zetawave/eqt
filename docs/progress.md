@@ -32,7 +32,12 @@
 4. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
 5. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
 
-**Features requested and not started:** additional per-chat configuration.
+## Chat configuration and blank output: 2026-10-17
+
+- Read-only inspection of a reported blank answer found 2,062 line-feed characters and zero visible characters; its saved stats reported 2,048 generated tokens. The observed cursor-only display was consistent with whitespace-only model output. The original response was preserved and its prompt was not replayed.
+- Streaming chat and notifications now distinguish token generation without visible text, expose the live token count, and explain a completed blank response. Whitespace/control/format-only content does not leave a lone cursor. Native generation, model weights and sampling are unchanged.
+- The composer has a Chat configuration icon immediately beside Attach. One modal holds the per-chat configuration, with explicit Save/Cancel and read-only controls during active operations. Settings opens the same form. The previous header row and nested Adjust dialog were removed.
+- Debug app/instrumentation builds and Android lint passed (0 errors). Galaxy accessibility/UI checks passed waiting state, blank streaming status, live count updates, visible Unicode text updates, blank completion, notification consistency, composer icon placement and the single modal. These use synthetic benign UI messages and no model inference or chat/settings writes. The app was updated in place; the existing blank-response chat was reopened for visual verification. Record: `results/2026-10-17/galaxy/chat-ui-validation.json`.
 
 ## Attachment context recovery: 2026-10-17
 

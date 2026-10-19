@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-19",
+  "kind": "local device functional validation",
+  "device": "Galaxy S24+ (SM-S926B, Exynos 2400)",
+  "build": "debug APK with Vulkan, in-place update (no uninstall, no data clear)",
+  "cases": {
+    "steering_synthetic": {
+      "model": "Qwen3-0.6B catalog fixture",
+      "vector": "dense synthetic one-tensor fixture",
+      "strength": -0.5,
+      "mode_checked": "ablation",
+      "passed": true
+    },
+    "chat_ui": {
+      "passed": true
+    },
+    "steering_real_cpu": {
+      "passed": true,
+      "vector_sha256": "57ddf39f58c6f87b6a0c999aace49907213d1af67648bac29b8920ac7fe6e411",
+      "layer_count": 39,
+      "on_strength": 1,
+      "on_mode": "addition",
+      "cancelled_strength": -0.5,
+      "cancelled_mode": "ablation",
+      "prompt_tokens": 297,
+      "generated_tokens": 8,
+      "off_tokens_equal": true
+    },
+    "steering_real_gpu": {
+      "passed": true,
+      "vector_sha256": "57ddf39f58c6f87b6a0c999aace49907213d1af67648bac29b8920ac7fe6e411",
+      "on_mode": "addition",
+      "cancelled_strength": -0.5,
+      "off_tokens_equal": true,
+      "gpu_offload": {
+        "dense_ops": 390,
+        "routed_ops": 0,
+        "node_ops": 60,
+        "failed": false,
+        "error": null
+      }
+    }
+  },
+  "notes": [
+    "The first CPU attempt was refused by the app's memory admission (3,297 MiB available, 3,430 MiB required) while other apps were cached; no app was closed, and the retry passed with about 3.9 GB available.",
+    "The real IQ2_M instruction-contrast package remains associated with the installed IQ2_M model (keep_vector).",
+    "Functional only: 8 generated tokens on one benign 297-token prompt; no on-device behavioral, quality, latency or energy measurement."
+  ]
+}

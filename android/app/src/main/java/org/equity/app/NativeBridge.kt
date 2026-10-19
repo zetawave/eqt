@@ -11,6 +11,7 @@ object NativeBridge {
     external fun prepare()
     external fun cancel()
     external fun unload()
+    external fun inspectSteering(path: ByteArray, metadata: ByteArray): ByteArray
     external fun load(path: ByteArray, options: ByteArray, callback: ByteSink): ByteArray
     external fun generate(request: ByteArray, callback: ByteSink): ByteArray
 }

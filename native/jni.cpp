@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "steering.h"
 #include <jni.h>
 
 namespace {
@@ -49,6 +50,15 @@ extern "C" JNIEXPORT void JNICALL Java_org_equity_app_NativeBridge_cancel(JNIEnv
 }
 extern "C" JNIEXPORT void JNICALL Java_org_equity_app_NativeBridge_unload(JNIEnv *, jobject) {
     runtime().unload();
+}
+extern "C" JNIEXPORT jbyteArray JNICALL Java_org_equity_app_NativeBridge_inspectSteering(
+    JNIEnv *env, jobject, jbyteArray path, jbyteArray metadata) {
+    try {
+        return bytes(env, eqt::read_steering(utf8(env, path), eqt::Json::parse(utf8(env, metadata))).metadata.dump());
+    } catch (const std::exception &e) {
+        if (!env->ExceptionCheck()) error(env, e);
+        return nullptr;
+    }
 }
 extern "C" JNIEXPORT jbyteArray JNICALL Java_org_equity_app_NativeBridge_load(JNIEnv *env, jobject,
                                                                               jbyteArray path,

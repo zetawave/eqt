@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-17",
+  "scope": "Galaxy S24+ Exynos 2400 Android 16; in-app functional instrumentation",
+  "passed": true,
+  "final_debug_apk_sha256": "28346b6aecc09d673d599537f5a04eba41dabe6667de17a3ffa8903c16d44ba8",
+  "final_instrumentation_apk_sha256": "c87bd0c84cf73d17ceb0908115e9d2e63f9d78929749888c51b7f83f809d3267",
+  "cases": {
+    "synthetic_dense_import_chat": {
+      "passed": true
+    },
+    "iq2m_cpu": {
+      "passed": true,
+      "model_sha256": "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
+      "steering": {
+        "model_sha256": "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
+        "vector_sha256": "bf1187517db7481d09ac06446bcb8387c3515903c156d417713f76f977c47ac2",
+        "architecture": "qwen35moe",
+        "layer_index": 20,
+        "embedding_size": 2048,
+        "tensor_name": "direction.20",
+        "direction": "refusal_minus_target",
+        "normalized": false,
+        "l2_norm": 2.3633568156161378,
+        "file_bytes": 8544,
+        "strength": 1,
+        "workspace_bytes": 319488
+      },
+      "gpu": false,
+      "gpu_offload": null,
+      "prompt_tokens": 297,
+      "generated_tokens": 8,
+      "off_tokens_equal": true,
+      "cancelled_strength": -0.5,
+      "chat_persistence": true,
+      "evaluation": "functional only",
+      "debug_apk_sha256": "6084ae13cc5049e2da11bfbdf6d61a3482c0e55bcc91fe266acbbf5dbe59cfcc"
+    },
+    "iq2m_gpu_prompt": {
+      "passed": true,
+      "model_sha256": "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
+      "steering": {
+        "model_sha256": "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
+        "vector_sha256": "bf1187517db7481d09ac06446bcb8387c3515903c156d417713f76f977c47ac2",
+        "architecture": "qwen35moe",
+        "layer_index": 20,
+        "embedding_size": 2048,
+        "tensor_name": "direction.20",
+        "direction": "refusal_minus_target",
+        "normalized": false,
+        "l2_norm": 2.3633568156161378,
+        "file_bytes": 8544,
+        "strength": 1,
+        "workspace_bytes": 319488
+      },
+      "gpu": true,
+      "gpu_offload": {
+        "dense_ops": 390,
+        "routed_ops": 0,
+        "node_ops": 60,
+        "node_gpu_ms": 147.47542099999998,
+        "rows": 115830,
+        "experts_staged": 0,
+        "weight_bytes": 1109090304,
+        "input_bytes": 1771261440,
+        "output_bytes": 1309034400,
+        "stage_ms": 388.89844100000005,
+        "gpu_ms": 1564.7641660000008,
+        "readback_ms": 176.8249260000001,
+        "peak_staging_bytes": 39845888,
+        "failed": false,
+        "error": null
+      },
+      "prompt_tokens": 297,
+      "generated_tokens": 8,
+      "off_tokens_equal": true,
+      "cancelled_strength": -0.5,
+      "chat_persistence": true,
+      "evaluation": "functional only",
+      "debug_apk_sha256": "28346b6aecc09d673d599537f5a04eba41dabe6667de17a3ffa8903c16d44ba8"
+    },
+    "synthetic_context_growth": {
+      "passed": true,
+      "initial_context": 128,
+      "expanded_context": 2048,
+      "prompt_tokens": 297,
+      "strength": -0.5,
+      "steering_preserved": true,
+      "off_after_expansion": true,
+      "evaluation": "synthetic direction; functional only",
+      "debug_apk_sha256": "28346b6aecc09d673d599537f5a04eba41dabe6667de17a3ffa8903c16d44ba8"
+    }
+  },
+  "retained_iq2m_association": {
+    "vector_sha256": "bf1187517db7481d09ac06446bcb8387c3515903c156d417713f76f977c47ac2"
+  },
+  "android_lint_errors": 0,
+  "model_weights_and_existing_chats_preserved": true,
+  "settings_restored_after_tests": true,
+  "behavioral_quality_evaluated": false,
+  "sustained_performance_evaluated": false,
+  "on_device_bitwise_logits_compared": false,
+  "android_picker_ui_exercised": false,
+  "q4km_steering_package_available": false,
+  "notes": [
+    "Real-package checks keep the original model fingerprint; synthetic fixture metadata is rebound only to the installed small test model.",
+    "The real-vector ON request uses +1; cancellation uses -0.5. OFF recovery compares eight greedy tokens on the same benign 297-token prompt.",
+    "The phone reported Dozing during the slow initial GPU baseline. Power, latency and throughput were not controlled or evaluated.",
+    "GPU offload covers dense products and hybrid nodes; this prompt does not exercise routed-expert GPU operations or images.",
+    "Optimal steering layer, sign, strength and behavioral quality remain unevaluated; Q4_K_M needs its own package."
+  ],
+  "source_sha256": {
+    "native/engine.cpp": "15393a084c37e662e64799192dc9189f3908c7c5046020e63979cb92a4f152a7",
+    "native/steering.cpp": "cdc94dab2479ead6dcec73dcba036a737ef05a2b7184df03ea959fea170056b7",
+    "native/jni.cpp": "ed09527da1723b6ed562a4d9276ca1e7c012fd8bc5655e17f5def41ea52faec9",
+    "android/app/src/main/java/org/equity/app/Steering.kt": "d5891c855c64980cba85010b14de39b1cadb4cd47d1d7c885af736bec7b628cc",
+    "android/app/src/main/java/org/equity/app/EngineController.kt": "1a43392e0c1fbada2cd89fdffbb314971ee076b9396a776e5fd5e93be8eebe84",
+    "android/app/src/androidTest/java/org/equity/app/NativeSmokeTest.kt": "8bda2db480e60069e70e54f7655be6d3be77bf534d7df4e19e09b6edc6a872cd"
+  }
+}

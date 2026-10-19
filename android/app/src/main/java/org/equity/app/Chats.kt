@@ -33,7 +33,12 @@ data class Message(
     val failed: Boolean = false,
     /** Stopped before the end; shown, but the turn is not sent back to the model as context. */
     val stopped: Boolean = false,
+    val steering: String? = null,
 )
+
+internal fun String.hasVisibleContent(): Boolean = any {
+    !it.isWhitespace() && !Character.isISOControl(it) && Character.getType(it) != Character.FORMAT.toInt()
+}
 
 data class Chat(
     val id: String,
@@ -41,6 +46,7 @@ data class Chat(
     val createdAt: Long,
     val updatedAt: Long,
     val messages: List<Message>,
+    val steering: SteeringOptions = SteeringOptions(),
 ) {
     val nextMessageId get() = (messages.maxOfOrNull { it.id } ?: 0L) + 1
 }
@@ -54,8 +60,10 @@ data class ChatsState(
     val currentId: String? = null,
     /** The current chat and the chat being answered, if different. */
     val loaded: Map<String, Chat> = emptyMap(),
+    val draftSteering: SteeringOptions = SteeringOptions(),
 ) {
     val current: Chat? get() = currentId?.let { loaded[it] }
+    val steering get() = current?.steering ?: draftSteering
 }
 
 /**
@@ -80,7 +88,14 @@ object ChatStore {
     fun media(chatId: String) = File(directory(chatId), "media")
     fun file(chatId: String, attachment: Attachment) = File(media(chatId), attachment.file)
 
-    fun newChat() = flow.update { it.copy(currentId = null, loaded = it.loaded.filterKeys(::busy)) }
+    fun newChat() = flow.update { it.copy(currentId = null, loaded = it.loaded.filterKeys(::busy), draftSteering = SteeringOptions()) }
+
+    fun setSteering(options: SteeringOptions) {
+        require(SteeringOptions.valid(options.strength)) { "Strength must be nonzero within [-1, 2]" }
+        val current = flow.value.current
+        if (current == null) flow.update { it.copy(draftSteering = options) }
+        else if (!busy(current.id)) put(current.copy(steering = options), persist = true)
+    }
 
     fun open(id: String) {
         val chat = flow.value.loaded[id] ?: read(id) ?: return
@@ -102,7 +117,7 @@ object ChatStore {
     /** Appends a user message and its pending answer, creating the chat when [chatId] is null. */
     fun startTurn(chatId: String?, text: String, attachments: List<Attachment>, now: Long = System.currentTimeMillis()): Pair<Chat, Long> {
         val existing = chatId?.let { flow.value.loaded[it] ?: read(it) }
-        val chat = existing ?: Chat(UUID.randomUUID().toString(), title(text, attachments), now, now, emptyList())
+        val chat = existing ?: Chat(UUID.randomUUID().toString(), title(text, attachments), now, now, emptyList(), flow.value.draftSteering)
         val userId = chat.nextMessageId
         // Attachments move from staging into the chat before the request refers to them.
         val media = media(chat.id).apply { mkdirs() }
@@ -202,9 +217,10 @@ object ChatStore {
             }
             messages.put(JSONObject().put("id", m.id).put("user", m.fromUser).put("text", m.text)
                 .put("attachments", attachments).put("streaming", m.streaming).put("stats", m.stats ?: JSONObject.NULL)
-                .put("failed", m.failed).put("stopped", m.stopped))
+                .put("failed", m.failed).put("stopped", m.stopped).put("steering", m.steering ?: JSONObject.NULL))
         }
         return JSONObject().put("version", 1).put("id", chat.id).put("title", chat.title)
+            .put("steering_enabled", chat.steering.enabled).put("steering_strength", chat.steering.strength.toDouble())
             .put("created", chat.createdAt).put("updated", chat.updatedAt).put("messages", messages)
     }
 
@@ -222,8 +238,13 @@ object ChatStore {
                 },
                 streaming = m.optBoolean("streaming"), stats = if (m.isNull("stats")) null else m.getString("stats"),
                 failed = m.optBoolean("failed"), stopped = m.optBoolean("stopped"),
+                steering = if (m.isNull("steering")) null else m.getString("steering"),
             )
         }
-        return Chat(json.getString("id"), json.getString("title"), json.getLong("created"), json.getLong("updated"), messages)
+        val strength = json.optDouble("steering_strength", 1.0).toFloat()
+        // Strengths saved under the former [-10, 10] scale are not reinterpreted: such chats reopen with steering off.
+        val valid = SteeringOptions.valid(strength)
+        return Chat(json.getString("id"), json.getString("title"), json.getLong("created"), json.getLong("updated"), messages,
+            SteeringOptions(valid && json.optBoolean("steering_enabled"), if (valid) strength else 1f))
     }
 }

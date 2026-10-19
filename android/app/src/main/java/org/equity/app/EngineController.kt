@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.security.MessageDigest
@@ -67,7 +68,8 @@ object SettingsStore {
 enum class Phase { Empty, Loading, Ready, Generating, Unloading }
 
 /** The answer being written: its chat, its message and how many tokens have arrived. */
-data class Generation(val chatId: String, val answerId: Long, val startedAt: Long, val tokens: Int = 0)
+data class Generation(val chatId: String, val answerId: Long, val startedAt: Long, val tokens: Int = 0,
+                      val hasVisibleText: Boolean = false)
 
 data class EngineState(
     val phase: Phase = Phase.Empty,
@@ -84,8 +86,16 @@ data class EngineState(
     val lastResult: String? = null,
     val lastSpeed: Double? = null,
     val error: String? = null,
+    val modelSha256: String? = null,
+    val architecture: String? = null,
+    val embeddingSize: Int? = null,
+    val decoderBlocks: Int? = null,
+    val steeringProfile: SteeringProfile? = null,
+    val steeringNote: String? = null,
+    val steeringImportMessage: String? = null,
+    val steeringOperation: Boolean = false,
 ) {
-    val busy get() = phase == Phase.Loading || phase == Phase.Generating || phase == Phase.Unloading
+    val busy get() = steeringOperation || phase == Phase.Loading || phase == Phase.Generating || phase == Phase.Unloading
 }
 
 /** Owns the single native engine. Native calls run on one worker thread; only cancellation crosses threads. */
@@ -146,6 +156,108 @@ object EngineController {
 
     fun clearError(message: String? = null) = update {
         if (message == null || it.error == message) it.copy(error = null) else it
+    }
+
+    private fun refreshSteering(context: Context) {
+        val hash = modelHash
+        if (hash == null) {
+            update { it.copy(modelSha256 = null, steeringProfile = null,
+                steeringNote = if (loadedSource == null) "Load the matching model to use its vector." else "Verify this model to find compatible vectors.") }
+            return
+        }
+        try {
+            val profile = SteeringFiles.read(context, hash)
+            val engine = flow.value
+            require(profile == null || (profile.architecture == engine.architecture && profile.embedding == engine.embeddingSize &&
+                profile.layer < (engine.decoderBlocks ?: 0))) { "Imported steering dimensions do not match this model" }
+            update { it.copy(modelSha256 = hash, steeringProfile = profile,
+                steeringNote = if (profile == null) "No vector imported for this model." else null) }
+        } catch (error: Exception) {
+            update { it.copy(modelSha256 = hash, steeringProfile = null, steeringNote = "Steering unavailable: ${error.message}") }
+        }
+    }
+
+    fun importSteering(context: Context, uris: List<Uri>) {
+        val previous = flow.value
+        if (previous.busy) return
+        val app = context.applicationContext
+        update { it.copy(phase = Phase.Loading, loadPercent = null, status = "Importing steering vector…", error = null,
+            steeringImportMessage = null, steeringOperation = true) }
+        task {
+            try {
+                val imported = SteeringFiles.importVector(app, uris) { cancelled }
+                refreshSteering(app)
+                val name = Catalog.models.firstOrNull { it.sha256 == imported.modelHash }?.name
+                update { it.copy(steeringImportMessage = if (name != null) "Vector imported for $name."
+                    else "Vector imported. Load the matching model to use it.") }
+            } catch (error: Exception) {
+                if (!cancelled) update { it.copy(error = error.message ?: "Steering import failed") }
+            } finally {
+                finishSteeringOperation(previous)
+            }
+        }
+    }
+
+    fun removeSteering(context: Context) {
+        val previous = flow.value
+        if (previous.busy) return
+        val profile = previous.steeringProfile ?: return
+        update { it.copy(phase = Phase.Loading, steeringOperation = true, status = "Removing steering vector…") }
+        task {
+            try {
+                SteeringFiles.remove(context.applicationContext, profile)
+                refreshSteering(context.applicationContext)
+            } finally {
+                finishSteeringOperation(previous)
+            }
+        }
+    }
+
+    private fun finishSteeringOperation(previous: EngineState) = update {
+        val next = if (it.phase == Phase.Loading) it.copy(phase = previous.phase, status = previous.status) else it
+        next.copy(loadPercent = null, steeringOperation = false)
+    }
+
+    /** Explicitly hashes a large picker model once; catalog models already have a verified fingerprint. */
+    fun verifySteeringModel(context: Context) {
+        if (flow.value.phase != Phase.Ready) return
+        val source = loadedSource ?: return
+        update { it.copy(phase = Phase.Loading, loadPercent = null, status = "Verifying model for steering…", error = null,
+            steeringOperation = true) }
+        task {
+            try {
+                val before = Os.stat(source.path)
+                val digest = MessageDigest.getInstance("SHA-256")
+                File(source.path).inputStream().use { input ->
+                    val buffer = ByteArray(1024 * 1024)
+                    var total = 0L
+                    while (true) {
+                        check(!cancelled) { "Model verification cancelled" }
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        digest.update(buffer, 0, count)
+                        total += count
+                    }
+                    require(total == source.fileBytes) { "Model size changed" }
+                }
+                val after = Os.stat(source.path)
+                require(before.st_size == after.st_size && before.st_mtime == after.st_mtime) { "Model changed during verification" }
+                val hash = digest.digest().joinToString("") { "%02x".format(it) }
+                // Reload shared/resident tensors too, so the fingerprint describes the weights actually in use.
+                guardLoad {
+                    loadSource(context.applicationContext, source.copy(hash = hash))
+                    val loaded = Os.stat(source.path)
+                    require(loaded.st_size == before.st_size && loaded.st_mtime == before.st_mtime) {
+                        "Model changed while reloading verified weights"
+                    }
+                }
+            } catch (error: Exception) {
+                if (!cancelled) update { it.copy(error = error.message ?: "Model verification failed") }
+            } finally {
+                update { it.copy(phase = if (loadedSource == null) Phase.Empty else Phase.Ready, loadPercent = null,
+                    status = if (loadedSource == null) "No model loaded" else "Ready", steeringOperation = false) }
+            }
+        }
     }
 
     /** Loads a downloaded catalog model with options tuned for it. */
@@ -215,7 +327,8 @@ object EngineController {
     private fun startLoad(context: Context, id: String?, name: String) {
         update {
             it.copy(phase = Phase.Loading, modelId = id, modelName = name, loadPercent = null, error = null,
-                status = "Preparing $name…", configuration = null, vision = false, lastModelId = id ?: it.lastModelId)
+                status = "Preparing $name…", configuration = null, vision = false, lastModelId = id ?: it.lastModelId,
+                modelSha256 = null, steeringProfile = null, steeringNote = null)
         }
         InferenceService.start(context)
     }
@@ -295,10 +408,12 @@ object EngineController {
             else runCatching { options(source.visionMiB).put("mmproj", path) }.getOrNull()
         }
         val options = withVision ?: options(0)
+        source.hash?.let { options.put("model_sha256", it) }
         val note = if (source.projectorPath != null && withVision == null) "images off: not enough free memory" else null
         loadNative(source.path, options, source.hash, note, growing)
         loadedSource = source.copy(settings = source.settings.copy(gpu = options.optBoolean("gpu")),
             projectorPath = source.projectorPath.takeIf { withVision != null })
+        refreshSteering(context)
     }
 
     private fun loadNative(path: String, options: JSONObject, hash: String?, note: String?, growing: Boolean) {
@@ -343,6 +458,8 @@ object EngineController {
             it.copy(phase = if (growing) Phase.Generating else Phase.Ready, loadPercent = null,
                 lastResult = null, lastSpeed = null, configuration = configuration,
                 status = if (growing) "Reading your message…" else "Ready", vision = vision)
+                .copy(modelSha256 = hash, architecture = info.getString("architecture"),
+                    embeddingSize = info.getInt("embedding_size"), decoderBlocks = info.getInt("decoder_blocks"))
         }
     }
 
@@ -380,6 +497,7 @@ object EngineController {
         descriptor = null
         loadedSource = null
         trainedContext = null
+        modelHash = null
     }
 
     fun unload() {
@@ -417,8 +535,13 @@ object EngineController {
     fun send(context: Context, chatId: String?, prompt: String, attachments: List<Attachment>): Boolean {
         val text = prompt.trim()
         val engine = flow.value
-        if (engine.phase != Phase.Ready || (text.isEmpty() && attachments.isEmpty())) return false
+        if (engine.phase != Phase.Ready || engine.steeringOperation || (text.isEmpty() && attachments.isEmpty())) return false
         if (attachments.any { it.kind == AttachmentKind.Image } && !engine.vision) return false
+        val steering = ChatStore.state.value.steering
+        if (steering.enabled && (engine.steeringProfile == null || engine.modelSha256 == null)) {
+            update { it.copy(error = "Import a compatible steering vector or turn steering off for this chat.") }
+            return false
+        }
         val app = context.applicationContext
         val settings = SettingsStore.state.value
         val (chat, answerId) = ChatStore.startTurn(chatId, text, attachments)
@@ -441,6 +564,10 @@ object EngineController {
                 request.put("messages", messages).put("max_tokens", settings.maxTokens)
                     .put("temperature", settings.temperature.toDouble()).put("seed", 42).put("thinking", false)
                     .put("ignore_eos", false)
+                if (steering.enabled) {
+                    request.put("model_sha256", engine.modelSha256)
+                        .put("steering", requireNotNull(engine.steeringProfile).request(app, steering.strength))
+                }
                 generateWithContext(app, request, ByteSink { chunk ->
                     output.write(chunk)
                     tokens++
@@ -451,8 +578,10 @@ object EngineController {
                         val save = now - lastSave >= 3000
                         if (save) lastSave = now
                         val partial = decodeComplete(output.toByteArray())
+                        val visible = partial.hasVisibleContent()
                         ChatStore.updateMessage(chat.id, answerId, save) { it.copy(text = partial) }
-                        update { s -> s.copy(status = "Writing…", generation = s.generation?.copy(tokens = tokens)) }
+                        update { s -> s.copy(status = if (visible) "Writing…" else "Generating tokens; no visible text yet",
+                            generation = s.generation?.copy(tokens = tokens, hasVisibleText = visible)) }
                     }
                 })
             } catch (error: Exception) {
@@ -484,9 +613,11 @@ object EngineController {
                 if (!json.isNull("ttft_ms")) append(" · first token %.1f s".format(Locale.US, json.getDouble("ttft_ms") / 1000))
                 if (termination == "cancelled") append(" · stopped")
                 if (termination == "length") append(" · length limit")
+                if (!json.isNull("steering")) append(" · steering %+.2f".format(Locale.US, steering.strength))
             }
             val stopped = termination == "cancelled"
-            ChatStore.updateMessage(chat.id, answerId, true) { it.copy(text = answer, streaming = false, stats = stats, stopped = stopped) }
+            ChatStore.updateMessage(chat.id, answerId, true) { it.copy(text = answer, streaming = false, stats = stats, stopped = stopped,
+                steering = json.optJSONObject("steering")?.toString()) }
             update { s ->
                 s.copy(phase = Phase.Ready, status = "Ready", lastResult = json.toString(2), lastSpeed = speed, generation = null)
             }

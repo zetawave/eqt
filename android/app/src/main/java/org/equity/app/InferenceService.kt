@@ -133,8 +133,9 @@ object Notifications {
                 .setProgress(100, state.loadPercent ?: 0, state.loadPercent == null)
             generation != null && generation.tokens > 0 -> {
                 val seconds = (SystemClock.elapsedRealtime() - generation.startedAt) / 1000.0
-                builder.setContentTitle("Equity is writing an answer")
-                    .setContentText("%d tokens · %s".format(Locale.US, generation.tokens, elapsed(seconds)))
+                builder.setContentTitle(if (generation.hasVisibleText) "Equity is writing an answer" else "Equity is generating tokens")
+                    .setContentText("%d tokens · %s%s".format(Locale.US, generation.tokens,
+                        if (generation.hasVisibleText) "" else "no visible text yet · ", elapsed(seconds)))
                     .setProgress(0, 0, true)
             }
             else -> builder.setContentTitle("Equity is reading your message").setContentText(state.status).setProgress(0, 0, true)
@@ -147,13 +148,15 @@ object Notifications {
         val heading = when {
             failed -> "Answer failed"
             stopped -> "Answer stopped"
+            !text.hasVisibleContent() -> "No visible answer"
             else -> "Answer ready"
         }
+        val preview = if (text.hasVisibleContent()) text else "The model finished without producing visible text."
         val notification = NotificationCompat.Builder(context, CHANNEL_FINISHED)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("$heading · $title")
-            .setContentText(text.take(200))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text.take(1000)))
+            .setContentText(preview.take(200))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(preview.take(1000)))
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setContentIntent(openApp(context, chatId))

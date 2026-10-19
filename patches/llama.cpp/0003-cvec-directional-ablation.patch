@@ -1,0 +1,241 @@
+diff --git a/include/llama.h b/include/llama.h
+index 9bca8ee..16ca931 100644
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -743,6 +743,20 @@ extern "C" {
+                          int32_t   il_start,
+                          int32_t   il_end);
+ 
++    // Directional ablation: subtract scale * d_il * (d_il^T h) from every token's output h of each decoder block
++    // il in [il_start, il_end] (both inclusive). data holds one direction of n_embd floats per block, starting
++    // from block 0 (unlike llama_set_adapter_cvec); each should have unit L2 norm, or be zero to leave its block
++    // unchanged. scale 1 removes the component along d_il. Applied before any control vector of the same block.
++    // Blocks beyond len / n_embd are not ablated. Pass NULL to disable. The directions are copied.
++    LLAMA_API int32_t llama_set_adapter_cvec_ablation(
++            struct llama_context * ctx,
++                     const float * data,
++                          size_t   len,
++                         int32_t   n_embd,
++                           float   scale,
++                         int32_t   il_start,
++                         int32_t   il_end);
++
+     //
+     // Memory
+     //
+diff --git a/src/llama-adapter.cpp b/src/llama-adapter.cpp
+index df3654d..3fe7b29 100644
+--- a/src/llama-adapter.cpp
++++ b/src/llama-adapter.cpp
+@@ -22,6 +22,15 @@ ggml_tensor * llama_adapter_cvec::tensor_for(int il) const {
+ }
+ 
+ ggml_tensor * llama_adapter_cvec::apply_to(ggml_context * ctx, ggml_tensor * cur, int  il) const {
++    if (il >= 0 && il >= ablation_start && il <= ablation_end && il < ablation_layers) {
++        // cur -= scale * d d^T cur for every token row: the outer product of d [n_embd, 1] with the scaled
++        // projections flattened to [n_rows, 1] is [n_embd, n_rows], reshaped back to cur's shape.
++        ggml_tensor * dir  = ablation[il];
++        ggml_tensor * proj = ggml_scale(ctx, ggml_mul_mat(ctx, dir, cur), ablation_scale);
++        proj = ggml_reshape_2d(ctx, proj, ggml_nelements(proj), 1);
++        cur  = ggml_sub(ctx, cur, ggml_reshape(ctx, ggml_out_prod(ctx, dir, proj), cur));
++    }
++
+     ggml_tensor * layer_dir = tensor_for(il);
+     if (layer_dir != nullptr) {
+         cur = ggml_add(ctx, cur, layer_dir);
+@@ -135,6 +144,88 @@ bool llama_adapter_cvec::apply(
+     return true;
+ }
+ 
++bool llama_adapter_cvec::init_ablation(const llama_model & model) {
++    const auto & hparams = model.hparams;
++
++    GGML_ASSERT(ablation.empty());
++
++    std::map<ggml_backend_buffer_type_t, ggml_context *> ctx_map;
++    ablation.reserve(hparams.n_layer());
++    for (size_t il = 0; il < hparams.n_layer(); il++) {
++        ggml_backend_buffer_type_t buft = model.select_buft(il);
++        auto it = ctx_map.find(buft);
++        if (it == ctx_map.end()) {
++            ggml_init_params params = {
++                /*.mem_size   =*/ hparams.n_layer()*ggml_tensor_overhead(),
++                /*.mem_buffer =*/ NULL,
++                /*.no_alloc   =*/ true,
++            };
++            ggml_context * ctx = ggml_init(params);
++            if (!ctx) {
++                LLAMA_LOG_ERROR("%s: failed to allocate context for ablation direction\n", __func__);
++                return false;
++            }
++            it = ctx_map.emplace(buft, ctx).first;
++            ablation_ctxs.emplace_back(ctx);
++        }
++        ablation.push_back(ggml_new_tensor_1d(it->second, GGML_TYPE_F32, hparams.n_embd));
++    }
++
++    for (auto & [buft, ctx] : ctx_map) {
++        ggml_backend_buffer_t buf = ggml_backend_alloc_ctx_tensors_from_buft(ctx, buft);
++        if (!buf) {
++            LLAMA_LOG_ERROR("%s: failed to allocate buffer for ablation direction\n", __func__);
++            return false;
++        }
++        ablation_bufs.emplace_back(buf);
++    }
++
++    return true;
++}
++
++bool llama_adapter_cvec::apply_ablation(
++        const llama_model & model,
++        const float * data,
++        size_t len,
++        int32_t n_embd,
++        float scale,
++        int32_t il_start,
++        int32_t il_end) {
++    if (data == nullptr) {
++        ablation_start = -1;
++        ablation_end   = -1;
++        return true;
++    }
++
++    if (n_embd != (int) model.hparams.n_embd) {
++        LLAMA_LOG_ERROR("%s: ablation direction n_embd does not match model\n", __func__);
++        return false;
++    }
++
++    if (ablation.empty() && !init_ablation(model)) {
++        ablation.clear();
++        ablation_ctxs.clear();
++        ablation_bufs.clear();
++        return false;
++    }
++
++    ablation_layers = 0;
++    for (size_t il = 0; il < ablation.size(); il++) {
++        const size_t off = n_embd * il;
++        if (off + n_embd > len) {
++            break;
++        }
++        ggml_backend_tensor_set(ablation[il], data + off, 0, n_embd * ggml_element_size(ablation[il]));
++        ablation_layers = (int32_t) il + 1;
++    }
++
++    ablation_scale = scale;
++    ablation_start = il_start;
++    ablation_end   = il_end;
++
++    return true;
++}
++
+ // lora
+ 
+ llama_adapter_lora_weight * llama_adapter_lora::get_weight(ggml_tensor * w) {
+diff --git a/src/llama-adapter.h b/src/llama-adapter.h
+index f0b1e50..ede8c6a 100644
+--- a/src/llama-adapter.h
++++ b/src/llama-adapter.h
+@@ -27,8 +27,18 @@ struct llama_adapter_cvec {
+             int32_t il_start,
+             int32_t il_end);
+ 
++    bool apply_ablation(
++            const llama_model & model,
++            const float * data,
++            size_t len,
++            int32_t n_embd,
++            float scale,
++            int32_t il_start,
++            int32_t il_end);
++
+ private:
+     bool init(const llama_model & model);
++    bool init_ablation(const llama_model & model);
+ 
+     int32_t layer_start = -1;
+     int32_t layer_end   = -1;
+@@ -37,6 +47,16 @@ private:
+     std::vector<ggml_backend_buffer_ptr> bufs;
+ 
+     std::vector<ggml_tensor *> tensors; // per layer
++
++    int32_t ablation_start  = -1;
++    int32_t ablation_end    = -1;
++    int32_t ablation_layers = 0; // blocks with a direction set by the last apply_ablation
++    float   ablation_scale  = 0.0f;
++
++    std::vector<ggml_context_ptr> ablation_ctxs;
++    std::vector<ggml_backend_buffer_ptr> ablation_bufs;
++
++    std::vector<ggml_tensor *> ablation; // per layer, including layer 0
+ };
+ 
+ using llama_adapter_cvec_ptr = std::shared_ptr<llama_adapter_cvec>;
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index 07b4c61..e068cb6 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -1397,6 +1397,23 @@ bool llama_context::set_adapter_cvec(
+     return res;
+ }
+ 
++bool llama_context::set_adapter_cvec_ablation(
++            const float * data,
++                 size_t   len,
++                int32_t   n_embd,
++                  float   scale,
++                int32_t   il_start,
++                int32_t   il_end) {
++    LLAMA_LOG_DEBUG("%s: il_start = %d, il_end = %d, scale = %f\n", __func__, il_start, il_end, scale);
++
++    bool res = cvec->apply_ablation(model, data, len, n_embd, scale, il_start, il_end);
++
++    // the ablation adds nodes to the graph
++    sched_need_reserve = true;
++
++    return res;
++}
++
+ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, llm_graph_type gtype, llama_memory_context_i * mctx, ggml_status & ret) {
+     if (mctx && !mctx->apply()) {
+         LLAMA_LOG_ERROR("%s: failed to apply memory context\n", __func__);
+@@ -4158,6 +4175,19 @@ int32_t llama_set_adapter_cvec(
+     return res ? 0 : -1;
+ }
+ 
++int32_t llama_set_adapter_cvec_ablation(
++        llama_context * ctx,
++          const float * data,
++               size_t   len,
++              int32_t   n_embd,
++                float   scale,
++              int32_t   il_start,
++              int32_t   il_end) {
++    bool res = ctx->set_adapter_cvec_ablation(data, len, n_embd, scale, il_start, il_end);
++
++    return res ? 0 : -1;
++}
++
+ //
+ // memory
+ //
+diff --git a/src/llama-context.h b/src/llama-context.h
+index 95b7226..e85d9fc 100644
+--- a/src/llama-context.h
++++ b/src/llama-context.h
+@@ -133,6 +133,14 @@ struct llama_context {
+                 int32_t   il_start,
+                 int32_t   il_end);
+ 
++    bool set_adapter_cvec_ablation(
++            const float * data,
++                 size_t   len,
++                int32_t   n_embd,
++                  float   scale,
++                int32_t   il_start,
++                int32_t   il_end);
++
+     // process a single ubatch with a specific graph type
+     // if memory_context is provided, it will be applied first to the context's memory
+     // ret contains the status of the graph computation

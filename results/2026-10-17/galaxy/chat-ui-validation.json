@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-17",
+  "scope": "Galaxy Android app UI regression; synthetic benign messages, no model inference",
+  "observed_blank_output": {
+    "characters": 2062,
+    "line_feeds": 2062,
+    "visible_characters": 0,
+    "streaming_at_inspection": false,
+    "generated_tokens_from_saved_stats": 2048
+  },
+  "ui_checks": {
+    "passed": true,
+    "whitespace_stream_status_visible": true,
+    "live_token_counter_updates": true,
+    "visible_unicode_stream_recomposes": true,
+    "blank_completion_message": true,
+    "notification_matches_visibility": true,
+    "configuration_next_to_attachment": true,
+    "single_configuration_modal": true,
+    "model_inference_executed": false,
+    "chat_or_settings_modified": false
+  },
+  "android_lint_errors": 0,
+  "debug_apk_sha256": "45af4b51579be02e22e51ab341c18b96f4a20f52e3521c1de317f38daaaa04a6",
+  "instrumentation_apk_sha256": "bc23f0e8a022311a5099a7e9ff36517cc355102a0f4d36fc57e7d4ce90a8ddbe",
+  "automatic_strength_calibration": false,
+  "native_generation_changes": false,
+  "source_sha256": {
+    "android/app/src/main/java/org/equity/app/Chats.kt": "415e459dbe434b974784df481274905f14f7533dda3edf92d473c0541b0a2545",
+    "android/app/src/main/java/org/equity/app/EngineController.kt": "89c0d97840c026b4996f15d221ba40529c49f548ecad7eb93925b5b919cd1f09",
+    "android/app/src/main/java/org/equity/app/InferenceService.kt": "2353682f2f97bda9818471a31f8c442bdda0c434dd9d7417d8ce807019429978",
+    "android/app/src/main/java/org/equity/app/ui/ChatScreen.kt": "c5e9cd1a467bacef8678a9f49f3d0eaad0502fad69b92f5ac8150316a6fb10df",
+    "android/app/src/main/java/org/equity/app/ui/SteeringControls.kt": "7c163c2723311c2e16ceb75674169f42a23d8511ce00ed0a1adaf27812dedc37",
+    "android/app/src/androidTest/java/org/equity/app/ChatUiChecks.kt": "91dfc20b1fd20b0fd658c96fcd6c32fa3eb782f1604f274404f33c581df4c5b5"
+  }
+}
