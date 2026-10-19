@@ -1,0 +1,105 @@
+{
+  "kind": "decode_expert_cache_replay",
+  "calibration": "results/local/flash-next-traces/calibration/trace.jsonl",
+  "evaluation": "results/local/flash-next-traces/evaluation/trace.jsonl",
+  "entry_bytes": 1884160,
+  "expert_bytes": 1875200,
+  "results": [
+    {
+      "budget_mib": 512,
+      "quota_per_layer": 5,
+      "lru": 0.1788205128205128,
+      "lfu": 0.2296923076923077,
+      "belady": 0.3665230769230769,
+      "pinned_25pct": 0.16354871794871795,
+      "pinned_50pct": 0.14303589743589742,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 739140371.6923077
+    },
+    {
+      "budget_mib": 916,
+      "quota_per_layer": 10,
+      "lru": 0.35385641025641024,
+      "lfu": 0.356225641025641,
+      "belady": 0.5401230769230769,
+      "pinned_25pct": 0.3120820512820513,
+      "pinned_50pct": 0.24184615384615385,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 581591260.5538462
+    },
+    {
+      "budget_mib": 1024,
+      "quota_per_layer": 11,
+      "lru": 0.3702666666666667,
+      "lfu": 0.3820205128205128,
+      "belady": 0.5613641025641025,
+      "pinned_25pct": 0.3434871794871795,
+      "pinned_50pct": 0.27352820512820514,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 566820454.3999999
+    },
+    {
+      "budget_mib": 1280,
+      "quota_per_layer": 14,
+      "lru": 0.4141128205128205,
+      "lfu": 0.4283794871794872,
+      "belady": 0.6121948717948718,
+      "pinned_25pct": 0.3928820512820513,
+      "pinned_50pct": 0.31883076923076925,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 527354706.70769227
+    },
+    {
+      "budget_mib": 1536,
+      "quota_per_layer": 17,
+      "lru": 0.452,
+      "lfu": 0.46253333333333335,
+      "belady": 0.6501538461538462,
+      "pinned_25pct": 0.42754871794871796,
+      "pinned_50pct": 0.3835076923076923,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 493252608.00000006
+    },
+    {
+      "budget_mib": 2048,
+      "quota_per_layer": 23,
+      "lru": 0.5126461538461539,
+      "lfu": 0.5232205128205129,
+      "belady": 0.7054051282051282,
+      "pinned_25pct": 0.48953846153846153,
+      "pinned_50pct": 0.4451076923076923,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 438665247.5076923
+    },
+    {
+      "budget_mib": 3072,
+      "quota_per_layer": 35,
+      "lru": 0.5948615384615384,
+      "lfu": 0.6037948717948718,
+      "belady": 0.7801333333333333,
+      "pinned_25pct": 0.5747897435897436,
+      "pinned_50pct": 0.5290358974358974,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 364663508.6769231
+    },
+    {
+      "budget_mib": 4096,
+      "quota_per_layer": 47,
+      "lru": 0.6469025641025641,
+      "lfu": 0.6559589743589743,
+      "belady": 0.8253333333333334,
+      "pinned_25pct": 0.6289333333333333,
+      "pinned_50pct": 0.5947282051282051,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 317821589.6615385
+    },
+    {
+      "mean_distinct_experts_per_layer_over_consecutive_decode_tokens": {
+        "tokens_2": 16.43176664605236,
+        "tokens_3": 21.92169049098819,
+        "tokens_4": 26.79596085779721
+      }
+    }
+  ],
+  "scope": "Decode-only expert-cache replay over exact routing traces, per-layer policies."
+}

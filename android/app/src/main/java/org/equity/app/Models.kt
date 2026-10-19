@@ -31,7 +31,14 @@ import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
-/** A pinned, hash-verified file the app can download: a model or a vision projector. */
+/** One shard of a model the repository splits with gguf-split. */
+data class ArtifactPart(val file: String, val sizeBytes: Long)
+
+/**
+ * A pinned, hash-verified file the app can download: a model or a vision projector. A file the repository ships
+ * as gguf-split shards ([parts]) is downloaded as their merge, written in place while the shards stream: its
+ * merged header must match [headerSha256] before any weights are written, and the whole file [sha256].
+ */
 data class Artifact(
     val id: String,
     val name: String,
@@ -42,8 +49,34 @@ data class Artifact(
     val sha256: String,
     /** Large files wait for an unmetered network instead of consuming mobile data. */
     val unmeteredOnly: Boolean,
+    val parts: List<ArtifactPart> = emptyList(),
+    val headerBytes: Long = 0,
+    val headerSha256: String? = null,
 ) {
-    val url get() = "https://huggingface.co/$repository/resolve/$revision/$file"
+    val url get() = url(file)
+    fun url(path: String) = "https://huggingface.co/$repository/resolve/$revision/$path"
+}
+
+/**
+ * Memory figures of a streamed model. A prompt batch of b tokens keeps the share 1 - (1 - k/E)^b of a layer's
+ * routed experts resident at once (top-k of E experts) and needs compute buffers linear in b.
+ */
+data class StreamProfile(
+    /** Routed-expert MiB of the largest layer. */
+    val layerExpertsMiB: Int = 0,
+    val experts: Int = 0,
+    val expertsUsed: Int = 0,
+    /** Compute buffers of a 512-token batch, in MiB. */
+    val computeMiBPer512: Int = 512,
+    /** Engine load options measured for this model, applied over the streamed defaults. */
+    val tuning: Map<String, Any> = emptyMap(),
+) {
+    /** MiB of one layer's experts that a batch of [batch] tokens holds resident. */
+    fun layerWorkingSetMiB(batch: Int): Int {
+        if (experts <= 0 || expertsUsed <= 0) return layerExpertsMiB
+        val share = 1 - Math.pow(1 - expertsUsed.toDouble() / experts, batch.toDouble())
+        return Math.ceil(layerExpertsMiB * share).toInt()
+    }
 }
 
 /** A pinned, hash-verified model the app can download and run. */
@@ -69,8 +102,15 @@ data class CatalogModel(
     val contextMiBPer1k: Int,
     /** Vision encoder (mmproj) that lets this model read images; null for text-only models. */
     val projector: Artifact? = null,
+    /** Parameter count shown on the model's badge. */
+    val badge: String = "",
+    val stream: StreamProfile = StreamProfile(),
+    val parts: List<ArtifactPart> = emptyList(),
+    val headerBytes: Long = 0,
+    val headerSha256: String? = null,
 ) {
-    val artifact get() = Artifact(id, name, repository, revision, file, sizeBytes, sha256, unmeteredOnly = streamed)
+    val artifact get() = Artifact(id, name, repository, revision, file, sizeBytes, sha256, unmeteredOnly = streamed,
+        parts = parts, headerBytes = headerBytes, headerSha256 = headerSha256)
 }
 
 object Catalog {
@@ -91,7 +131,7 @@ object Catalog {
             repository = "Qwen/Qwen3-0.6B-GGUF", revision = "23749fefcc72300e3a2ad315e1317431b06b590a",
             file = "Qwen3-0.6B-Q8_0.gguf", sizeBytes = 639_446_688L,
             sha256 = "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
-            license = "Apache-2.0", streamed = false, residentMiB = 610, contextMiBPer1k = 112,
+            license = "Apache-2.0", streamed = false, residentMiB = 610, contextMiBPer1k = 112, badge = "0.6B",
         ),
         CatalogModel(
             id = "qwen3.6-35b-a3b-iq2m", name = "Qwen3.6 35B-A3B · 2.7-bit",
@@ -103,7 +143,8 @@ object Catalog {
             file = "Qwen3.6-35B-A3B-UD-IQ2_M.gguf", sizeBytes = 11_882_969_376L,
             sha256 = "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
             license = "Apache-2.0", streamed = true, residentMiB = 1430, contextMiBPer1k = 40,
-            projector = qwen36Projector,
+            projector = qwen36Projector, badge = "35B",
+            stream = StreamProfile(layerExpertsMiB = 240, experts = 256, expertsUsed = 8),
         ),
         CatalogModel(
             id = "qwen3.6-35b-a3b-q4km", name = "Qwen3.6 35B-A3B · 4-bit",
@@ -115,7 +156,36 @@ object Catalog {
             file = "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", sizeBytes = 22_663_387_424L,
             sha256 = "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
             license = "Apache-2.0", streamed = true, residentMiB = 1935, contextMiBPer1k = 40,
-            projector = qwen36Projector,
+            projector = qwen36Projector, badge = "35B",
+            stream = StreamProfile(layerExpertsMiB = 466, experts = 256, expertsUsed = 8),
+        ),
+        // Unsloth splits the 78.9 GB build into three gguf-split shards (configs/flash-next-model.json); the app
+        // writes their merge, byte-identical to llama-gguf-split --merge of the same shards.
+        CatalogModel(
+            id = "qwen3.8-flash-next-ud-q2kxl", name = "Qwen3.8 Flash Next · Q2_K_XL",
+            tagline = "Huge · seven times the phone's RAM · experimental",
+            description = "Qwen's 125B mixture-of-experts preview of the Qwen4 architecture (512 experts, 10 per token, " +
+                "plus a 51B n-gram memory) in Unsloth's dynamic UD-Q2_K_XL build, experts at about 3 bits (78.9 GB). " +
+                "Only 3.4 GB stays in memory; " +
+                "experts and n-gram rows are read from storage as each token needs them, so answers start slowly " +
+                "and run at a few tokens per second. Needs about 80 GB of free storage.",
+            repository = "unsloth/Qwen3.8-Flash-Next-GGUF", revision = "766911a6b7369840a91dbcd95f9f997acaab6cd6",
+            file = "Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf", sizeBytes = 78_869_128_640L,
+            sha256 = "f26a5e679710fb4cd048f481ff082d9af9c79fbd640d1867ef58c425518659d7",
+            // Shared weights 3,372 MiB, recurrent state 113 MiB; the expert banks and n-gram table are file-backed.
+            license = "Qwen Community 1.0", streamed = true, residentMiB = 3500, contextMiBPer1k = 30,
+            badge = "125B",
+            // Compute buffers measured on the host: 518 MiB at 512 tokens and 4,096 context, 534 at 16,384; linear
+            // in the batch. 512 experts: a prompt shorter than ~118 tokens uses under 90% of a layer's experts, so
+            // reading the next layer whole wastes reads (52 tokens: 54 GB read instead of 31, measured on the host).
+            stream = StreamProfile(layerExpertsMiB = 916, experts = 512, expertsUsed = 10, computeMiBPer512 = 540,
+                tuning = mapOf("prefill_prefetch_min_coverage" to 0.9)),
+            parts = listOf(
+                ArtifactPart("UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00001-of-00003.gguf", 10_946_624L),
+                ArtifactPart("UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00002-of-00003.gguf", 49_979_779_296L),
+                ArtifactPart("UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00003-of-00003.gguf", 28_878_402_944L),
+            ),
+            headerBytes = 11_024_320L, headerSha256 = "2106fcb2ff86c4addea4ecec7895300bbac4ef28c5d42db4742b3181a56ca31a",
         ),
     )
 
@@ -225,6 +295,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
     }
 
     private suspend fun download(artifact: Artifact) {
+        if (artifact.parts.isNotEmpty()) return downloadMerged(artifact)
         val context = applicationContext
         ModelFiles.dir(context, artifact).mkdirs()
         val part = ModelFiles.part(context, artifact)
@@ -235,24 +306,8 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             part.delete()
             done = 0
         }
-        // The hash state is not persisted, so a resumed transfer first re-reads what is already on disk.
-        if (done > 0) {
-            var hashed = 0L
-            part.inputStream().use { input ->
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    digest.update(buffer, 0, count)
-                    hashed += count
-                    report(artifact, Downloads.PHASE_VERIFYING, hashed, done, 0)
-                    if (isStopped) return
-                }
-            }
-        }
-        val needed = artifact.sizeBytes - done + (1L shl 30)
-        if (ModelFiles.freeBytes(context) < needed) {
-            throw IntegrityException("Not enough free storage: %.1f GB needed".format(needed / 1e9))
-        }
+        if (!rehash(artifact, part, done, digest, buffer)) return
+        requireStorage(artifact, done)
         if (done < artifact.sizeBytes) {
             val connection = open(artifact.url, done)
             try {
@@ -293,6 +348,36 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
         }
         if (done != artifact.sizeBytes) throw IOException("Connection closed early")
+        finish(artifact, part, digest)
+    }
+
+    /** The hash state is not persisted, so a resumed transfer first re-reads what is already on disk. */
+    private suspend fun rehash(artifact: Artifact, part: File, done: Long, digest: MessageDigest, buffer: ByteArray): Boolean {
+        if (done == 0L) return true
+        var hashed = 0L
+        part.inputStream().use { input ->
+            while (hashed < done) {
+                val count = input.read(buffer, 0, minOf(buffer.size.toLong(), done - hashed).toInt())
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+                hashed += count
+                report(artifact, Downloads.PHASE_VERIFYING, hashed, done, 0)
+                if (isStopped) return false
+            }
+        }
+        if (hashed != done) throw IOException("The partial download changed while it was checked")
+        return true
+    }
+
+    private fun requireStorage(artifact: Artifact, done: Long) {
+        val needed = artifact.sizeBytes - done + (1L shl 30)
+        if (ModelFiles.freeBytes(applicationContext) < needed) {
+            throw IntegrityException("Not enough free storage: %.1f GB needed".format(needed / 1e9))
+        }
+    }
+
+    private fun finish(artifact: Artifact, part: File, digest: MessageDigest) {
+        val context = applicationContext
         val hash = digest.digest().joinToString("") { "%02x".format(it) }
         if (hash != artifact.sha256) {
             part.delete()
@@ -302,8 +387,132 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         ModelFiles.markVerified(context, artifact)
     }
 
-    /** Follows redirects manually so the Range header reaches the final host. */
-    private fun open(url: String, from: Long): HttpURLConnection {
+    /**
+     * Downloads gguf-split shards as their merge (see [GgufMerge]): the shards' headers come first (ranged
+     * requests), the merged header is checked against its pinned hash and written, then each shard's data
+     * section is appended as it streams. A resumed transfer re-hashes the partial file and continues inside the
+     * shard where it stopped. The finished file must match the pinned SHA-256 of the whole merge.
+     */
+    private suspend fun downloadMerged(artifact: Artifact) {
+        val context = applicationContext
+        ModelFiles.dir(context, artifact).mkdirs()
+        val part = ModelFiles.part(context, artifact)
+        val shards = artifact.parts.map { shardHeader(artifact, it) ?: return }
+        val header = GgufMerge.mergedHeader(shards)
+        val headerHash = MessageDigest.getInstance("SHA-256").digest(header).joinToString("") { "%02x".format(it) }
+        if (header.size.toLong() != artifact.headerBytes || headerHash != artifact.headerSha256 ||
+            header.size + shards.sumOf { it.dataBytes } != artifact.sizeBytes) {
+            throw IntegrityException("The repository's shards do not match the pinned model")
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(1 shl 20)
+        var done = part.takeIf { it.isFile }?.length() ?: 0L
+        // Only a partial file that starts with the whole merged header is resumed.
+        if (done > artifact.sizeBytes || (done > 0 && !startsWith(part, header))) {
+            part.delete()
+            done = 0
+        }
+        if (!rehash(artifact, part, done, digest, buffer)) return
+        requireStorage(artifact, done)
+        FileOutputStream(part, done > 0).use { output ->
+            if (done == 0L) {
+                output.write(header)
+                digest.update(header)
+                done = header.size.toLong()
+            }
+            var start = header.size.toLong() // merged offset of this shard's data section
+            for ((index, shard) in shards.withIndex()) {
+                val end = start + shard.dataBytes
+                if (done < end) {
+                    val from = shard.dataOffset + (done - start)
+                    done = transfer(artifact, artifact.url(artifact.parts[index].file), from, end, done, output, digest, buffer)
+                        ?: return
+                }
+                start = end
+            }
+        }
+        if (done != artifact.sizeBytes) throw IOException("Connection closed early")
+        finish(artifact, part, digest)
+    }
+
+    private fun startsWith(file: File, prefix: ByteArray): Boolean {
+        if (file.length() < prefix.size) return false
+        val head = ByteArray(prefix.size)
+        file.inputStream().use { input ->
+            var read = 0
+            while (read < head.size) {
+                val count = input.read(head, read, head.size - read)
+                if (count < 0) return false
+                read += count
+            }
+        }
+        return head.contentEquals(prefix)
+    }
+
+    /** Reads a shard's header with ranged requests, growing the range until the header is complete. */
+    private fun shardHeader(artifact: Artifact, shard: ArtifactPart): GgufMerge.Shard? {
+        var probe = minOf(shard.sizeBytes, 1L shl 20)
+        while (true) {
+            if (isStopped) return null
+            val connection = open(artifact.url(shard.file), 0, probe - 1)
+            val bytes = try {
+                if (connection.responseCode != HttpURLConnection.HTTP_PARTIAL ||
+                    connection.getHeaderField("Content-Range") != "bytes 0-${probe - 1}/${shard.sizeBytes}") {
+                    throw IntegrityException("The server did not return the requested range of a shard")
+                }
+                connection.inputStream.use { it.readBytes() }
+            } finally {
+                connection.disconnect()
+            }
+            if (bytes.size.toLong() != probe) throw IOException("Connection closed early")
+            try {
+                return GgufMerge.parse(bytes, shard.sizeBytes)
+            } catch (_: GgufMerge.Truncated) {
+                if (probe == shard.sizeBytes) throw IntegrityException("A shard header is incomplete")
+                probe = minOf(shard.sizeBytes, probe * 4)
+            }
+        }
+    }
+
+    /**
+     * Appends the bytes of [url] from [from] until the merged file reaches [end]; returns the merged size, or null
+     * when the work was stopped.
+     */
+    private suspend fun transfer(artifact: Artifact, url: String, from: Long, end: Long, start: Long,
+                                 output: FileOutputStream, digest: MessageDigest, buffer: ByteArray): Long? {
+        var done = start
+        val connection = open(url, from)
+        try {
+            val code = connection.responseCode
+            if (code != HttpURLConnection.HTTP_PARTIAL) throw IOException("Server returned HTTP $code for a shard range")
+            var lastBytes = done
+            var lastTime = System.nanoTime()
+            connection.inputStream.use { input ->
+                while (done < end) {
+                    val count = input.read(buffer, 0, minOf(buffer.size.toLong(), end - done).toInt())
+                    if (count < 0) break
+                    output.write(buffer, 0, count)
+                    digest.update(buffer, 0, count)
+                    done += count
+                    val now = System.nanoTime()
+                    if (now - lastTime >= 700_000_000L) {
+                        val speed = (done - lastBytes) * 1_000_000_000L / (now - lastTime)
+                        lastBytes = done
+                        lastTime = now
+                        report(artifact, Downloads.PHASE_DOWNLOADING, done, artifact.sizeBytes, speed)
+                    }
+                    if (isStopped) return null
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+        if (done != end) throw IOException("Connection closed early")
+        return done
+    }
+
+    /** Follows redirects manually so the Range header reaches the final host; [to] < 0 reads to the end. */
+    private fun open(url: String, from: Long, to: Long = -1): HttpURLConnection {
         var location = url
         repeat(6) {
             val connection = (URL(location).openConnection() as HttpURLConnection).apply {
@@ -311,7 +520,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 connectTimeout = 30_000
                 readTimeout = 60_000
                 setRequestProperty("User-Agent", "Equity/${BuildConfigInfo.VERSION}")
-                if (from > 0) setRequestProperty("Range", "bytes=$from-")
+                if (from > 0 || to >= 0) setRequestProperty("Range", "bytes=$from-${if (to >= 0) to.toString() else ""}")
             }
             val code = connection.responseCode
             if (code in 300..399) {

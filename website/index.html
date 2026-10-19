@@ -26,6 +26,7 @@
       <a href="#idea">Idea</a>
       <a href="#how">How it works</a>
       <a href="#climb">The climb</a>
+      <a href="#models">Models</a>
       <a href="#numbers">Numbers</a>
       <a href="#milestones">Milestones</a>
     </nav>
@@ -60,14 +61,15 @@
         <a class="btn btn-ghost" href="#how">How it works</a>
       </div>
       <div class="hero-chips reveal" aria-label="Key facts">
-        <span class="chip">7.4 tok/s in the app</span>
+        <span class="chip">35B · 7.4 tok/s in the app</span>
+        <span class="chip">125B · 1.8 tok/s observed</span>
         <span class="chip">262k context</span>
         <span class="chip">0 bytes sent</span>
         <span class="chip">no root</span>
       </div>
     </div>
     <div class="hero-foot container">
-      <span class="mono-dim">weights streamed from flash · every claim tied to a measurement record</span>
+      <span class="mono-dim">weights streamed from flash · benchmarks and owner observations labeled separately</span>
       <a class="scroll-hint" href="#idea" aria-label="Scroll to the idea">
         <span>scroll</span>
         <span class="scroll-hint-line" aria-hidden="true"></span>
@@ -125,7 +127,7 @@
         <article class="card reveal">
           <div class="card-glyph">⌁</div>
           <h3>Measured, not promised</h3>
-          <p>Every number ties to a record in <span class="mono">results/</span>. A/B runs cooled to skin temperature,
+          <p>Benchmarks tie to records in <span class="mono">results/</span>; app observations are labeled separately. A/B runs cooled to skin temperature,
             energy read from the battery counter, an automatically checked quality set. Negative results are kept and
             written down, not deleted.</p>
         </article>
@@ -138,7 +140,7 @@
     <div class="container">
       <p class="eyebrow reveal">how it works</p>
       <h2 class="reveal">Shared weights stay resident. <em>Experts stream.</em></h2>
-      <p class="lede reveal">One token touches forty layers in a fixed cycle. Equity turns that pattern into a pipeline:
+      <p class="lede reveal">On the 35B model, one token touches forty layers in a fixed cycle. Equity turns that pattern into a pipeline:
         predict, read, compute — overlapped, zero-copy, and exact.</p>
 
       <figure class="pipeline-wrap reveal">
@@ -193,7 +195,7 @@
     <div class="container">
       <p class="eyebrow reveal">the climb</p>
       <h2 class="reveal">From <em>2.52</em> to <em>8.22 tokens/s</em> — one measured step at a time.</h2>
-      <p class="lede reveal">The target model streamed on the first reference device — a stock Android phone — 64 greedy tokens,
+      <p class="lede reveal">Qwen3.6-35B-A3B streamed on the first reference device — a stock Android phone — 64 greedy tokens,
         128 from the six-thread step on, alternating A/B arms. Every step is bitwise exact unless noted; identical token
         sequences across all arms.</p>
 
@@ -262,10 +264,75 @@
     </div>
   </section>
 
+  <!-- ============================== MODELS ============================== -->
+  <section class="section" id="models">
+    <div class="container">
+      <p class="eyebrow reveal">models · updated October 19, 2026</p>
+      <h2 class="reveal">Now a <em>125B model</em>, on the same stock phone.</h2>
+      <p class="lede reveal">Qwen3.8-Flash-Next joins the two Qwen3.6 builds. Its 78.9 GB file is about 6.7× the
+        phone's Android-visible RAM. The first owner-reported app result is 1.8 tokens/s, with the first token
+        after 6.1 seconds — a single observation on the Galaxy S24+ with Exynos 2400.</p>
+
+      <div class="cards-grid">
+        <article class="card reveal">
+          <h3>Qwen3.6 · 35B</h3>
+          <p><strong>UD-IQ2_M · 11.9 GB</strong><br>
+            7.4 tok/s in the app, owner-reported short answer on a cool phone. The engine reaches 8.22 tok/s
+            in short measured runs. Quality-v1: 26/27; the older battery run settled at about 3.5 tok/s.</p>
+        </article>
+        <article class="card reveal">
+          <h3>Qwen3.6 · 35B reference</h3>
+          <p><strong>UD-Q4_K_M · 22.7 GB</strong><br>
+            5.1 tok/s in the app, owner-reported short answer on a cool phone. Quality-v1: 26/27,
+            with 2.61 tok/s median across that separate evaluation. Sustained speed on the current build is pending.</p>
+        </article>
+        <article class="card reveal">
+          <h3>Qwen3.8 Flash Next · 125B</h3>
+          <p><strong>UD-Q2_K_XL · 78.9 GB · experimental</strong><br>
+            The new 120B-class model: 125B parameters plus a 51B n-gram table. 1.8 tok/s in the owner's
+            252-token app result. Repeated benchmarks, sustained speed, energy and quantization quality are pending.</p>
+        </article>
+      </div>
+
+      <div class="stats-grid model-stats">
+        <div class="stat stat-accent reveal">
+          <div class="stat-val">1.8<span class="stat-unit">tok/s</span></div>
+          <div class="stat-label">Flash Next, in the app</div>
+          <div class="stat-sub">owner-reported screenshot · 252 generated tokens</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val">6.1<span class="stat-unit">s</span></div>
+          <div class="stat-label">time to first token</div>
+          <div class="stat-sub">same observation · prompt length and cache state not recorded</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val">78.9<span class="stat-unit">GB</span></div>
+          <div class="stat-label">model file on storage</div>
+          <div class="stat-sub">about 80 GB free storage needed · resumable, checksum-verified import</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val">10<span class="stat-unit">/512</span></div>
+          <div class="stat-label">experts selected per layer</div>
+          <div class="stat-sub">bounded expert cache · n-gram rows read from a file mapping</div>
+        </div>
+      </div>
+      <p class="footnote mono-dim reveal">Flash Next observation: October 19, 2026 · one app result, not a controlled or
+        sustained benchmark · cache budget, batch, thermal state, peak RSS and energy were not captured ·
+        <a href="data/flash-next-owner-observation.json">observation record (JSON)</a></p>
+      <p class="lede reveal">Flash Next runs on the CPU. Shared resident weights account for about 3.37 GiB before
+        the expert cache, recurrent/KV state, compute buffers and mapped-file page cache. Total peak RAM on this
+        model has not been measured on the phone. The app adapts prompt batches to the available memory; the
+        n-gram file mapping is separate from the bounded expert cache.</p>
+      <p class="lede reveal">Host verification passed all 41 streamed-versus-resident fixture cases, and two cache
+        configurations on the real model produced bitwise-equal logits and identical tokens. These are host
+        correctness checks; they do not establish phone performance or the quality of this quantization.</p>
+    </div>
+  </section>
+
   <!-- ============================== NUMBERS ============================== -->
   <section class="section" id="numbers">
     <div class="container">
-      <p class="eyebrow reveal">numbers that hold</p>
+      <p class="eyebrow reveal">numbers that hold · Qwen3.6 35B</p>
       <h2 class="reveal">What the work is <em>worth</em>, so far.</h2>
       <p class="lede reveal">Each figure below is attributable to a specific change, measured on the phone, and recorded.
         Nothing here is extrapolated from other hardware.</p>
@@ -342,6 +409,17 @@
       <h2 class="reveal">What Equity can do <em>now</em>, step by step.</h2>
 
       <ol class="timeline">
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">October 19, 2026 · the 120B-class model</span><span class="tl-tag">capability</span></div>
+            <h3>125B parameters, 78.9 GB, running in the app</h3>
+            <p>Qwen3.8-Flash-Next adds 512-expert routing, a file-mapped n-gram table and support for its
+              hyper-connection residual. The owner's first app screenshot reports 1.8 tok/s over 252 tokens,
+              with the first token after 6.1 s. Host exactness checks pass; sustained phone measurements
+              and a separate quality evaluation remain ahead.</p>
+          </div>
+        </li>
         <li class="tl-item reveal">
           <div class="tl-dot" aria-hidden="true"></div>
           <div class="tl-card card">
@@ -424,7 +502,7 @@
       <p class="eyebrow reveal">where this goes</p>
       <h2 class="reveal">This is a <em>work in progress</em> — the queue is ordered by measured bottleneck.</h2>
       <div class="next-row">
-        <div class="next-item reveal"><span class="next-num mono-dim">01</span><p><strong>Sustained speed</strong> — minutes-long runs of the current build, with energy per token</p></div>
+        <div class="next-item reveal"><span class="next-num mono-dim">01</span><p><strong>Flash Next on the phone</strong> — repeated decode, peak RAM, storage throughput, quality and sustained energy measurements</p></div>
         <div class="next-item reveal"><span class="next-num mono-dim">02</span><p><strong>Missed-expert latency</strong> — reads still take 1.3–1.8 ms and wait ~0.45 ms to start</p></div>
         <div class="next-item reveal"><span class="next-num mono-dim">03</span><p><strong>Expert kernels</strong> — IQ2_XXS / IQ3_XXS run at 14 GB/s against 38 for K-quants</p></div>
         <div class="next-item reveal"><span class="next-num mono-dim">04</span><p><strong>Cache policy</strong> — eviction informed by router scores (the Belady gap is ~15 points)</p></div>
@@ -446,13 +524,13 @@
     </div>
     <div class="footer-col">
       <h4>Honesty notes</h4>
-      <p>Research preview. All numbers are measured on the current reference device — a stock Android phone — and
-        recorded in <span class="mono">results/</span>. The 5 tokens/s <em>sustained</em> goal is an experimental target,
+      <p>Research preview. Device benchmarks, owner-reported app observations and host checks are labeled separately;
+        records live in <span class="mono">results/</span>. The 5 tokens/s <em>sustained</em> goal is an experimental target,
         never a promise. Quality, context and capabilities are not traded for speed.</p>
     </div>
     <div class="footer-col">
       <h4>Standing on</h4>
-      <p>Built on <strong>llama.cpp / GGML</strong>, pinned with two recorded patches. Streaming from flash builds on
+      <p>Built on <strong>llama.cpp / GGML</strong>, with pinned revisions and recorded patches. Streaming from flash builds on
         antirez's <strong>ds4</strong>, <em>LLM in a Flash</em>, Mixtral offloading, EdgeMoE and PowerInfer-2. Development
         is AI-assisted; every claim is tied to a measurement record.</p>
     </div>

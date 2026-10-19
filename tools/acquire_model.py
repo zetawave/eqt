@@ -177,15 +177,96 @@ def acquire_to_device(manifest_path, remote_directory, serial=None):
     print(f"Acquired {final}: {size} bytes, SHA-256 {device_hash} (stream and device verified)")
 
 
+def push_to_app(manifest_path, local, package, model_id, serial=None, segment=256 * 1024 * 1024):
+    """Copy a local pinned artifact into an installed debug app's model directory, where the app finds it.
+
+    The app's private storage is reachable only through `run-as`, which cannot read the host, so the file goes in
+    segments: each is pushed to /data/local/tmp, appended by the app user and confirmed by the device-side size.
+    Only the artifact's own size is needed on the device, a transfer resumes after the last confirmed segment,
+    and the copy is accepted only when its on-device SHA-256 matches the manifest; the app's marker is then written.
+    """
+    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    entry = manifest["files"][0]
+    name, size, digest = entry["name"], entry["size_bytes"], entry["sha256"]
+    local = Path(local)
+    if local.name != name or local.stat().st_size != size:
+        raise ValueError("The local file's name or size differs from the manifest")
+    if not all(c.isalnum() or c in "._-" for c in package + model_id):
+        raise ValueError("Unsafe package or model id")
+    directory = f"files/models/{model_id}"
+    final, partial, marker = f"{directory}/{name}", f"{directory}/{name}.part", f"{directory}/{name}.sha256"
+    staged = "/data/local/tmp/eqt-model-segment"
+
+    # Long transfers meet transient ADB failures (a command returns 1 once, then works): every device command
+    # is retried before the copy stops, and the copy resumes after the last confirmed segment anyway.
+    def device(*command):
+        for attempt in range(10):
+            run = adb(*command, serial=serial, check=False)
+            if run.returncode == 0:
+                return run
+            time.sleep(3)
+            if serial and ":" in serial:
+                adb("connect", serial, check=False)
+        raise IOError(f"Device command keeps failing: {command}")
+
+    def app(command, check=True):
+        if not check:
+            return adb("shell", f"run-as {package} sh -c '{command}'", serial=serial, check=False)
+        return device("shell", f"run-as {package} sh -c '{command}'")
+
+    app(f"mkdir -p {directory}")
+    if app(f"cat {marker} 2>/dev/null", check=False).stdout.strip() == digest:
+        print(f"Verified device copy {package}:{final}")
+        return
+    done = int(app(f"stat -c %s {partial} 2>/dev/null || echo 0").stdout.strip() or 0)
+    free = int(device("shell", "df", "-k", "/data").stdout.splitlines()[-1].split()[3]) * 1024
+    if done > size:
+        raise ValueError("Device partial file exceeds the declared size")
+    if free < size - done + segment + 1024**3:
+        raise OSError(f"Insufficient device space: {(size - done + segment + 1024**3) / 1e9:.1f} GB needed")
+    Path(".cache").mkdir(exist_ok=True)
+    buffer = Path(".cache") / "eqt-model-segment"
+    with local.open("rb") as source:
+        while done < size:
+            source.seek(done)
+            length = min(segment, size - done)
+            buffer.write_bytes(source.read(length))
+            device("push", str(buffer), staged)
+            device("shell", "chmod", "644", staged)
+            app(f"cat {staged} >> {partial}")
+            reached = int(app(f"stat -c %s {partial}").stdout.strip())
+            if reached != done + length:
+                app(f"truncate -s {done} {partial}")  # a short append is cut back and retried
+                print(f"\nRetrying segment at {done}")
+                continue
+            done = reached
+            print(f"\r{done / size:6.1%}", end="", flush=True)
+    device("shell", "rm", "-f", staged)
+    buffer.unlink(missing_ok=True)
+    print()
+    device_hash = app(f"sha256sum {partial}").stdout.split()[0]
+    if device_hash != digest:
+        raise ValueError("Device-side SHA-256 differs from the manifest; partial file kept for inspection")
+    app(f"mv {partial} {final} && printf %s {digest} > {marker}")
+    print(f"Installed {package}:{final}: {size} bytes, SHA-256 {device_hash} (device verified)")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest")
     parser.add_argument("--directory", default="models")
     parser.add_argument("--header-only", action="store_true", help="Acquire only the hash-pinned header range; never full weights")
     parser.add_argument("--adb-stream", metavar="REMOTE_DIR", help="Stream the full artifact into this device directory without a host copy")
+    parser.add_argument("--push-local", metavar="FILE", help="Copy this local artifact into the app's model directory")
+    parser.add_argument("--package", default="org.equity.app")
+    parser.add_argument("--model-id", help="Catalog id of the model (the app's files/models/<id> directory)")
     parser.add_argument("--serial")
     args = parser.parse_args()
-    if args.adb_stream:
+    if args.push_local:
+        if not args.model_id:
+            parser.error("--push-local requires --model-id")
+        push_to_app(args.manifest, args.push_local, args.package, args.model_id, args.serial)
+    elif args.adb_stream:
         acquire_to_device(args.manifest, args.adb_stream, args.serial)
     else:
         acquire(args.manifest, args.directory, args.header_only)

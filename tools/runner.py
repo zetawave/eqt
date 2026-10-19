@@ -26,14 +26,27 @@ def android_libraries():
 
 
 class Runner:
-    def __init__(self, target, serial=None, cpu_variant=None):
+    def __init__(self, target, serial=None, cpu_variant=None, run_as=None):
         self.target, self.serial, self.cpu_variant = target, serial, cpu_variant
         # host: Windows MSVC build; linux: native Linux build (e.g. in a container); android: NDK build over ADB.
         self.bin = ROOT / "build" / target / "bin" / ("Release" if target == "host" else "")
         self.local = target != "android"
+        # Models in an app's private storage (files/models/<id>/) are readable only by that app's user. With
+        # `run_as`, tools run as the app through `run-as`, which can read /data/local/tmp but not execute from it:
+        # binaries are copied into the app's files/bench/ and run there. Model paths are then app-relative
+        # (files/models/<id>/<file>) or absolute app paths.
+        self.run_as = run_as if target == "android" else None
+        if self.run_as and not all(c.isalnum() or c in "._" for c in self.run_as):
+            raise ValueError("Unsafe package name")
 
     def tool(self, name):
         return self.bin / (name + (".exe" if self.target == "host" else ""))
+
+    def app(self, command, check=True):
+        """Run a shell command as the app user, in its data directory; commands must not contain single quotes."""
+        if "'" in command:
+            raise ValueError("App commands cannot contain single quotes")
+        return adb("shell", f"run-as {self.run_as} sh -c '{command}'", serial=self.serial, check=check)
 
     def stage(self, tools, files=()):
         """Push tools, shared libraries and extra files; return their SHA-256 values keyed by file name."""
@@ -43,7 +56,8 @@ class Runner:
                 hashes[path.name] = sha256(path)
             return hashes
         adb("shell", "mkdir", "-p", REMOTE, serial=self.serial)
-        for local in [self.tool(t) for t in tools] + android_libraries() + [Path(f) for f in files]:
+        staged = [self.tool(t) for t in tools] + android_libraries() + [Path(f) for f in files]
+        for local in staged:
             name = local.name
             expected = sha256(local)
             adb("push", "--sync", str(local), f"{REMOTE}/{name}", serial=self.serial)
@@ -51,12 +65,24 @@ class Runner:
             if actual != expected:
                 raise RuntimeError(f"Device artifact hash mismatch: {name}")
             hashes[name] = expected
-        # ADB push can reset the executable bit, including after a previous successful run.
-        adb("shell", "chmod", "700", *[f"{REMOTE}/{t}" for t in tools], serial=self.serial)
+        # ADB push can reset the executable bit, including after a previous successful run; run-as copies need
+        # the files readable by the app user.
+        adb("shell", "chmod", "755" if self.run_as else "700", *[f"{REMOTE}/{t}" for t in tools], serial=self.serial)
+        if self.run_as:
+            adb("shell", "chmod", "644", *[f"{REMOTE}/{p.name}" for p in staged if p.stem not in tools],
+                serial=self.serial)
+            names = " ".join(p.name for p in staged)
+            self.app(f"mkdir -p files/bench && cd files/bench && for f in {names}; do cp {REMOTE}/$f . || exit 1; done"
+                     f" && chmod 700 {' '.join(tools)}")
+            copied = dict(line.split()[::-1] for line in self.app(f"cd files/bench && sha256sum {names}").stdout.splitlines())
+            for name, expected in hashes.items():
+                if copied.get(name) != expected:
+                    raise RuntimeError(f"App-side artifact hash mismatch: {name}")
         return hashes
 
     def run(self, tool, model, request, workdir, check=True):
-        """Run `tool MODEL REQUEST RESULT`; `model` is a local path (host) or a staged file name (android)."""
+        """Run `tool MODEL REQUEST RESULT`; `model` is a local path (host), a staged file name (android), or an
+        app-relative model path (android with run_as)."""
         workdir = Path(workdir)
         source, target = workdir / "request.json", workdir / "result.json"
         source.write_text(json.dumps(request), encoding="utf-8")
@@ -65,6 +91,15 @@ class Runner:
             env = dict(os.environ, **({"EQT_CPU_VARIANT": self.cpu_variant} if self.cpu_variant else {}))
             run = subprocess.run([str(self.tool(tool)), str(model), str(source), str(target)], capture_output=True,
                                  text=True, encoding="utf-8", errors="replace", env=env)
+        elif self.run_as:
+            adb("push", str(source), f"{REMOTE}/request.json", serial=self.serial)
+            adb("shell", "chmod", "644", f"{REMOTE}/request.json", serial=self.serial)
+            variant = f"EQT_CPU_VARIANT={self.cpu_variant} " if self.cpu_variant else ""
+            path = model if str(model).startswith("/") else f"../../{model}"
+            run = self.app(f"cd files/bench && cp {REMOTE}/request.json . && rm -f result.json && "
+                           f"LD_LIBRARY_PATH=. {variant}./{tool} {path} request.json result.json", check=False)
+            if run.returncode == 0:
+                target.write_text(self.app("cat files/bench/result.json").stdout, encoding="utf-8")
         else:
             adb("push", str(source), f"{REMOTE}/request.json", serial=self.serial)
             variant = f"EQT_CPU_VARIANT={self.cpu_variant} " if self.cpu_variant else ""

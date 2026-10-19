@@ -154,7 +154,7 @@ def load_items(path, only):
 
 
 def run(args):
-    runner = Runner(args.target, args.serial, args.cpu_variant)
+    runner = Runner(args.target, args.serial, args.cpu_variant, run_as=getattr(args, "run_as", None))
     runner.stage(["eqt-bench"])
     load = json.loads(args.load)
     rows = []
@@ -252,6 +252,7 @@ def main():
     run_parser.add_argument("--target", choices=["host", "linux", "android"], default="android")
     run_parser.add_argument("--serial")
     run_parser.add_argument("--cpu-variant")
+    run_parser.add_argument("--run-as", metavar="PACKAGE", help="Run as this debug app (models in its files/models/; pass app-relative model paths)")
     run_parser.add_argument("--model", required=True, help="Local path (host) or staged device path (android)")
     run_parser.add_argument("--load", default="{}", help="JSON load options shared by every item")
     run_parser.add_argument("--workload", default="workloads/quality-v1.jsonl")

@@ -19,7 +19,9 @@
 - All models live in the app's private storage: `/data/user/0/org.equity.app/files/models/<id>/`, each with a `.sha256` marker (Qwen3-0.6B, UD-IQ2_M, UD-Q4_K_M MTP). `/data/local/tmp/eqt` no longer holds models.
 - The installed app is the debug build. Uninstalling it, or switching to a release signature, deletes the models.
 - CLI access works through `adb shell run-as org.equity.app`. It can read `/data/local/tmp` but cannot execute from it, so binaries and libraries must be copied into `files/bench/` and executed there. Executables staged in `/data/local/tmp` need mode 755 so `run-as` can copy them.
-- **First task next session:** teach `tools/runner.py` this run-as mode (stage into `files/bench`, models under `files/models`, results read back with `run-as cat`). The sweep, quality and sustained tools depend on it.
+- `tools/runner.py` has this run-as mode since 2026-10-19: `--run-as org.equity.app` on the sweep, quality, sustained and trace tools, with app-relative model paths. It stages into `files/bench`, reads models under `files/models` and reads results back with `run-as cat`. It has not been run on the phone yet.
+
+**Qwen3.8-Flash-Next (2026-10-19):** supported end to end and verified on the host. The owner subsequently reported an app result on the Galaxy: 1.8 tokens/s over 252 generated tokens, first token after 6.1 s (one screenshot, not a controlled benchmark). The device-session steps below remain the measurement plan. Chat turns now reuse the previous turn's state where the template allows it (D027).
 
 **Next performance goals, in order:**
 
@@ -31,6 +33,68 @@
 3. **Cache policy:** eviction informed by router scores (the Belady gap is about 15 points), and a speculative pool that never displaces demanded experts.
 4. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
 5. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
+
+## Qwen3.8-Flash-Next: 2026-10-19 (branch `experimental/005-Flash-Next-120b`)
+
+**Model.** Qwen3.8-Flash-Next is a `qwen4exp` model: 125B parameters plus a 51B n-gram table, 512 experts with 10 per token, a hyper-connection residual, and Gated DeltaNet with sparse attention. The build is UD-Q2_K_XL, 78.9 GB (`configs/flash-next-model.json`). The local file `models/flash-next/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf` is the merge of the three official shards; its header, rebuilt from the official shard headers, is byte-identical. What it costs per token is in D026: 3.37 GiB of resident shared weights, 897 MB of experts if every one misses, 16 n-gram rows.
+
+**Engine (D026, D027):**
+
+- streaming support for qwen4exp;
+- the n-gram table mapped from the file, also on Windows hosts;
+- a lookahead that recomputes the next layer's FFN mixer (77.6% of predicted experts routed on the host);
+- prompt batches kept inside the cache budget, since one layer's experts take 0.9 GiB;
+- next-layer prompt reads only when the batch uses at least 90% of the experts;
+- GPU mode refused for qwen4exp;
+- chat turns that reuse the previous turn's state, for every model whose template allows it.
+
+**App:**
+
+- Catalog entry "Qwen3.8 Flash Next · Q2_K_XL" (badge 125B, Qwen Community License 1.0).
+- The download fetches the shard headers, checks the merged header's pinned hash, writes the merged file in place while the shards stream, resumes inside the current shard, and verifies the whole-file SHA-256. The phone needs about 80 GB free, not twice that.
+- Admission: the cache never starts below one layer (916 MiB), because prompts need that much resident at once. When memory is short, the next-layer prompt allowance is dropped first, then prompts are read in batches of 256, 128, 64 or 32 tokens before the load is refused. Flash-Next's minimum falls from about 5,440 to 4,980 MiB at 128 tokens; the configuration line shows the batch. A picked local file of this exact size gets the catalog model's memory figures.
+- `CatalogModel.tuning` passes measured per-model load options.
+
+**Tools:**
+
+- `tools/make_qwen4exp_fixture.py` builds the random-weight fixture;
+- `tools/gguf_merge.py` plans and verifies the merge;
+- `tools/replay_decode.py` replays decode-only cache behaviour;
+- `tools/acquire_model.py --push-local` copies a local model into the installed app: resumable 256 MiB segments, device-side SHA-256, then the app's marker;
+- `--run-as org.equity.app` on `sweep_target`, `eval_quality`, `sustained_run` and `collect_traces` runs the CLI as the app user on models in its storage. This was the open task from 2026-10-08; it is written but has not been run on the phone yet.
+- `eqt-io-bench` takes `threads`.
+
+**Verified on the host** (16 GB PC; not a Galaxy measurement), records in `results/2026-10-19/host/`:
+
+- all 41 streamed-versus-resident cases are bitwise equal on the four fixtures, including the new qwen4exp one, and the lifecycle checks pass;
+- on the real model, two very different cache configurations give bitwise-equal logits and identical tokens;
+- the 8 lifecycle checks pass on the real model, bitwise where the evaluation path is the same. There, the second turn reused 75 prompt tokens: identical answer tokens, KL 2.5e-3 against a full rebuild. Batch shape alone gives KL 4.3e-4 on this model (D027);
+- the merge plan matches the local file, both in Python and through the app's own Kotlin `GgufMerge`, compiled and run on the JVM against the official shard headers;
+- the debug APK (with GPU mode) and the Android CLI tools build without new warnings.
+
+**Routing locality** (real traces, held-out prompts, decode steps):
+
+- LRU serves 37% of expert requests with a 1 GiB cache, 45% with 1.5 GiB and 51% with 2 GiB; that is 567, 493 and 439 MB of expert reads per token;
+- decayed LFU and optimized quotas each add about one point; the Belady bound is about 19 points higher;
+- two consecutive tokens share only about 4 of 10 experts per layer, so MTP would cut I/O per token by about 3% and is not pursued.
+
+**Model compatibility (D028):** qwen4exp supports model-specific configuration across its hyper-connection streams. Fixture checks and a real-model host smoke check pass. These establish technical compatibility; effects on behavior and answer quality remain unevaluated.
+
+**Owner-reported Galaxy observation (2026-10-19):** the model runs in the app; the supplied statistics screenshot shows 1.8 tokens/s, 252 generated tokens and 6.1 s to first token. Record: `results/2026-10-19/galaxy/flash-next-owner-observation.json`. Prompt length, cache budget, batch, prefix reuse, thinking state, thermal state, peak RSS and energy were not captured and remain null. This is a single app observation, not a controlled speed, sustained or quality result. The website now includes the model alongside both 35B builds, separates host checks from this observation, and retains the 35B scope on its earlier performance figures. Local preview from the repository root: `npm start`, then `http://localhost:8377`.
+
+**Not verified:** controlled or sustained Galaxy speed, peak memory, dotprod lookahead, storage throughput at queue depth, the in-app download, and the quality of this quantization.
+
+**Device session, when ~80 GB are free on the phone:**
+
+1. Install the debug build in place, which keeps the installed models: `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`, or `./scripts/android-app.ps1 -Variant Debug -Install`.
+2. Copy the model: `python tools/acquire_model.py configs/flash-next-model.json --push-local models/flash-next/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf --model-id qwen3.8-flash-next-ud-q2kxl`. It resumes if interrupted, and hashing 79 GB on the phone takes a few minutes.
+3. Load it in the app (Models). The configuration line shows the expert cache it got; expect about 1–1.5 GiB on a phone with 5.5–6 GiB available.
+4. Measure in this order:
+   - `eqt-simd-test` (NEON + dotprod Q8_0 path);
+   - `eqt-io-bench` over the model file in app storage, `direct: true`, `read_bytes` 479232 and 925696, `threads` 1/4/8/16/32. This number decides the expected speed: about 2 tokens/s at 1.2 GB/s, 3.5–4 at 2–2.5 GB/s (arithmetic, D026);
+   - `sweep_target.py --run-as org.equity.app --model files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf` with `--cool-to`, arms for `io_threads`, `prefetch` on/off and `lookahead_gate`, watching `predict_wait_ms`;
+   - a `quality-v1` subset;
+   - a short sustained run.
 
 ## Thinking mode: 2026-10-19
 

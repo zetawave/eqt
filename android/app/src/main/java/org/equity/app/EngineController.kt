@@ -120,6 +120,7 @@ object EngineController {
         val settings: Settings,
         val projectorPath: String? = null,
         val visionMiB: Int = 0,
+        val stream: StreamProfile = StreamProfile(),
     )
     private var loadedSource: ModelSource? = null
     private var trainedContext: Int? = null
@@ -280,7 +281,7 @@ object EngineController {
                 val visionMiB = projector?.let { (it.sizeBytes shr 20).toInt() + VISION_WORK_MIB } ?: 0
                 loadSource(app, ModelSource(path.absolutePath, model.sha256, model.streamed, model.residentMiB,
                     model.contextMiBPer1k, path.length(), settings,
-                    projector?.let { ModelFiles.final(app, it).absolutePath }, visionMiB))
+                    projector?.let { ModelFiles.final(app, it).absolutePath }, visionMiB, model.stream))
             }
         }
     }
@@ -322,9 +323,13 @@ object EngineController {
                     }
                     hash = digest.digest().joinToString("") { "%02x".format(it) }
                 }
-                // Unknown local files use the larger per-token context cost of the catalog models.
+                // A streamed file of a catalog model's exact size is admitted with that model's memory figures (its
+                // hash is not checked, so it gets no fingerprint); other files use the larger per-token context cost
+                // of the catalog models.
+                val sized = Catalog.models.firstOrNull { it.streamed && streamed && it.sizeBytes == stat.st_size }
                 loadSource(app, ModelSource("/proc/self/fd/${pfd.fd}", hash, streamed,
-                    if (streamed) 2448 else sizeMiB, 112, stat.st_size, settings))
+                    sized?.residentMiB ?: if (streamed) 2448 else sizeMiB, sized?.contextMiBPer1k ?: 112, stat.st_size,
+                    settings, stream = sized?.stream ?: StreamProfile()))
             }
         }
     }
@@ -352,7 +357,41 @@ object EngineController {
         }
     }
 
-    private fun availableMiB(context: Context): Int {
+    /** One way to read prompts for a streamed model, and the free memory it needs. */
+    private class StreamPlan(val batch: Int, val prefillMiB: Int, val cacheMiB: Int, val shortfallMiB: Int, val requiredMiB: Int)
+
+    /**
+     * Memory for reading prompts in [batch]-token batches with a [prefillMiB] next-layer allowance. With [available]
+     * the expert cache takes what is left (between its floor and 3 GiB); without it the cache is at its floor, which is
+     * the least the model needs.
+     */
+    private fun streamPlan(available: Int?, residentMiB: Int, kvMiB: Int, settings: Settings, visionMiB: Int,
+                           stream: StreamProfile, batch: Int, prefillMiB: Int): StreamPlan {
+        val gpuStagingMiB = if (settings.gpu) GPU_STAGING_MIB else 0
+        val workMiB = if (batch == 2048) kvMiB + 512 + GPU_WORK_MIB else kvMiB + stream.computeMiBPer512 * batch / 512
+        val layerMiB = stream.layerWorkingSetMiB(batch)
+        // Images are encoded before the prompt is read and the projector is released before it, so image memory and
+        // the prompt-time prefetch allowance are never needed at the same time.
+        val transientMiB = maxOf(prefillMiB + gpuStagingMiB, visionMiB)
+        val floor = maxOf(512, layerMiB)
+        val cache = settings.expertCacheMiB.takeIf { it > 0 }
+            ?: available?.let { (it - residentMiB - workMiB - transientMiB - SYSTEM_RESERVE_MIB).coerceIn(floor, 3072) }
+            ?: floor
+        val shortfallMiB = maxOf(0, layerMiB - cache)
+        return StreamPlan(batch, prefillMiB, cache, shortfallMiB,
+            residentMiB + cache + shortfallMiB + transientMiB + workMiB + SYSTEM_RESERVE_MIB)
+    }
+
+    /** Free memory, in MiB, that [model] needs to load with full prompt batches and the next-layer allowance. */
+    fun fullSpeedMemoryMiB(model: CatalogModel): Int {
+        val settings = SettingsStore.state.value
+        val kvMiB = model.contextMiBPer1k * settings.context / 1024
+        if (!model.streamed) return (model.sizeBytes shr 20).toInt() + kvMiB + 512 + 512
+        return streamPlan(null, model.residentMiB, kvMiB, settings, 0, model.stream,
+            if (settings.gpu) 2048 else 512, 512).requiredMiB
+    }
+
+    fun availableMiB(context: Context): Int {
         val memory = ActivityManager.MemoryInfo()
         context.getSystemService(ActivityManager::class.java).getMemoryInfo(memory)
         return (memory.availMem shr 20).toInt()
@@ -360,7 +399,7 @@ object EngineController {
 
     /** [visionMiB] is memory kept free for image encoding; 0 for a text-only load. */
     private fun loadOptions(context: Context, streamed: Boolean, residentMiB: Int, contextMiBPer1k: Int, fileBytes: Long,
-                            settings: Settings, visionMiB: Int): JSONObject {
+                            settings: Settings, visionMiB: Int, stream: StreamProfile): JSONObject {
         val available = availableMiB(context)
         // Context state and compute buffers are allocated at load; admitting without them invites the low-memory killer.
         // Prompt batches of 512 tokens take the tiled GEMM path and need larger compute buffers.
@@ -368,8 +407,10 @@ object EngineController {
         // tiles): larger compute buffers, plus staging for one GPU operation that is released after each prompt.
         val gpuWorkMiB = if (settings.gpu) GPU_WORK_MIB else 0
         val gpuStagingMiB = if (settings.gpu) GPU_STAGING_MIB else 0
-        val workMiB = contextMiBPer1k * settings.context / 1024 + 512 + gpuWorkMiB
-        val options = JSONObject().put("context", settings.context).put("batch", if (settings.gpu) 2048 else 512)
+        val kvMiB = contextMiBPer1k * settings.context / 1024
+        val workMiB = kvMiB + 512 + gpuWorkMiB
+        val firstBatch = if (settings.gpu) 2048 else 512
+        val options = JSONObject().put("context", settings.context).put("batch", firstBatch)
             .put("threads", settings.threads)
         if (settings.gpu) options.put("gpu", true)
         if (!streamed) {
@@ -382,24 +423,30 @@ object EngineController {
             return options.put("mmap", true).put("memory_budget_mib", maxOf(2048, requiredMiB))
         }
         // Expert cache from free RAM after shared weights, compute buffers, the transient next-layer allowance used
-        // while reading prompts, and system headroom.
-        val prefillMiB = 512
-        // Images are encoded before the prompt is read and the projector is released before it, so image memory
-        // and the prompt-time prefetch allowance are never needed at the same time.
-        val transientMiB = maxOf(prefillMiB + gpuStagingMiB, visionMiB)
-        val cache = settings.expertCacheMiB.takeIf { it > 0 }
-            ?: (available - residentMiB - workMiB - transientMiB - SYSTEM_RESERVE_MIB).coerceIn(512, 3072)
-        require(residentMiB + cache + transientMiB + workMiB + SYSTEM_RESERVE_MIB <= available) {
-            "This model needs about ${residentMiB + cache + transientMiB + workMiB + SYSTEM_RESERVE_MIB} MiB of free memory and " +
-                "$available MiB are available. Close some apps and try again."
+        // while reading prompts, and system headroom. A prompt batch keeps its share of one layer's experts resident
+        // at once and the engine fits them inside the cache (D026), so the cache never starts below that share and a
+        // smaller fixed cache needs the shortfall on top. When memory is short, prompts are first read without the
+        // next-layer allowance, then in smaller batches: fewer of a layer's experts and smaller compute buffers at once
+        // (Flash-Next at 128 tokens: 843 instead of 916 MiB of experts, 135 instead of 540 MiB of buffers). Answers
+        // stay the same up to float rounding; prompts longer than the batch take more passes over the experts.
+        val plans = listOf(firstBatch to 512, firstBatch to 0) + listOf(256, 128, 64, 32).filter { it < firstBatch }.map { it to 0 }
+        var required = 0
+        for ((batch, prefillMiB) in plans) {
+            val plan = streamPlan(available, residentMiB, kvMiB, settings, visionMiB, stream, batch, prefillMiB)
+            required = plan.requiredMiB
+            if (required > available) continue
+            // Measured defaults (docs/decisions.md D018, D020): coalesced expert reads, next-layer prefetch for
+            // prompts; the engine keeps experts in reusable slots by default.
+            return options.put("batch", batch).put("mmap", false).put("expert_streaming", true)
+                .put("expert_cache_mib", plan.cacheMiB)
+                .put("io_threads", 16).put("direct_io", true).put("prefetch", true)
+                .put("coalesce_kib", 2048).put("coalesce_gap", 1).put("prefill_prefetch_mib", prefillMiB)
+                .put("memory_budget_mib", residentMiB + plan.cacheMiB + plan.shortfallMiB + prefillMiB + 1536 +
+                    gpuWorkMiB + gpuStagingMiB + kvMiB)
+                .apply { stream.tuning.forEach { (key, value) -> put(key, value) } }
         }
-        // Measured defaults (docs/decisions.md D018, D020): coalesced expert reads, next-layer prefetch for prompts;
-        // the engine keeps experts in reusable slots by default.
-        return options.put("mmap", false).put("expert_streaming", true).put("expert_cache_mib", cache)
-            .put("io_threads", 16).put("direct_io", true).put("prefetch", true)
-            .put("coalesce_kib", 2048).put("coalesce_gap", 1).put("prefill_prefetch_mib", prefillMiB)
-            .put("memory_budget_mib", residentMiB + cache + prefillMiB + 1536 + gpuWorkMiB + gpuStagingMiB +
-                contextMiBPer1k * settings.context / 1024)
+        throw IllegalArgumentException("This model needs about $required MiB of free memory and $available MiB are " +
+            "available. Close some apps or choose a smaller context in Settings, then try again.")
     }
 
     private fun loadSource(context: Context, source: ModelSource, growing: Boolean = false) {
@@ -407,7 +454,7 @@ object EngineController {
         NativeBridge.unload()
         loadedSource = null
         fun options(visionMiB: Int) = loadOptions(context, source.streamed, source.residentMiB,
-            source.contextMiBPer1k, source.fileBytes, source.settings, visionMiB)
+            source.contextMiBPer1k, source.fileBytes, source.settings, visionMiB, source.stream)
         val withVision = source.projectorPath?.let { path ->
             if (growing) options(source.visionMiB).put("mmproj", path)
             else runCatching { options(source.visionMiB).put("mmproj", path) }.getOrNull()
@@ -436,7 +483,8 @@ object EngineController {
                 // A phone without a usable Vulkan GPU, or a build without the GPU backend, runs on the CPU.
                 options.optBoolean("gpu") && error.message?.let { "GPU" in it || "Vulkan" in it } == true -> {
                     options.remove("gpu")
-                    options.put("batch", 512)
+                    // A batch the memory fit already lowered stays lowered.
+                    options.put("batch", minOf(512, options.getInt("batch")))
                     gpuNote = "GPU unavailable"
                 }
                 else -> throw error
@@ -451,6 +499,7 @@ object EngineController {
             append("CPU ").append(info.optString("cpu_variant").removePrefix("android_"))
             info.optJSONObject("gpu")?.let { append(" + GPU ").append(it.optString("device")) }
             append(" · ${info.getInt("threads")} threads · ${info.getInt("context")} context")
+            if (info.getInt("batch") < 512) append(" · ${info.getInt("batch")}-token prompt batches")
             if (streaming != null) {
                 append(" · ${streaming.getLong("effective_budget_bytes") shr 20} MiB expert cache")
                 if (!options.optBoolean("direct_io")) append(" · buffered reads")

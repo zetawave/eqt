@@ -13,7 +13,7 @@ import tempfile
 from benchmark import source_hash
 from runner import ROOT, Runner, sha256
 
-FIXTURES = ["models/eqt-tiny-qwen35moe.gguf", "models/eqt-tiny-qwen35moe-ff96.gguf"]
+FIXTURES = ["models/eqt-tiny-qwen35moe.gguf", "models/eqt-tiny-qwen35moe-ff96.gguf", "models/eqt-tiny-qwen4exp.gguf"]
 MTP_FIXTURE = "models/eqt-tiny-qwen35moe-mtp.gguf"
 MTP_CASES = [
     ("plain_resident", {}),
@@ -55,6 +55,8 @@ def main():
     parser.add_argument("--cpu-variant", help="Android only: force one GGML CPU backend variant")
     parser.add_argument("--direct-io", action="store_true", help="Also run a direct-I/O case (Android/Linux only)")
     parser.add_argument("--output", default="results/local/streaming-correctness.json")
+    parser.add_argument("--fixture", action="append", help="Only these fixtures (default: all)")
+    parser.add_argument("--skip-mtp", action="store_true", help="Skip the MTP self-speculation fixture")
     args = parser.parse_args()
     runner = Runner(args.target, args.serial, args.cpu_variant)
     base = json.loads((ROOT / "configs/smoke-request.json").read_text(encoding="utf-8"))
@@ -79,7 +81,7 @@ def main():
                   fixtures=[])
     (ROOT / ".cache").mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="eqt-stream-", dir=ROOT / ".cache") as workdir:
-        for fixture in FIXTURES:
+        for fixture in args.fixture or FIXTURES:
             # EQT_FIXTURE_DIR lets a container read fixtures from a filesystem that supports O_DIRECT.
             local = (Path(os.environ.get("EQT_FIXTURE_DIR", ROOT / "models")) / Path(fixture).name).resolve()
             hashes = runner.stage(["eqt-bench", "eqt-check"], [local])
@@ -117,27 +119,29 @@ def main():
                                            binary_sha256=hashes[runner.tool("eqt-bench").name],
                                            outcomes=outcomes, lifecycle=lifecycle,
                                            rejects_cache_options_without_streaming=True))
-        # MTP self-speculation must reproduce plain greedy decoding. The random head rejects nearly every
-        # draft, which exercises the recurrent-state rollback on every step.
-        local = (Path(os.environ.get("EQT_FIXTURE_DIR", ROOT / "models")) / Path(MTP_FIXTURE).name).resolve()
-        hashes = runner.stage(["eqt-bench"], [local])
-        model = local if runner.local else local.name
-        mtp_outcomes, reference = [], None
-        for name, load in MTP_CASES:
-            request = json.loads(json.dumps(base))
-            request["load"].update(load)
-            result = runner.run("eqt-bench", model, request, workdir)[1]
-            reference = reference or result
-            outcome = dict(case=name, load=load, token_ids_equal=result["token_ids"] == reference["token_ids"],
-                           speculative=result["speculative"])
-            outcome["passed"] = outcome["token_ids_equal"] and (result["speculative"] is not None) == load.get("mtp", False)
-            mtp_outcomes.append(outcome)
-            print(MTP_FIXTURE, name, "PASS" if outcome["passed"] else "FAIL", flush=True)
-            if not outcome["passed"]:
-                raise AssertionError(outcome)
-        report["mtp"] = dict(model=MTP_FIXTURE, model_sha256=hashes[local.name], outcomes=mtp_outcomes,
-                             criterion="identical greedy token IDs with and without MTP self-speculation")
-    report["scope"] = ("Random-weight fixtures with the target's qwen35moe graph, tokenizer and routed quant types. "
+        if not args.skip_mtp:
+            # MTP self-speculation must reproduce plain greedy decoding. The random head rejects nearly every
+            # draft, which exercises the recurrent-state rollback on every step.
+            local = (Path(os.environ.get("EQT_FIXTURE_DIR", ROOT / "models")) / Path(MTP_FIXTURE).name).resolve()
+            hashes = runner.stage(["eqt-bench"], [local])
+            model = local if runner.local else local.name
+            mtp_outcomes, reference = [], None
+            for name, load in MTP_CASES:
+                request = json.loads(json.dumps(base))
+                request["load"].update(load)
+                result = runner.run("eqt-bench", model, request, workdir)[1]
+                reference = reference or result
+                outcome = dict(case=name, load=load, token_ids_equal=result["token_ids"] == reference["token_ids"],
+                               speculative=result["speculative"])
+                outcome["passed"] = outcome["token_ids_equal"] and (result["speculative"] is not None) == load.get("mtp", False)
+                mtp_outcomes.append(outcome)
+                print(MTP_FIXTURE, name, "PASS" if outcome["passed"] else "FAIL", flush=True)
+                if not outcome["passed"]:
+                    raise AssertionError(outcome)
+            report["mtp"] = dict(model=MTP_FIXTURE, model_sha256=hashes[local.name], outcomes=mtp_outcomes,
+                                 criterion="identical greedy token IDs with and without MTP self-speculation")
+    report["scope"] = ("Random-weight fixtures with the targets' qwen35moe and qwen4exp graphs, tokenizers and routed "
+                       "quant types. "
                        "Exactness of the streamed and speculative paths only; no routing locality, acceptance, "
                        "speed or quality evidence.")
     output = Path(args.output)

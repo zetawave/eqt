@@ -91,3 +91,24 @@ CPU variants: Android CLI runs need the shared libraries next to the tools; `too
 Threadpool: `threadpool` (default true), `poll` (0–100) and `cpu_mask` (hex CPU-id mask) are load options; `configuration.threadpool` records them. A/B `threadpool=false` reproduces GGML's per-graph disposable pool. Pinning or polling changes energy and phone responsiveness; report thermal state and battery drain alongside speed.
 
 Galaxy sequence: `python tools/galaxy_session.py preflight simd variants threadpool streaming`, then explicitly `acquire-target` (streams 22 GB from the pinned URL to `/data/local/tmp/eqt` without a host copy, hash-verified on the stream and on the device), then `target` and `traces`.
+
+## Qwen3.8-Flash-Next (qwen4exp) — 2026-10-19
+
+Artifact: `configs/flash-next-model.json`. The repository ships three gguf-split shards; the artifact is their merge. `python tools/gguf_merge.py configs/flash-next-model.json --local <merged file> [--verify-data]` fetches only the shard headers (ranged requests), rebuilds the merged header as `gguf_merge` writes it and compares it with the pinned header hash and a local merge; `--verify-data` also rehashes each shard from the local file. The app downloads the shards into the merged file directly (same layout, no second copy) and checks the merged header before writing weights and the whole file at the end.
+
+Copying a local merge into the installed debug app: `python tools/acquire_model.py configs/flash-next-model.json --push-local models/flash-next/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf --model-id qwen3.8-flash-next-ud-q2kxl`. It appends 256 MiB segments through `/data/local/tmp` as the app user, resumes after the last confirmed segment, needs only the model's size free on the phone, and installs the file only after its on-device SHA-256 matches. CLI tools reach models in the app's storage with `--run-as org.equity.app` and app-relative model paths (`files/models/<id>/<file>`): binaries are copied into `files/bench/` and run there.
+
+Fixture: `python tools/make_qwen4exp_fixture.py` (from `.cache/research/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf.header.bin`, the first 11,024,320 bytes of the merge). `verify_streaming.py` includes it; `--fixture` and `--skip-mtp` select a subset.
+
+Load options added:
+
+- `prefill_prefetch_min_coverage` (0–1, default 0): read the next layer ahead during a prompt batch only when the batch is expected to use at least that share of its experts, 1 − (1 − k/E)^rows.
+- `lookahead_gate` (default true): with hyper-connection mixers, the lookahead applies the mixer's low-rank gate; false averages the normed streams.
+
+Request option: `prompt_cache` (default true) reuses the state the previous request left when the new prompt starts with all of its tokens (D027).
+
+Result fields added: `reused_prompt_tokens`; `expert_cache.borrowed_evictions` (entries other layers lent to a prompt batch), `expert_cache.predict_wait_ms` (decode-thread time spent waiting for the lookahead). `prefill_tokens_per_second` counts evaluated tokens only.
+
+`eqt-io-bench` takes `threads` (1–32): concurrent readers, each with its own buffer, over the same random offsets; `bytes_per_second` is the aggregate rate. Flash-Next experts are read as 473,600-byte (gate, up) and 921,600-byte (down) slices, at most 117 and 226 pages once rounded to pages, so sweep `read_bytes` 479232 and 925696 with `direct: true` over `threads` 1, 4, 8, 16 and 32 on the model file itself.
+
+Decode-only replay of routing traces: `python tools/replay_decode.py --calibrate <trace> --evaluate <other trace> --entry-bytes 1884160 --expert-bytes 1875200 --layers 48 --budget-mib ...`. Prompt calls update the cache with native semantics; only single-token calls are scored.

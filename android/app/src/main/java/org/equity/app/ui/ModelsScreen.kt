@@ -2,8 +2,11 @@ package org.equity.app.ui
 
 import android.Manifest
 import android.app.ActivityManager
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -121,6 +124,75 @@ fun ModelsScreen(engine: EngineState, onOpenChat: () -> Unit) {
     }
 }
 
+/** Free memory in bytes, refreshed every few seconds while shown. */
+@Composable
+private fun rememberAvailableMemory(): Long {
+    val context = LocalContext.current
+    val available by produceState(0L) {
+        val manager = context.getSystemService(ActivityManager::class.java)
+        while (true) {
+            value = ActivityManager.MemoryInfo().also { manager.getMemoryInfo(it) }.availMem
+            delay(3000)
+        }
+    }
+    return available
+}
+
+/** Free memory against what [model] needs at full speed, with the way to free more when it falls short. */
+@Composable
+private fun MemoryNeed(model: CatalogModel) {
+    val context = LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    val available = rememberAvailableMemory()
+    // Recomputed on every refresh: it depends on the context size and processor chosen in Settings.
+    val needed = EngineController.fullSpeedMemoryMiB(model).toLong() shl 20
+    var explain by remember { mutableStateOf(false) }
+    if (available <= 0) return
+    val enough = available >= needed
+    Spacer(Modifier.height(10.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            if (enough) "${formatBytes(available)} free · full speed needs ${formatBytes(needed)}"
+            else "${formatBytes(available)} free of the ${formatBytes(needed)} full speed needs; it will load with slower prompts or not at all",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (enough) colors.onSurfaceVariant else colors.error,
+            modifier = Modifier.weight(1f),
+        )
+        if (!enough) TextButton(onClick = { explain = true }) { Text("Free memory") }
+    }
+    if (explain) {
+        val developer = Settings.Global.getInt(context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) != 0
+        AlertDialog(
+            onDismissRequest = { explain = false },
+            title = { Text("Free memory for ${model.name}") },
+            text = {
+                Text(
+                    if (developer) "In Developer options, set Background process limit to No background processes. " +
+                        "Android then stops keeping closed apps in memory. Come back here when it is set. The limit " +
+                        "lasts until the phone restarts; other apps start from scratch when you open them again."
+                    else "Developer options are turned off. Open About phone, then Software information, and tap " +
+                        "Build number seven times. Then come back and tap Free memory again."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    explain = false
+                    openSettings(context, if (developer) Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS
+                        else Settings.ACTION_DEVICE_INFO_SETTINGS)
+                }) { Text(if (developer) "Open Developer options" else "Open About phone") }
+            },
+            dismissButton = { TextButton(onClick = { explain = false }) { Text("Cancel") } },
+            containerColor = colors.surfaceContainerHigh,
+        )
+    }
+}
+
+private fun openSettings(context: Context, action: String) {
+    // Some builds lack a specific page; the main Settings screen still gets the user there.
+    runCatching { context.startActivity(Intent(action)) }
+        .recoverCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
+}
+
 @Composable
 private fun DeviceCard() {
     val context = LocalContext.current
@@ -181,7 +253,7 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
         Column(Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).background(BrandGradient, CircleShape), contentAlignment = Alignment.Center) {
-                    Text(if (model.streamed) "35B" else "0.6B", color = colors.surface, fontWeight = FontWeight.Bold,
+                    Text(model.badge, color = colors.surface, fontWeight = FontWeight.Bold,
                         fontSize = 12.sp, fontFamily = Inter)
                 }
                 Spacer(Modifier.width(14.dp))
@@ -228,16 +300,19 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                     Button(onClick = onOpenChat) { Text("Open chat") }
                     OutlinedButton(onClick = { EngineController.unload() }, enabled = engine.phase == Phase.Ready) { Text("Unload") }
                 }
-                installed -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = { EngineController.load(context, model) }, enabled = engineIdle) {
-                        Text(if (engine.phase == Phase.Ready) "Switch to this model" else "Load")
+                installed -> Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = { EngineController.load(context, model) }, enabled = engineIdle) {
+                            Text(if (engine.phase == Phase.Ready) "Switch to this model" else "Load")
+                        }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { confirmDelete = true }) {
+                            Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Delete")
+                        }
                     }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { confirmDelete = true }) {
-                        Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Delete")
-                    }
+                    if (model.streamed) MemoryNeed(model)
                 }
                 else -> Column {
                     if (state == WorkInfo.State.FAILED) {

@@ -1,11 +1,58 @@
 #include "simd.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+
 #if defined(__aarch64__) && defined(__ARM_NEON)
 #include <arm_neon.h>
 #define EQT_NEON 1
+#if defined(__linux__)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#endif
 #endif
 
 namespace eqt::simd {
+namespace {
+constexpr size_t q8_block = 32;
+constexpr size_t q8_block_bytes = 2 + q8_block; // FP16 scale, then the quants (GGML block_q8_0)
+
+// IEEE binary16 to binary32, including subnormals (the FP16 library's bit-exact conversion that GGML uses).
+float half_to_float(const uint8_t *bytes) {
+    uint16_t h;
+    std::memcpy(&h, bytes, sizeof(h));
+    const auto as_float = [](uint32_t bits) {
+        float f;
+        std::memcpy(&f, &bits, sizeof(f));
+        return f;
+    };
+    const auto as_bits = [](float f) {
+        uint32_t bits;
+        std::memcpy(&bits, &f, sizeof(bits));
+        return bits;
+    };
+    const uint32_t w = static_cast<uint32_t>(h) << 16, sign = w & 0x80000000u, two_w = w + w;
+    const float normalized = as_float((two_w >> 4) + (0xE0u << 23)) * 0x1.0p-112f;
+    const float denormalized = as_float((two_w >> 17) | (126u << 23)) - 0.5f;
+    return as_float(sign | (two_w < (1u << 27) ? as_bits(denormalized) : as_bits(normalized)));
+}
+} // namespace
+
+void quantize_blocks(const float *x, size_t n, int8_t *q, float *scales) {
+    for (size_t b = 0; b < n / q8_block; ++b) {
+        const float *block = x + b * q8_block;
+        float amax = 0;
+        for (size_t j = 0; j < q8_block; ++j) {
+            amax = std::max(amax, std::abs(block[j]));
+        }
+        const float d = amax / 127.0f, inverse = d ? 1.0f / d : 0.0f;
+        scales[b] = d;
+        for (size_t j = 0; j < q8_block; ++j) {
+            q[b * q8_block + j] = static_cast<int8_t>(std::nearbyint(block[j] * inverse));
+        }
+    }
+}
 #ifdef EQT_NEON
 // Four-wide FMA latency is ~4 cycles with two or more pipes on Cortex-A720/X4, so loops keep at
 // least eight independent accumulators live. Summation order differs from the scalar path.
@@ -70,8 +117,65 @@ void gemv_rows(const float *rows, const float *x, float *scores, size_t row_coun
     }
 }
 
+namespace {
+bool has_dotprod() {
+#if defined(__linux__) && defined(HWCAP_ASIMDDP)
+    static const bool available = (getauxval(AT_HWCAP) & HWCAP_ASIMDDP) != 0;
+    return available;
+#else
+    return false;
+#endif
+}
+
+// SDOT adds four int8 products into each 32-bit lane per instruction (at most 4 * 128 * 128 per step).
+__attribute__((target("arch=armv8.2-a+dotprod"))) void gemv_q8_0_dotprod(const uint8_t *rows, size_t row_stride,
+                                                                          const int8_t *q, const float *scales,
+                                                                          float *scores, size_t row_count, size_t n) {
+    const size_t blocks = n / q8_block;
+    for (size_t r = 0; r < row_count; ++r) {
+        const uint8_t *row = rows + r * row_stride;
+        float sum = 0;
+        for (size_t b = 0; b < blocks; ++b) {
+            const uint8_t *block = row + b * q8_block_bytes;
+            const int8x16_t w0 = vld1q_s8(reinterpret_cast<const int8_t *>(block + 2));
+            const int8x16_t w1 = vld1q_s8(reinterpret_cast<const int8_t *>(block + 18));
+            int32x4_t acc = vdotq_s32(vdupq_n_s32(0), w0, vld1q_s8(q + b * q8_block));
+            acc = vdotq_s32(acc, w1, vld1q_s8(q + b * q8_block + 16));
+            sum += half_to_float(block) * scales[b] * static_cast<float>(vaddvq_s32(acc));
+        }
+        scores[r] = sum;
+    }
+}
+} // namespace
+
+void gemv_q8_0(const uint8_t *rows, size_t row_stride, const int8_t *q, const float *scales, float *scores,
+               size_t row_count, size_t n) {
+    if (has_dotprod()) {
+        gemv_q8_0_dotprod(rows, row_stride, q, scales, scores, row_count, n);
+        return;
+    }
+    const size_t blocks = n / q8_block;
+    for (size_t r = 0; r < row_count; ++r) {
+        const uint8_t *row = rows + r * row_stride;
+        float sum = 0;
+        for (size_t b = 0; b < blocks; ++b) {
+            const uint8_t *block = row + b * q8_block_bytes;
+            const int8x16_t w0 = vld1q_s8(reinterpret_cast<const int8_t *>(block + 2));
+            const int8x16_t w1 = vld1q_s8(reinterpret_cast<const int8_t *>(block + 18));
+            const int8x16_t x0 = vld1q_s8(q + b * q8_block), x1 = vld1q_s8(q + b * q8_block + 16);
+            // Each int8 product fits int16; pairwise accumulation into int32 cannot overflow.
+            int32x4_t acc = vpaddlq_s16(vmull_s8(vget_low_s8(w0), vget_low_s8(x0)));
+            acc = vpadalq_s16(acc, vmull_s8(vget_high_s8(w0), vget_high_s8(x0)));
+            acc = vpadalq_s16(acc, vmull_s8(vget_low_s8(w1), vget_low_s8(x1)));
+            acc = vpadalq_s16(acc, vmull_s8(vget_high_s8(w1), vget_high_s8(x1)));
+            sum += half_to_float(block) * scales[b] * static_cast<float>(vaddvq_s32(acc));
+        }
+        scores[r] = sum;
+    }
+}
+
 const char *implementation() {
-    return "neon";
+    return has_dotprod() ? "neon+dotprod" : "neon";
 }
 #else
 float dot(const float *a, const float *b, size_t n) {
@@ -95,6 +199,25 @@ void scale_mul(const float *x, const float *weight, float scale, float *out, siz
 void gemv_rows(const float *rows, const float *x, float *scores, size_t row_count, size_t n) {
     for (size_t r = 0; r < row_count; ++r) {
         scores[r] = dot(rows + r * n, x, n);
+    }
+}
+
+void gemv_q8_0(const uint8_t *rows, size_t row_stride, const int8_t *q, const float *scales, float *scores,
+               size_t row_count, size_t n) {
+    const size_t blocks = n / q8_block;
+    for (size_t r = 0; r < row_count; ++r) {
+        const uint8_t *row = rows + r * row_stride;
+        float sum = 0;
+        for (size_t b = 0; b < blocks; ++b) {
+            const uint8_t *block = row + b * q8_block_bytes;
+            const auto *weights = reinterpret_cast<const int8_t *>(block + 2);
+            int32_t acc = 0;
+            for (size_t j = 0; j < q8_block; ++j) {
+                acc += static_cast<int32_t>(weights[j]) * q[b * q8_block + j];
+            }
+            sum += half_to_float(block) * scales[b] * static_cast<float>(acc);
+        }
+        scores[r] = sum;
     }
 }
 

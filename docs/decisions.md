@@ -327,3 +327,80 @@ Measured choices (929-token prompt unless noted):
 - Images: the vision encoder runs on the GPU without flash attention (33.5 → 8.8 s), and the whole prompt (text tokens and image rows) is read in shared mixed batches, one pass over the experts instead of one per text chunk.
 
 Result, CPU path against GPU mode: 35 tokens 4.20 → 4.12 s (nothing offloaded); 237 tokens 6.87 → 6.38 s; 929 tokens 24.5 → 14.6 s (1.68x); one 1024x768 image, first token 69.2 → 23.9 s (2.9x). Decode speed is unchanged (CPU). Peak RSS +0.4–0.45 GiB while a long prompt is read. First-token logits against the CPU path at the same batch size: same top-1 and top-10, KL 1.8e-3 (text) and 2.7e-2 (image), first 8 tokens equal; a full quality evaluation of the GPU mode is still to do. The CPU path is unchanged: the hook is not installed, and the model never uses the Vulkan device.
+
+## D026: Qwen3.8-Flash-Next (qwen4exp) on the streaming engine — 2026-10-19
+
+Model, from the pinned GGUF header (`configs/flash-next-model.json`, Unsloth UD-Q2_K_XL, 78.9 GB): `qwen4exp`, 48 layers, 512 routed experts with 10 per token plus a shared expert, Gated DeltaNet in 36 layers and sparse attention (QSA: a block indexer keeps the top 2,048 cells plus the tail) in 12, a four-stream hyper-connection residual with low-rank mixers, and a 51B-parameter n-gram table (PLE) read at layer 1. Byte budget per token:
+
+| Part | Size | Per token |
+|---|---|---|
+| Routed experts (IQ2_XS gate/up, IQ4_NL down) | 43.9 GiB, 1.875 MB per expert | 10 × 48 experts, 897 MB if all miss |
+| n-gram table (IQ4_NL, 320M rows × 160) | 27.5 GiB | 16 rows of 90 bytes |
+| Shared weights (Q5_K/Q6_K/Q8_0, F32 routers) | 3.37 GiB | all of it |
+| KV and indexer cache | 30 KiB per context token | |
+| Recurrent and PLE convolution state | 113 MiB | |
+
+Engine changes:
+
+- **Architecture accepted.** The pinned llama.cpp already implements `qwen4exp`. Patch 0004 only names the post-attention residual streams `attn_residual`, as qwen35 does.
+- **The n-gram table is always mapped from the file**, like the token embedding, never copied or counted as resident. Without the file's tensor list (metadata mode) the model sizes it by the rows its hash heads can address, a prefix of the converter's padded table; the loader accepts exactly that prefix. Windows hosts now map tensors too (placeholder reservations at 64 KiB granularity, `MapViewOfFile3`), so the 79 GB model runs on a 16 GB PC.
+- **Lookahead through the mixer.** The router reads the FFN mixer's output, not a normed residual. The predictor applies the next layer's mixer to the current post-attention streams: per-stream RMS norm, the low-rank gate as two Q8_0 products on int8-quantized activations (NEON, SDOT where HWCAP has it), the mean of the gated streams, then the F32 router. Host, 64 tokens: 77.6% of predicted experts are routed, against 71.3% when the streams are averaged without the gate (13.5% more decode misses). The gate stays; `lookahead_gate: false` keeps the cheaper variant, and `predict_wait_ms` reports any time the decode thread waits for the predictor.
+- **Prompt batches stay inside the cache budget.** A 512-token batch uses almost all 512 experts of a layer (0.9 GiB). The store used to hold that overflow on top of the budget; now other layers lend entries, in the order a layer sweep reuses them last (D020's slots make this an index change). Peak memory during prompts is the budget plus `prefill_prefetch_mib`, unless one layer alone needs more than the budget.
+- **Next-layer reads for prompts only when they pay.** Reading the whole next layer during a prompt wastes reads when the batch uses few of its experts: 52 tokens use about 64% of 512, and the host read 54 GB instead of 31. `prefill_prefetch_min_coverage` reads ahead only when 1 − (1 − k/E)^rows reaches the threshold. It defaults to 0 (unchanged for the 35B, where 52 tokens already use 81%); the catalog sets 0.9 for Flash-Next.
+- **GPU mode refused for qwen4exp.** Its node selection was measured on qwen35moe graphs (8,192-channel DeltaNet concatenations). The engine refuses before loading, and the app falls back to the CPU path as for a phone without Vulkan.
+
+Correctness, all with tokens and first-token logits compared:
+
+- **Fixture.** `tools/make_qwen4exp_fixture.py` builds a random-weight qwen4exp fixture from the pinned header: same tokenizer, template and stored types, eight layers, sparse attention below the prompt length, one PLE layer. Its 12 streamed configurations are bitwise equal to the resident run, and the lifecycle checks pass. The qwen35moe and MTP fixtures still pass all 29 cases.
+- **Real model, host.** A 4 GiB cache with lookahead and prompt prefetch, and a 1.5 GiB cache without either, gave identical tokens and bitwise-equal logits over 248,320 entries.
+
+Routing locality, from exact traces of the real model on the host: 8 calibration prompts and 6 held-out ones, decode steps only, uniform layer quotas (`tools/replay_decode.py`, `results/2026-10-19/host/flash-next-replay-decode.json`):
+
+| Cache | LRU (native) | Decayed LFU | Belady bound | Expert bytes read per token, LRU |
+|---|---|---|---|---|
+| 512 MiB | 17.9% | 23.0% | 36.7% | 739 MB |
+| 1 GiB | 37.0% | 38.2% | 56.1% | 567 MB |
+| 1.5 GiB | 45.2% | 46.3% | 65.0% | 493 MB |
+| 2 GiB | 51.3% | 52.3% | 70.5% | 439 MB |
+| 3 GiB | 59.5% | 60.4% | 78.0% | 365 MB |
+
+Calibration-optimized quotas add about one point. Pinning the most frequent experts loses points. Neither is worth a policy change now. Consecutive decode tokens share few experts: two tokens use 16.4 distinct experts per layer, three 21.9, four 26.8. MTP drafting accepts 64–66% per draft according to Unsloth's measurements. A k=1 verification would then read about 16.4 experts per layer for 1.65 tokens, only 3% less per token, and k=2 would read about the same. While storage bounds decoding, MTP is not pursued; its separate GGUF also needs an unmerged llama.cpp branch.
+
+Arithmetic, not a measurement: with the 1–1.5 GiB cache the Galaxy can hold, decoding reads about 0.5–0.57 GB of experts per token. Compute is estimated at 160–170 ms per token (3.4 GiB of shared weights at the K-quant GEMV rates of D025, plus IQ2_XS/IQ4_NL experts). The storage rate at queue depth decides the speed: about 2 tokens/s at 1.2 GB/s, about 3.5–4 tokens/s at 2–2.5 GB/s with full overlap. `eqt-io-bench` now takes `threads` to measure exactly that.
+
+Download: the repository ships the build as three gguf-split shards (the first holds only metadata). Their merge is rebuilt from the shard headers alone: the first shard's metadata with `split.count` moved last and set to 0, all tensor infos with offsets recomputed at 32 bytes, then the shards' data sections in order (`tools/gguf_merge.py`, the reference for the app). Built from the official shard headers, the merged header is byte-identical to the local `llama-gguf-split --merge` output (11,024,320 bytes, SHA-256 `2106fcb2…`), and the planned size matches the file. The app's download writes that header, after checking its pinned hash, and appends the shards' data sections as they stream, so the phone needs the file's size, not twice it. The finished file must match the merge's SHA-256 (`f26a5e67…`). Records: `results/2026-10-19/host/`.
+
+Memory fit, measured on the host: a prompt batch's compute buffers are linear in its tokens (518 MiB at 512, 259 at 256, 130 at 128, 65 at 64, at 4,096 context; 534 at 512 and 16,384). The experts one layer holds at once fall with the batch: 1 − (1 − 10/512)^b of 916 MiB, so 843 MiB at 128 tokens and 657 at 64. When the phone's free memory is short, the app first drops the next-layer prompt allowance, then reads prompts in batches of 256, 128, 64 or 32 tokens before refusing the load. For Flash-Next the minimum falls from about 5,440 MiB at 512 tokens to 4,980 at 128. Answers are the same up to float rounding. A prompt longer than the batch takes more passes over the experts: a short first message costs the same at 128 tokens, a 1,000-token prompt about four times the reads.
+
+Not verified: anything on the Galaxy (load, memory, speed, the dotprod path, prompt-cache timing), quality of this quantization, and the in-app download.
+
+## D027: A chat turn reuses the previous turn's state — 2026-10-19
+
+Every request used to clear the context and evaluate the whole conversation again. With Qwen3.8-Flash-Next a prompt batch reads almost every expert of every layer (about 43 GB at 512 tokens), so each turn of a long chat re-read most of the model, once per 512 tokens of history.
+
+The engine now keeps the context's keys, values and recurrent state after a text request that ends at EOS or at the output limit. A cancelled request, or one with model-output transformations, images or MTP drafting, does not keep them. It also keeps the exact tokens they hold: the prompt and the evaluated answer. An answer cut by the limit has its last token sampled but not evaluated, and EOS is never part of it. A new prompt that starts with all of those tokens evaluates only the rest.
+
+Recurrent state cannot be rewound, so any other prompt clears the context and evaluates everything, as before: a new chat, an edited or regenerated message, or a template that renders earlier turns differently. `prompt_cache: false` in a request forces that rebuild. `reused_prompt_tokens` reports the reuse, and `prefill_tokens_per_second` now counts evaluated tokens.
+
+When the reuse applies: turn n+1's rendered prompt must start with turn n's prompt and generated tokens.
+
+- **Qwen3.8 (Flash-Next):** its template keeps an empty `<think></think>` block in earlier assistant turns by default (`preserve_thinking`), exactly what the non-thinking generation prompt produced. Non-thinking chats therefore reuse their state whenever the answer re-tokenizes to the generated tokens.
+- **Qwen3.6 (35B):** its template drops that block from earlier turns, so its chats keep rebuilding, unchanged.
+- **Thinking mode:** chats rebuild, because Equity does not send the reasoning back.
+
+Numerics. A reused state evaluates the same tokens in other batch shapes: answer tokens one by one (autoregressive DeltaNet) instead of in a prompt batch (chunked DeltaNet). It differs by float rounding, which can flip near-ties among 512 experts. On the real model, host, the lifecycle check's second turn reused 75 prompt tokens. Against a full rebuild of the same conversation: identical 24 answer tokens, the same top-1, 9 of the top-10 shared, KL 2.5e-3, largest logit difference 1.55.
+
+That is the same class of difference that batch shape alone produces without any cache. One 122-token prompt evaluated in one batch and token by token gave KL 4.3e-4, largest difference 0.93, 8 of the top-10 shared, and identical tokens. All other lifecycle checks on the real model (repeat, new chat, conversation replay, cancellation recovery, seeded sampling, reload) remain bitwise equal.
+
+On the random-weight fixtures the generated text does not re-tokenize to the generated tokens, so they exercise the rebuild path only; all lifecycle checks pass. A multi-turn quality evaluation with reuse is still to do. Records: `results/2026-10-19/host/flash-next-lifecycle.json`, `flash-next-batch-shape-sensitivity.json`.
+
+## D028: Hyper-connection model compatibility (qwen4exp) — 2026-10-19
+
+Qwen3.8-Flash-Next keeps four residual streams per token. Model-specific configuration handles every stream, and offline package validation accounts for this layout.
+
+Checks on the qwen4exp fixture cover resident and streamed inference, exact recovery when configuration is disabled, cancellation, reload and invalid requests. Nine offline-tool tests pass. A real-model host smoke check produced a finite, dimensionally compatible 47-block package (blocks 1..47, width 2560).
+
+Several sequences in one batch can change sparse-attention block selection when prompts exceed the model's attention budget. Offline collection therefore evaluates such prompts separately. Equity's inference runs one sequence.
+
+These are technical compatibility checks. Effects on behavior and answer quality have not been evaluated for this model.
+

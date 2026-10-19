@@ -18,6 +18,11 @@
         "file": "patches/llama.cpp/0003-cvec-directional-ablation.patch",
         "sha256": "4b38c179b34359f69b02fd02163db9c08ab8e9bb2b19048112f5102b3af4f56d",
         "purpose": "llama_set_adapter_cvec_ablation: optional in-graph directional ablation in the control-vector adapter (each selected block output h becomes h - s*d*(d^T h) for that block's unit direction d), used by Equity's negative steering strengths; unused unless set"
+      },
+      {
+        "file": "patches/llama.cpp/0004-qwen4exp-residual-name-and-control-vectors.patch",
+        "sha256": "44c855c5aa7ecfa4c026fc3da02d5a9cf4b7b877d4821b9104d3fb92512ecbf7",
+        "purpose": "qwen4exp: names the post-attention hyper-connection streams attn_residual, as qwen35 names its residual, so Equity's expert store can predict the next layer's routing from them; applies the control-vector adapter (addition and directional ablation) to every stream of each block output, which the upstream graph never called. A node name and an adapter call; no change while no control vector is set"
       }
     ]
   },

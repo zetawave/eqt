@@ -37,6 +37,7 @@ def joules(before, after):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--serial")
+    parser.add_argument("--run-as", metavar="PACKAGE", help="Run as this debug app (models in its files/models/; pass app-relative model paths)")
     parser.add_argument("--model", required=True)
     parser.add_argument("--load", required=True, help="JSON load options")
     parser.add_argument("--request", default="configs/target-stream-request.json")
@@ -45,7 +46,7 @@ def main():
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
-    runner = Runner("android", args.serial)
+    runner = Runner("android", args.serial, run_as=args.run_as)
     runner.stage(["eqt-bench"])
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
     request.update(max_tokens=args.tokens, temperature=0, ignore_eos=True)

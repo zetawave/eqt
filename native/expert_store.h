@@ -33,6 +33,9 @@ struct ExpertOptions {
     bool direct_io = false;
     bool prefetch = false;
     int prefetch_extra = 0; // predicted candidates prefetched beyond the routed top-k, per row
+    // Hyper-connection lookahead: apply the mixer's low-rank gate (two Q8_0 GEMVs per layer) or average the normed
+    // streams without it, which costs only the router product.
+    bool lookahead_gate = true;
     // Demand misses of adjacent experts merge into one read per bank of at most coalesce_kib (0: one read
     // per expert and bank), bridging gaps of at most coalesce_gap resident experts.
     int coalesce_kib = 0;
@@ -40,6 +43,10 @@ struct ExpertOptions {
     // Transient allowance above the cache for reading the next layer during batched (prompt) evaluation;
     // 0 disables. Decode and small speculative batches use the router lookahead instead.
     int prefill_prefetch_mib = 0;
+    // The next layer is read ahead only when a batch of that many rows is expected to use at least this share of
+    // its experts, 1 - (1 - k/E)^rows for top-k of E (with 512 experts, 52 prompt tokens use about 64%); below it
+    // the reads are left to demand. 0 always reads ahead.
+    double prefill_prefetch_min_coverage = 0;
     // Experts live in persistent, reused page-aligned slots that GGML's MUL_MAT_ID resolves through
     // ggml_cpu_set_expert_address, instead of in a GGUF-shaped reserved range released on eviction: reloads
     // take no page faults or zero-fill, and direct reads land whole in the slot.
@@ -65,9 +72,9 @@ class ExpertStore {
 
     ggml_backend_buffer_type *buffer_type();
     bool owns(const ggml_tensor *tensor) const;
-    // Tensors read one row per token (the token embedding) can be mapped from the file instead of copied into
-    // anonymous memory: their pages are loaded on use and reclaimable, which leaves that RAM to the expert
-    // cache. Mapped tensors need no loading; on hosts without mmap the loader reads them as usual.
+    // Tensors read a few rows per token (the token embedding, the PLE n-gram table) are mapped from the file
+    // instead of copied into anonymous memory: their pages are loaded on use and reclaimable, which leaves that
+    // RAM to the expert cache. Mapped tensors need no loading.
     ggml_backend_buffer_type *mapped_buffer_type();
     bool maps(const ggml_tensor *tensor) const;
     // Maps a tensor's file range at its (page-congruent) address; called from the buffer's init_tensor.
@@ -129,6 +136,13 @@ class ExpertStore {
         const float *norm = nullptr;   // [width], F32
         int width = 0;
         int router_rows = 0;
+        // Hyper-connection models (qwen4exp) route the FFN mixer's output instead of a normed residual: the mean of
+        // `streams` residual streams, each RMS-normed with its own weights and gated elementwise through a
+        // low-rank projection. The lookahead recomputes it with these weights (Q8_0 or F32, as stored).
+        const float *mixer_norm = nullptr;       // [streams][width], F32
+        const ggml_tensor *mixer_down = nullptr; // streams * width -> rank
+        const ggml_tensor *mixer_up = nullptr;   // rank -> streams * width
+        int streams = 0;
         std::vector<int> prediction;
         bool prediction_valid = false;
     };
@@ -145,10 +159,10 @@ class ExpertStore {
     struct Stats {
         uint64_t ensure_calls = 0, demanded = 0, hits = 0, prefetch_hits = 0, inflight_hits = 0, misses = 0;
         uint64_t demand_read_bytes = 0, prefetch_read_bytes = 0, prefetch_issued = 0, prefetch_wasted = 0;
-        uint64_t evictions = 0, overflow_events = 0, predicted = 0, predicted_correct = 0;
+        uint64_t evictions = 0, overflow_events = 0, borrowed_evictions = 0, predicted = 0, predicted_correct = 0;
         uint64_t decode_demanded = 0, decode_misses = 0, decode_read_bytes = 0;
         uint64_t read_jobs = 0, coalesced_reads = 0, bridged_experts = 0, slot_cold_reuses = 0;
-        double io_wait_ms = 0, decode_io_wait_ms = 0, predict_ms = 0, evict_ms = 0;
+        double io_wait_ms = 0, decode_io_wait_ms = 0, predict_ms = 0, predict_wait_ms = 0, evict_ms = 0;
         uint64_t overlapped_layers = 0; // decode layers whose misses compute threads waited for per bank
         uint64_t demand_jobs = 0;
         double demand_queue_ms = 0, demand_read_ms = 0;
@@ -178,6 +192,14 @@ class ExpertStore {
     void setup_slots();
     bool ensure(int layer_index, const ggml_tensor *ids);
     void predict(int layer_index, const float *rows, int64_t count, size_t row_bytes);
+    // Floats per lookahead input row for the layer whose experts are predicted (all streams with a mixer).
+    static size_t lookahead_width(const Layer &layer);
+    // The router input of `layer` computed from one row of residual streams.
+    void mix(const Layer &layer, const float *streams, float *out);
+    void project(const ggml_tensor *weights, const float *x, float *out);
+    // Prompt batches: makes room for `bytes` more by evicting other layers' resident entries, those whose next
+    // use in a layer-ordered sweep lies furthest ahead first, so a layer's whole working set fits the budget.
+    void borrow(int layer_index, uint64_t bytes);
     // Lookahead off the decode thread: the residual is copied, the decode thread returns to the graph, and the
     // predictor thread scores the next layer's router and queues its prefetch. Every decode-thread entry point
     // that touches cache state first waits for it, so the cache keeps a single writer at any time.
@@ -210,6 +232,9 @@ private:
     std::unique_ptr<ggml_backend_buffer_type> mapped_type_;
     std::string path_;
     int map_fd_ = -1;
+#ifdef _WIN32
+    void *map_handle_ = nullptr; // file-mapping object of the mapped tensors
+#endif
     std::vector<std::unique_ptr<Layer>> layers_;
     std::vector<std::thread> workers_;
     std::deque<Job> demand_queue_, prefetch_queue_;
@@ -241,6 +266,8 @@ private:
     size_t max_stride_ = 0;
     std::vector<int> demand_, missing_, order_, whole_layer_;
     std::vector<float> scratch_, scores_;
+    std::vector<float> mix_normed_, mix_gate_, mix_low_, quant_scales_; // mixer lookahead scratch
+    std::vector<int8_t> quant_;
     std::unordered_map<std::string, uint64_t> source_offsets_;
     std::vector<const ggml_tensor *> residuals_; // per-layer lookahead input of the current graph
     uint8_t *arena_ = nullptr;

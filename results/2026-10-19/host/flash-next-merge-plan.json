@@ -1,0 +1,27 @@
+{
+  "merged_header_bytes": 11024320,
+  "merged_header_sha256": "2106fcb2ff86c4addea4ecec7895300bbac4ef28c5d42db4742b3181a56ca31a",
+  "shard_headers": [
+    {
+      "name": "UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00001-of-00003.gguf",
+      "header_bytes": 10946624,
+      "tensors": 0,
+      "data_bytes": 0
+    },
+    {
+      "name": "UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00002-of-00003.gguf",
+      "header_bytes": 31840,
+      "tensors": 503,
+      "data_bytes": 49979747456
+    },
+    {
+      "name": "UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00003-of-00003.gguf",
+      "header_bytes": 46080,
+      "tensors": 721,
+      "data_bytes": 28878356864
+    }
+  ],
+  "merged_size_bytes": 78869128640,
+  "matches_manifest": true,
+  "matches_local_header": true
+}

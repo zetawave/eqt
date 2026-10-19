@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <random>
 #include <vector>
 
@@ -66,6 +67,56 @@ int main() {
                 }
                 if (!close(reference_dot(&w[r * n], x.data(), n), scores[r], magnitude, n)) {
                     std::printf("gemv mismatch rows=%zu n=%zu r=%zu\n", rows, n, r);
+                    ++failures;
+                    break;
+                }
+            }
+        }
+    }
+    // Q8_0 rows (FP16 scale + 32 int8) against quantized activations: the result must equal the double-precision
+    // sum of the same integer products and scales up to FP32 accumulation error.
+    for (size_t rows : {1u, 3u, 320u}) {
+        for (size_t n : {32u, 320u, 10240u}) {
+            std::vector<float> x(n), scores(rows), x_scales(n / 32);
+            std::vector<int8_t> xq(n);
+            std::vector<uint8_t> w(rows * (n / 32) * 34);
+            for (auto &v : x) {
+                v = normal(random);
+            }
+            std::uniform_int_distribution<int> quant(-127, 127);
+            for (size_t block = 0; block < rows * (n / 32); ++block) {
+                const uint16_t half = 0x2000 + static_cast<uint16_t>(quant(random) & 0x3ff); // about 0.008..0.016
+                std::memcpy(&w[block * 34], &half, 2);
+                for (size_t j = 0; j < 32; ++j) {
+                    w[block * 34 + 2 + j] = static_cast<uint8_t>(static_cast<int8_t>(quant(random)));
+                }
+            }
+            eqt::simd::quantize_blocks(x.data(), n, xq.data(), x_scales.data());
+            for (size_t i = 0; i < n; ++i) {
+                if (std::abs(xq[i] * x_scales[i / 32] - x[i]) > x_scales[i / 32] * 0.5f + 1e-6f) {
+                    std::printf("quantize mismatch n=%zu i=%zu\n", n, i);
+                    ++failures;
+                    break;
+                }
+            }
+            eqt::simd::gemv_q8_0(w.data(), (n / 32) * 34, xq.data(), x_scales.data(), scores.data(), rows, n);
+            for (size_t r = 0; r < rows; ++r) {
+                double expected = 0, magnitude = 0;
+                for (size_t b = 0; b < n / 32; ++b) {
+                    const uint8_t *block = &w[(r * (n / 32) + b) * 34];
+                    uint16_t half;
+                    std::memcpy(&half, block, 2);
+                    // binary16 normal numbers only in this test: (1 + m/1024) * 2^(e - 15)
+                    const double d = std::ldexp(1.0 + (half & 0x3ff) / 1024.0, ((half >> 10) & 0x1f) - 15);
+                    long long dot = 0;
+                    for (size_t j = 0; j < 32; ++j) {
+                        dot += static_cast<long long>(static_cast<int8_t>(block[2 + j])) * xq[b * 32 + j];
+                    }
+                    expected += d * x_scales[b] * static_cast<double>(dot);
+                    magnitude += std::abs(d * x_scales[b] * static_cast<double>(dot));
+                }
+                if (!close(expected, scores[r], magnitude, n / 32)) {
+                    std::printf("gemv_q8_0 mismatch rows=%zu n=%zu r=%zu\n", rows, n, r);
                     ++failures;
                     break;
                 }

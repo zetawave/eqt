@@ -80,6 +80,10 @@ std::string piece(const llama_vocab *vocab, llama_token token) {
 }
 // Routed banks streamed by ExpertStore; everything else is read into ordinary CPU buffers at load.
 constexpr const char *routed_bank_pattern = "^blk\\.[0-9]+\\.ffn_(gate|up|down|gate_up)_exps\\.weight$";
+// Lookup tables read a few rows per token and mapped from the file with expert streaming: the token embedding
+// (optional) and the PLE n-gram hash table of qwen4exp (27 GB in Qwen3.8-Flash-Next, larger than RAM).
+constexpr const char *token_embedding = "token_embd.weight";
+constexpr const char *ngram_embedding = "per_layer_token_embd.weight";
 
 struct CpuFeatures {
     bool known = false, dotprod = false, fp16 = false, sve = false, i8mm = false, sve2 = false, sme = false;
@@ -214,15 +218,23 @@ struct TensorLoader {
                             "expert streaming): ") +
                 name);
         }
-        if (stored->type != tensor->type || !ggml_are_same_shape(stored, tensor) ||
+        if (store->maps(tensor)) {
+            // File-backed, loaded on use. Without the file's tensor list, qwen4exp sizes its PLE table by the
+            // rows its hash heads can address, a prefix of the converter's padded table.
+            if (stored->type != tensor->type || stored->ne[0] != tensor->ne[0] || ggml_nbytes(tensor) > ggml_nbytes(stored) ||
+                !ggml_is_contiguous(tensor)) {
+                throw std::runtime_error(std::string("Mapped tensor is not a prefix of the file's: ") + name);
+            }
+            return;
+        }
+        // Element counts, not shapes: the architecture may view a stored vector as a matrix (qwen4exp loads its
+        // [n_embd * streams] norm weights as [n_embd, streams]).
+        if (stored->type != tensor->type || ggml_nelements(stored) != ggml_nelements(tensor) ||
             ggml_nbytes(stored) != ggml_nbytes(tensor)) {
             throw std::runtime_error(std::string("Tensor type or shape differs from the file: ") + name);
         }
         const uint64_t offset = gguf_get_data_offset(meta) + gguf_get_tensor_offset(meta, id);
         const size_t size = ggml_nbytes(tensor);
-        if (store->maps(tensor)) {
-            return; // file-backed, loaded on use
-        }
         if (store->owns(tensor)) {
             store->add_bank(tensor, offset);
             return;
@@ -319,6 +331,12 @@ ContextCost context_cost(const gguf_context *meta) {
     }
     const int64_t attention_layers = interval > 1 ? (layers + interval - 1) / interval : layers;
     cost.kv_bytes_per_token = static_cast<uint64_t>(attention_layers * kv_heads * (key + val) * 2);
+    // A sparse-attention indexer (qwen4exp QSA) keeps one F16 key row per attention cell; with pooled blocks the
+    // row holds the raw and the pooled key.
+    if (const int64_t indexer_key = value(".attention.indexer.key_length"); indexer_key > 0) {
+        const int64_t row = value(".attention.compress_ratios") > 0 ? 2 * indexer_key : indexer_key;
+        cost.kv_bytes_per_token += static_cast<uint64_t>(attention_layers * row * 2);
+    }
     return cost;
 }
 
@@ -502,6 +520,11 @@ struct Engine::State {
     Json info;
     int context_size = 0;
     int batch_size = 0;
+    // Tokens whose keys, values and recurrent state the context holds after the last request, in position order.
+    // Valid only after a text request that completed without cancellation, steering or drafting; the recurrent
+    // state cannot be rewound, so a later prompt reuses it only when it starts with all of these tokens.
+    std::vector<llama_token> resident;
+    bool resident_valid = false;
     int draft_max = 0;
     double draft_p_min = 0;
     size_t n_embd = 0;
@@ -627,6 +650,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     ExpertOptions expert_options;
     std::unordered_map<std::string, uint64_t> routed_offsets;
     uint64_t mapped_bytes = 0; // file-backed tensors, never resident as a whole
+    std::vector<std::string> mapped_names;
     const bool gpu = options.value("gpu", false);
     GpuOptions gpu_options;
     gpu_options.min_rows = integer(options, "gpu_min_rows", gpu_options.min_rows, 1, 1 << 20);
@@ -644,9 +668,10 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     uint64_t largest_weight = 0;
     auto note_weight = [&](const gguf_context *meta) {
         for (int64_t i = 0; i < gguf_get_n_tensors(meta); ++i) {
-            // The embedding is read by row and the output head runs on prompts' last token only: neither is staged.
+            // Embeddings are read by row and the output head runs on prompts' last token only: none is staged.
             const char *name = gguf_get_tensor_name(meta, i);
-            if (std::strcmp(name, "token_embd.weight") != 0 && std::strcmp(name, "output.weight") != 0) {
+            if (std::strcmp(name, token_embedding) != 0 && std::strcmp(name, ngram_embedding) != 0 &&
+                std::strcmp(name, "output.weight") != 0) {
                 largest_weight = std::max<uint64_t>(largest_weight, gguf_get_tensor_size(meta, i));
             }
         }
@@ -660,14 +685,18 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         }
         const std::regex routed(routed_bank_pattern);
         uint64_t routed_bytes = 0;
+        const bool map_embeddings = options.value("map_embeddings", true);
         for (int64_t i = 0; i < gguf_get_n_tensors(state->meta.get()); ++i) {
             const char *name = gguf_get_tensor_name(state->meta.get(), i);
+            const uint64_t offset = gguf_get_data_offset(state->meta.get()) + gguf_get_tensor_offset(state->meta.get(), i);
             if (std::regex_search(name, routed)) {
                 routed_bytes += gguf_get_tensor_size(state->meta.get(), i);
-                routed_offsets[name] = gguf_get_data_offset(state->meta.get()) + gguf_get_tensor_offset(state->meta.get(), i);
-            } else if (std::strcmp(name, "token_embd.weight") == 0 && options.value("map_embeddings", true)) {
-                routed_offsets[name] = gguf_get_data_offset(state->meta.get()) + gguf_get_tensor_offset(state->meta.get(), i);
-                mapped_bytes = gguf_get_tensor_size(state->meta.get(), i);
+                routed_offsets[name] = offset;
+            } else if ((map_embeddings && std::strcmp(name, token_embedding) == 0) ||
+                       std::strcmp(name, ngram_embedding) == 0) {
+                routed_offsets[name] = offset;
+                mapped_bytes += gguf_get_tensor_size(state->meta.get(), i);
+                mapped_names.emplace_back(name);
             }
         }
         if (!routed_bytes) {
@@ -681,9 +710,15 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         expert_options.direct_io = options.value("direct_io", false);
         expert_options.prefetch = options.value("prefetch", false);
         expert_options.prefetch_extra = integer(options, "prefetch_extra", 0, 0, 32);
+        expert_options.lookahead_gate = options.value("lookahead_gate", true);
         expert_options.coalesce_kib = integer(options, "coalesce_kib", 0, 0, 65536);
         expert_options.coalesce_gap = integer(options, "coalesce_gap", 1, 0, 8);
         expert_options.prefill_prefetch_mib = integer(options, "prefill_prefetch_mib", 0, 0, 4096);
+        expert_options.prefill_prefetch_min_coverage = options.value("prefill_prefetch_min_coverage", 0.0);
+        if (!std::isfinite(expert_options.prefill_prefetch_min_coverage) ||
+            expert_options.prefill_prefetch_min_coverage < 0 || expert_options.prefill_prefetch_min_coverage > 1) {
+            throw std::invalid_argument("prefill_prefetch_min_coverage must be in [0, 1]");
+        }
         expert_options.slots = options.value("expert_slots", true);
         expert_options.overlap_reads = options.value("overlap_reads", true);
         expert_options.trace_path = options.value("expert_trace", std::string());
@@ -711,6 +746,11 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         const int64_t arch_key = gguf_find_key(meta, "general.architecture");
         const std::string arch_name =
             arch_key >= 0 && gguf_get_kv_type(meta, arch_key) == GGUF_TYPE_STRING ? gguf_get_val_str(meta, arch_key) : "";
+        // The offload's node selection is measured on qwen35moe graphs (DeltaNet conv concatenations of 8192
+        // channels); qwen4exp's sparse-attention and PLE nodes have not been checked on the GPU.
+        if (arch_name == "qwen4exp") {
+            throw std::runtime_error("GPU mode is not verified for qwen4exp models; load them on the CPU");
+        }
         auto value = [&](const char *suffix, int64_t fallback) {
             const int64_t found = arch_name.empty() ? -1 : gguf_integer(meta, arch_name + suffix);
             return found > 0 ? found : fallback;
@@ -769,9 +809,16 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     if (streaming) {
         state->store = std::make_unique<ExpertStore>(path, expert_options, cancelled_);
         state->store->set_source_offsets(std::move(routed_offsets));
+        std::string mapped_pattern;
+        for (const auto &name : mapped_names) {
+            mapped_pattern += (mapped_pattern.empty() ? "^(" : "|") + std::regex_replace(name, std::regex("\\."), "\\.");
+        }
+        if (!mapped_pattern.empty()) {
+            mapped_pattern += ")$";
+        }
         const llama_model_tensor_buft_override overrides[] = {
             {routed_bank_pattern, state->store->buffer_type()},
-            {mapped_bytes ? "^token_embd\\.weight$" : nullptr, state->store->mapped_buffer_type()},
+            {mapped_pattern.empty() ? nullptr : mapped_pattern.c_str(), state->store->mapped_buffer_type()},
             {nullptr, nullptr}};
         // Metadata mode: no file mapping and no MAP_POPULATE of the 20+ GB artifact.
         model_params.load_mode = LLAMA_LOAD_MODE_NONE;
@@ -797,8 +844,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         throw std::runtime_error(cancelled_ ? "Loading cancelled" : "GGUF load failed; see native log");
     }
     const auto arch = metadata(state->model.get(), "general.architecture");
-    if (arch != "qwen3" && arch != "qwen35" && arch != "qwen35moe") {
-        throw std::runtime_error("Unsupported architecture: " + arch + "; expected Qwen3/Qwen3.5 family");
+    if (arch != "qwen3" && arch != "qwen35" && arch != "qwen35moe" && arch != "qwen4exp") {
+        throw std::runtime_error("Unsupported architecture: " + arch + "; expected Qwen3/Qwen3.5/Qwen3.8 family");
     }
     if (cancelled_) {
         throw std::runtime_error("Loading cancelled");
@@ -949,6 +996,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                                               {"draft_p_min", draft_p_min}, {"sampling", "greedy only"}}
                                        : Json(nullptr)},
                    {"steering", false},
+                   // Every accepted architecture applies the control-vector adapter to its block outputs (qwen4exp to
+                   // each hyper-connection stream, patch 0004).
                    {"steering_supported", true},
                    // Qwen-style templates switch reasoning with this variable; others have no thinking mode.
                    {"thinking_supported", state->chat_template.find("enable_thinking") != std::string::npos},
@@ -1082,6 +1131,9 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         }
     } steering_scope{s.context.get()};
     if (request.contains("steering") && !request.at("steering").is_null()) {
+        if (!s.info.value("steering_supported", false)) {
+            throw std::invalid_argument("Steering is not supported for this model's architecture");
+        }
         const auto &options = request.at("steering");
         const double strength = options.at("strength").get<double>();
         if (!std::isfinite(strength) || strength < steering_minimum || strength > steering_maximum || strength == 0) {
@@ -1177,8 +1229,19 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         media.reset();
         encode_ms = milliseconds(encode_start);
     }
-    // Rebuild the entire prefix each request: safe for hybrid recurrent state and cancellation.
-    llama_memory_clear(llama_get_memory(s.context.get()), true);
+    // A chat turn's prompt starts with the previous turn's prompt and answer: when it extends exactly the tokens the
+    // context still holds, only the new tokens are evaluated. Anything else rebuilds the entire prefix, which is
+    // always safe for hybrid recurrent state and after cancellation. Reused and rebuilt states evaluate the same
+    // tokens in different batch shapes: float rounding, which can flip near-tie expert choices (D027).
+    const bool reusable = request.value("prompt_cache", true) && !has_media && !steering_scope.active && !s.draft;
+    size_t reused = 0;
+    if (reusable && s.resident_valid && s.resident.size() < tokens.size() &&
+        std::equal(s.resident.begin(), s.resident.end(), tokens.begin())) {
+        reused = s.resident.size();
+    } else {
+        llama_memory_clear(llama_get_memory(s.context.get()), true);
+    }
+    s.resident_valid = false;
     // The expert cache stays warm across requests; per-request counters reset here and in-flight
     // speculative reads are drained on every exit path.
     struct RequestScope {
@@ -1304,7 +1367,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     bool ready = true;
     double image_ms = 0;
     if (!has_media) {
-        for (int i = 0; i < prefill && ready; i += s.batch_size) {
+        for (int i = static_cast<int>(reused); i < prefill && ready; i += s.batch_size) {
             const int length = std::min(s.batch_size, prefill - i);
             ready = evaluate(tokens.data() + i, length, i) && (!use_draft || mtp_process(tokens.data() + i, length, i));
         }
@@ -1573,6 +1636,8 @@ Json Engine::generate(const Json &request, const Emit &emit) {
           {"thinking", thinking},
           {"ignore_eos", ignore_eos}}},
         {"prompt_tokens", count},
+        // Prompt tokens whose state the previous turn left in the context; only the others were evaluated.
+        {"reused_prompt_tokens", reused},
         {"threads_at_end", s.pool_threads},
         {"thread_pool_rebuilds", s.pool_changes - pool_changes_before},
         {"prompt_images", input.images.size()},
@@ -1582,7 +1647,9 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"memory_after_image_encode", encode_memory},
         {"generated_tokens", generated.size()},
         {"prefill_ms", prefill_ms},
-        {"prefill_tokens_per_second", prefill_complete ? Json(count * 1000 / prefill_ms) : Json(nullptr)},
+        {"prefill_tokens_per_second",
+         prefill_complete && count > static_cast<int>(reused) ? Json((count - static_cast<int>(reused)) * 1000 / prefill_ms)
+                                                               : Json(nullptr)},
         {"ttft_ms", ttft},
         {"first_visible_piece_ms", first_visible},
         {"first_answer_content_ms", thinking ? first_answer : first_visible},
@@ -1619,7 +1686,16 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"text", text},
         {"token_ids", generated},
         {"first_logits", first_logits}};
-    llama_memory_clear(llama_get_memory(s.context.get()), true);
+    // The context keeps this turn's state when it holds exactly the prompt and the evaluated answer: an answer that
+    // ended at the output limit has its last token sampled but not evaluated; EOS is never part of the answer.
+    if (reusable && prefill_complete && reason != "cancelled" && !cancelled_) {
+        const size_t evaluated = generated.size() - (reason == "length" && !generated.empty() ? 1 : 0);
+        s.resident = std::move(tokens);
+        s.resident.insert(s.resident.end(), generated.begin(), generated.begin() + static_cast<ptrdiff_t>(evaluated));
+        s.resident_valid = true;
+    } else {
+        llama_memory_clear(llama_get_memory(s.context.get()), true);
+    }
     return result;
 }
 } // namespace eqt

@@ -1,0 +1,23 @@
+diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
+index 250eb74..5cce3ef 100644
+--- a/src/models/qwen4exp.cpp
++++ b/src/models/qwen4exp.cpp
+@@ -481,6 +481,8 @@ llama_model_qwen4exp::graph::graph(const llama_model & model, const llm_graph_pa
+         }
+ 
+         res_hc = build_hc_combine(res_hc, cur, inject, il);
++        // named like the other hybrid graphs: evaluation callbacks read the streams the FFN mixer consumes
++        cb(res_hc, "attn_residual", il);
+ 
+         cur = build_hc_mix(res_hc,
+                 model.layers[il].hc_ffn_norm,
+@@ -494,6 +496,9 @@ llama_model_qwen4exp::graph::graph(const llama_model & model, const llm_graph_pa
+ 
+         res_hc = build_hc_combine(res_hc, cur, inject, il);
+ 
++        // control vectors and directional ablation act on every hyper-connection stream alike
++        res_hc = build_cvec(res_hc, il);
++
+         // "l_last" is the layer output name that build_cvec and imatrix look for
+         cb(res_hc, "l_last", il);
+     }

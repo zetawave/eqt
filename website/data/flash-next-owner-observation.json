@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-19",
+  "source": "Owner-provided app statistics screenshot in the project conversation",
+  "measurement_kind": "owner_reported_single_app_observation",
+  "device": "Galaxy S24+ (Exynos 2400), stock Android",
+  "model_id": "qwen3.8-flash-next-ud-q2kxl",
+  "model_file_bytes": 78869128640,
+  "decode_tokens_per_second": 1.8,
+  "generated_tokens": 252,
+  "first_token_seconds": 6.1,
+  "prompt_tokens": null,
+  "context_tokens": null,
+  "expert_cache_mib": null,
+  "prompt_batch": null,
+  "prefix_reused_tokens": null,
+  "thinking_enabled": null,
+  "thermal_status": null,
+  "peak_rss_bytes": null,
+  "energy_joules_per_token": null,
+  "sustained_tokens_per_second": null,
+  "quality_score": null,
+  "notes": "Rounded values transcribed from the screenshot. Not a controlled repeated benchmark, sustained measurement or quality evaluation. No conversation text is retained."
+}

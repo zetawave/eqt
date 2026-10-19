@@ -4,7 +4,7 @@
 
 **Equity runs language models that do not fit in a phone's RAM — on the phone, offline, at usable speed.**
 
-It is a research inference engine specialised in one model family, the **Qwen3.5/3.6 hybrid-attention mixture-of-experts models**, on one first device, a stock **Samsung Galaxy S24+ (Exynos 2400, 10.9 GiB visible RAM)**. No root, no cloud, no account, no telemetry. Weights stay on the phone's storage and the engine reads only the experts each token needs.
+It is a research inference engine specialised in one model family, the **Qwen3.5/3.6 hybrid-attention mixture-of-experts models** and their Qwen3.8 successor, on one first device, a stock **Samsung Galaxy S24+ (Exynos 2400, 10.9 GiB visible RAM)**. No root, no cloud, no account, no telemetry. Weights stay on the phone's storage and the engine reads only the experts each token needs.
 
 ## What is true today
 
@@ -15,6 +15,7 @@ All numbers are measured on the Galaxy and recorded in [`results/`](results/).
 - **Sustained speed is not yet re-measured.** The last 10-minute run on battery, with an older build, settled at about 3.5 tokens/s (about 1.07 J per token) as the phone heated. The 5 tokens/s *sustained* target is therefore not demonstrated yet.
 - **Quality held on a first check.** On a 27-item, automatically checked set (Italian, instructions, reasoning, code, knowledge, long context), UD-IQ2_M and UD-Q4_K_M both score 26/27, and the 2.7-bit build is about 33% faster. The set is small, so UD-Q4_K_M stays the reference.
 - **Long context works.** Context is limited only by the model (262,144 tokens). A 7,857-token needle-in-a-haystack prompt is answered correctly, and a 3,803-token prompt prefills in 164 s, down from 522 s.
+- **A model seven times the phone's RAM is ready to try, not yet measured on the phone.** Qwen3.8-Flash-Next (125B parameters plus a 51B n-gram table, 512 experts; UD-Q2_K_XL, 78.9 GB) loads with 3.4 GB resident: experts and n-gram rows stream from storage. On a 16 GB PC its streamed outputs are bitwise identical across cache configurations; speed on the Galaxy is still to be measured (D026).
 - **Optimizations are exact.** Every speedup is either bitwise exact or differs only in float rounding (at most 3.4·10⁻⁷ relative), and is A/B-tested with identical output tokens. The 5 tokens/s *sustained* goal is an experimental target, not a promise; quality and context are never traded for speed.
 
 <picture>
@@ -73,13 +74,16 @@ Prerequisites (Windows): Git, Python 3.12, Android SDK 36, NDK `28.2.13676358`, 
 python tools/verify_streaming.py --target android --direct-io   # bitwise streamed-vs-resident checks
 python tools/eval_quality.py run --target android --model <device path> --output <file>
 python tools/sustained_run.py --model <device path> --load '{...}' --output <file>
+# Models already in the app's storage: add --run-as org.equity.app and pass files/models/<id>/<file>
+# A local model file into the installed app (resumable, verified on the phone)
+python tools/acquire_model.py configs/flash-next-model.json --push-local <file> --model-id qwen3.8-flash-next-ud-q2kxl
 ```
 
 Inference is offline. Acquiring weights is an explicit operation (`tools/acquire_model.py`, or the app's resumable download). Builds never download models.
 
 ## Acknowledgements
 
-Equity builds on [llama.cpp and GGML](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and contributors, pinned with two recorded patches. Streaming weights from flash is not new: the design was informed by [DwarfStar/ds4](https://github.com/antirez/ds4) by antirez and by published work such as Apple's *LLM in a Flash*, Mixtral offloading (Eliseev & Mazur), EdgeMoE and PowerInfer-2. Equity's part is an exact implementation of these ideas for one model family on a stock phone. Model weights belong to their publishers under their own licenses. Development is AI-assisted; every claim is tied to a measurement record.
+Equity builds on [llama.cpp and GGML](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and contributors, pinned with four recorded patches. Streaming weights from flash is not new: the design was informed by [DwarfStar/ds4](https://github.com/antirez/ds4) by antirez and by published work such as Apple's *LLM in a Flash*, Mixtral offloading (Eliseev & Mazur), EdgeMoE and PowerInfer-2. Equity's part is an exact implementation of these ideas for one model family on a stock phone. Model weights belong to their publishers under their own licenses. Development is AI-assisted; every claim is tied to a measurement record.
 
 ## License & Commercial Licensing
 

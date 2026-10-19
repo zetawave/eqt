@@ -43,9 +43,13 @@ struct Capture {
 
 bool capture_blocks(ggml_tensor *tensor, bool ask, void *opaque) {
     auto &capture = *static_cast<Capture *>(opaque);
-    int block = -1;
-    if (std::sscanf(ggml_get_name(tensor), "l_out-%d", &block) != 1 || block < 0 ||
-        block >= static_cast<int>(capture.blocks.size()))
+    // Block outputs are l_out, or l_last in hyper-connection graphs, where each row of n_embd is one stream. The
+    // name must match exactly: views of a block output carry suffixes such as " (reshaped)".
+    int block = -1, end = 0;
+    const char *name = ggml_get_name(tensor);
+    const bool named = (std::sscanf(name, "l_out-%d%n", &block, &end) == 1 && name[end] == '\0') ||
+                       (std::sscanf(name, "l_last-%d%n", &block, &end) == 1 && name[end] == '\0');
+    if (!named || block < 0 || block >= static_cast<int>(capture.blocks.size()))
         return !ask;
     if (ask)
         return true;

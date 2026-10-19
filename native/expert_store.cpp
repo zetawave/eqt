@@ -65,6 +65,55 @@ bool commit(uint8_t *data, size_t size) {
 void discard_pages(uint8_t *begin, size_t size) {
     VirtualFree(begin, size, MEM_DECOMMIT);
 }
+
+// File views replace parts of a placeholder reservation in place (Windows 10 1803+). Both the view address and
+// its file offset must be multiples of the 64 KiB allocation granularity.
+#ifndef MEM_RESERVE_PLACEHOLDER
+#define MEM_RESERVE_PLACEHOLDER 0x00040000
+#endif
+#ifndef MEM_REPLACE_PLACEHOLDER
+#define MEM_REPLACE_PLACEHOLDER 0x00004000
+#endif
+#ifndef MEM_PRESERVE_PLACEHOLDER
+#define MEM_PRESERVE_PLACEHOLDER 0x00000002
+#endif
+constexpr size_t map_granularity = 64 * 1024;
+struct PlaceholderApi {
+    PVOID(WINAPI *alloc)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, void *, ULONG) = nullptr;
+    PVOID(WINAPI *map)(HANDLE, HANDLE, PVOID, ULONG64, SIZE_T, ULONG, ULONG, void *, ULONG) = nullptr;
+};
+const PlaceholderApi &placeholder_api() {
+    static const PlaceholderApi api = [] {
+        PlaceholderApi result;
+        if (HMODULE module = GetModuleHandleW(L"kernelbase.dll")) {
+            result.alloc = reinterpret_cast<decltype(result.alloc)>(GetProcAddress(module, "VirtualAlloc2"));
+            result.map = reinterpret_cast<decltype(result.map)>(GetProcAddress(module, "MapViewOfFile3"));
+        }
+        return result;
+    }();
+    return api;
+}
+uint8_t *reserve_mapped(size_t size) {
+    const auto &api = placeholder_api();
+    return api.alloc ? static_cast<uint8_t *>(api.alloc(nullptr, nullptr, size, MEM_RESERVE | MEM_RESERVE_PLACEHOLDER,
+                                                        PAGE_NOACCESS, nullptr, 0))
+                     : nullptr;
+}
+// After map_tensor the reservation is a sequence of views and placeholders; each is released separately.
+void release_mapped(uint8_t *base, size_t size) {
+    for (uint8_t *at = base; at < base + size;) {
+        MEMORY_BASIC_INFORMATION info{};
+        if (!VirtualQuery(at, &info, sizeof(info))) {
+            return;
+        }
+        if (info.Type == MEM_MAPPED) {
+            UnmapViewOfFile(info.AllocationBase);
+        } else if (info.State == MEM_RESERVE) {
+            VirtualFree(info.AllocationBase, 0, MEM_RELEASE);
+        }
+        at = static_cast<uint8_t *>(info.BaseAddress) + info.RegionSize;
+    }
+}
 #else
 // MAP_NORESERVE: the routed-bank range is address space only; residency is bounded by the cache.
 uint8_t *reserve(size_t size) {
@@ -81,6 +130,13 @@ bool commit(uint8_t *, size_t) {
 // Anonymous private pages are freed immediately and read back as zero.
 void discard_pages(uint8_t *begin, size_t size) {
     madvise(begin, size, MADV_DONTNEED);
+}
+constexpr size_t map_granularity = page;
+uint8_t *reserve_mapped(size_t size) {
+    return reserve(size);
+}
+void release_mapped(uint8_t *base, size_t size) {
+    munmap(base, size);
 }
 #endif
 
@@ -160,14 +216,14 @@ const ggml_backend_buffer_type_i buffer_type_interface = {
     /* .is_host          = */ [](ggml_backend_buffer_type_t) { return true; },
 };
 
-// File-backed tensors: the reservation is replaced in place by read-only private mappings of each tensor's
-// page-rounded file range. On hosts without mmap the pages are committed and the loader copies the bytes.
+// File-backed tensors: the reservation is replaced in place by read-only mappings of each tensor's file range,
+// rounded to the mapping granularity, so a tensor's address is congruent to its file offset modulo that unit.
 const ggml_backend_buffer_i mapped_buffer_interface = {
     /* .free_buffer   = */
     [](ggml_backend_buffer_t buffer) {
         auto *reservation = static_cast<Reservation *>(buffer->context);
         if (reservation->base) {
-            release(reservation->base, reservation->size);
+            release_mapped(reservation->base, reservation->size);
         }
         delete reservation;
     },
@@ -176,7 +232,8 @@ const ggml_backend_buffer_i mapped_buffer_interface = {
     /* .init_tensor   = */
     [](ggml_backend_buffer_t buffer, ggml_tensor *tensor) {
         const auto *store = static_cast<const ExpertStore *>(buffer->buft->context);
-        tensor->data = static_cast<uint8_t *>(tensor->data) + store->source_offset(ggml_get_name(tensor)) % page;
+        tensor->data =
+            static_cast<uint8_t *>(tensor->data) + store->source_offset(ggml_get_name(tensor)) % map_granularity;
         return store->map_tensor(tensor) ? GGML_STATUS_SUCCESS : GGML_STATUS_ALLOC_FAILED;
     },
     /* .memset_tensor = */
@@ -203,7 +260,7 @@ const ggml_backend_buffer_type_i mapped_buffer_type_interface = {
         auto *reservation = new Reservation;
         if (size) {
             reservation->size = round_up(size, 64 * 1024);
-            reservation->base = reserve(reservation->size);
+            reservation->base = reserve_mapped(reservation->size);
             if (!reservation->base) {
                 delete reservation;
                 return nullptr;
@@ -212,10 +269,12 @@ const ggml_backend_buffer_type_i mapped_buffer_type_interface = {
         return ggml_backend_buffer_init(type, mapped_buffer_interface, reservation, size);
     },
     /* .alloc_buffer_n   = */ nullptr,
-    /* .get_alignment    = */ [](ggml_backend_buffer_type_t) -> size_t { return page; },
+    /* .get_alignment    = */ [](ggml_backend_buffer_type_t) -> size_t { return map_granularity; },
     /* .get_max_size     = */ nullptr,
     /* .get_alloc_size   = */
-    [](ggml_backend_buffer_type_t, const ggml_tensor *tensor) { return ggml_nbytes(tensor) + page; },
+    [](ggml_backend_buffer_type_t, const ggml_tensor *tensor) {
+        return round_up(ggml_nbytes(tensor), map_granularity) + map_granularity;
+    },
     /* .get_alloc_size_n = */ nullptr,
     /* .is_host          = */ [](ggml_backend_buffer_type_t) { return true; },
 };
@@ -565,7 +624,11 @@ ExpertStore::~ExpertStore() {
     if (arena_) {
         release(arena_, arena_size_);
     }
-#ifndef _WIN32
+#ifdef _WIN32
+    if (map_handle_) {
+        CloseHandle(map_handle_);
+    }
+#else
     if (map_fd_ >= 0) {
         close(map_fd_);
     }
@@ -585,20 +648,45 @@ ggml_backend_buffer_type *ExpertStore::mapped_buffer_type() {
 }
 
 bool ExpertStore::maps(const ggml_tensor *tensor) const {
-#ifdef _WIN32
-    (void)tensor;
-    return false;
-#else
     return tensor->buffer && ggml_backend_buffer_get_type(tensor->buffer) == mapped_type_.get();
-#endif
 }
 
 bool ExpertStore::map_tensor(ggml_tensor *tensor) const {
     const uint64_t offset = source_offset(ggml_get_name(tensor));
-    auto *begin = reinterpret_cast<uint8_t *>(round_down(reinterpret_cast<uintptr_t>(tensor->data), page));
-    const size_t size = round_up(offset % page + ggml_nbytes(tensor), page);
+    auto *begin = reinterpret_cast<uint8_t *>(round_down(reinterpret_cast<uintptr_t>(tensor->data), map_granularity));
+    const size_t size = round_up(offset % map_granularity + ggml_nbytes(tensor), map_granularity);
 #ifdef _WIN32
-    return commit(begin, size);
+    const auto &api = placeholder_api();
+    if (!api.map || round_down(offset, map_granularity) + size > file_->size()) {
+        return false; // a view cannot extend past the end of the file
+    }
+    auto &mapping = const_cast<void *&>(map_handle_);
+    if (!mapping) {
+        const int length = MultiByteToWideChar(CP_UTF8, 0, path_.c_str(), -1, nullptr, 0);
+        std::wstring wide(length > 0 ? length : 1, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, path_.c_str(), -1, wide.data(), length);
+        HANDLE file = CreateFileW(wide.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                  FILE_FLAG_RANDOM_ACCESS, nullptr);
+        if (file == INVALID_HANDLE_VALUE) {
+            return false;
+        }
+        mapping = CreateFileMappingW(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
+        CloseHandle(file); // the mapping object keeps the file open
+        if (!mapping) {
+            return false;
+        }
+    }
+    // Split the placeholder so this tensor's range is one placeholder of its own, then replace it with the view.
+    MEMORY_BASIC_INFORMATION info{};
+    if (!VirtualQuery(begin, &info, sizeof(info)) || info.State != MEM_RESERVE) {
+        return false;
+    }
+    if ((info.BaseAddress != begin || info.RegionSize != size) &&
+        !VirtualFree(begin, size, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER)) {
+        return false;
+    }
+    return api.map(mapping, GetCurrentProcess(), begin, round_down(offset, map_granularity), size,
+                   MEM_REPLACE_PLACEHOLDER, PAGE_READONLY, nullptr, 0) == begin;
 #else
     auto &fd = const_cast<int &>(map_fd_);
     if (fd < 0) {
@@ -667,14 +755,24 @@ void ExpertStore::add_bank(ggml_tensor *tensor, uint64_t file_offset) {
 }
 
 void ExpertStore::add_router_tensor(ggml_tensor *tensor) {
+    enum class Kind { router, norm, mixer_norm, mixer_down, mixer_up };
+    static constexpr std::pair<const char *, Kind> suffixes[] = {
+        {".ffn_gate_inp.weight", Kind::router}, {".post_attention_norm.weight", Kind::norm},
+        {".hc_ffn_norm.weight", Kind::mixer_norm}, {".hc_ffn_down.weight", Kind::mixer_down},
+        {".hc_ffn_up.weight", Kind::mixer_up}};
     int index = -1;
     const char *name = ggml_get_name(tensor);
-    const bool router = parse_tensor_name(name, ".ffn_gate_inp.weight", index);
-    if (!router && !parse_tensor_name(name, ".post_attention_norm.weight", index)) {
+    const auto *match = std::find_if(std::begin(suffixes), std::end(suffixes),
+                                     [&](const auto &entry) { return parse_tensor_name(name, entry.first, index); });
+    if (match == std::end(suffixes)) {
         return;
     }
-    if (tensor->type != GGML_TYPE_F32 || !ggml_is_contiguous(tensor) ||
-        !ggml_backend_buffer_is_host(tensor->buffer)) {
+    const Kind kind = match->second;
+    // The mixer projections stay in their stored type; everything else the lookahead reads must be F32.
+    const bool projection = kind == Kind::mixer_down || kind == Kind::mixer_up;
+    const bool readable = tensor->type == GGML_TYPE_F32 ||
+                          (projection && tensor->type == GGML_TYPE_Q8_0 && tensor->ne[0] % 32 == 0);
+    if (!readable || !ggml_is_contiguous(tensor) || !ggml_backend_buffer_is_host(tensor->buffer)) {
         return;
     }
     if (static_cast<int>(layers_.size()) <= index) {
@@ -684,13 +782,25 @@ void ExpertStore::add_router_tensor(ggml_tensor *tensor) {
         layers_[index] = std::make_unique<Layer>();
     }
     auto &layer = *layers_[index];
-    if (router) {
+    switch (kind) {
+    case Kind::router:
         layer.router = static_cast<const float *>(tensor->data);
         layer.width = static_cast<int>(tensor->ne[0]);
         layer.router_rows = static_cast<int>(tensor->ne[1]);
-    } else {
-        layer.norm = static_cast<const float *>(tensor->data);
+        break;
+    case Kind::norm: layer.norm = static_cast<const float *>(tensor->data); break;
+    case Kind::mixer_norm:
+        // Loaded as [width, streams]: one RMS weight vector per stream.
+        layer.mixer_norm = static_cast<const float *>(tensor->data);
+        layer.streams = static_cast<int>(tensor->ne[1]);
+        break;
+    case Kind::mixer_down: layer.mixer_down = tensor; break;
+    case Kind::mixer_up: layer.mixer_up = tensor; break;
     }
+}
+
+size_t ExpertStore::lookahead_width(const Layer &layer) {
+    return static_cast<size_t>(layer.width) * (layer.streams > 0 ? layer.streams : 1);
 }
 
 void ExpertStore::finalize(int experts_used, float norm_epsilon) {
@@ -733,13 +843,29 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
         layer->prediction.reserve(static_cast<size_t>(experts_used + options_.prefetch_extra) * max_lookahead_rows);
         effective_budget_ += static_cast<uint64_t>(layer->quota) * layer->entry_bytes;
         max_experts = std::max(max_experts, layer->experts);
-        if (layer->router && (layer->router_rows != layer->experts || !layer->norm)) {
-            layer->router = nullptr; // Lookahead needs a matching F32 router and RMS weight.
+        // A mixer must map `streams` streams of the router's width through one rank and back.
+        const auto *down = layer->mixer_down, *up = layer->mixer_up;
+        const int64_t total = static_cast<int64_t>(layer->width) * layer->streams;
+        const bool mixer = layer->mixer_norm && down && up && layer->streams > 1 && down->ne[0] == total &&
+                           up->ne[1] == total && up->ne[0] == down->ne[1];
+        if (!mixer) {
+            layer->streams = 0;
+        }
+        if (layer->router && (layer->router_rows != layer->experts || !(layer->norm || mixer))) {
+            layer->router = nullptr; // Lookahead needs a matching F32 router and an RMS weight or a mixer.
         }
         predictable_layers_ += layer->router != nullptr;
+        if (layer->router && mixer) {
+            mix_normed_.resize(std::max<size_t>(mix_normed_.size(), total));
+            mix_gate_.resize(std::max<size_t>(mix_gate_.size(), total));
+            mix_low_.resize(std::max<size_t>(mix_low_.size(), down->ne[1]));
+            const size_t widest = static_cast<size_t>(std::max<int64_t>(total, down->ne[1]));
+            quant_.resize(std::max(quant_.size(), widest));
+            quant_scales_.resize(std::max(quant_scales_.size(), widest / 32));
+        }
     }
     if (options_.prefetch && predictable_layers_ == 0) {
-        throw std::invalid_argument("prefetch requires F32 ffn_gate_inp and post_attention_norm tensors");
+        throw std::invalid_argument("prefetch requires an F32 ffn_gate_inp with post_attention_norm or an FFN mixer");
     }
     residuals_.assign(layers_.size(), nullptr);
     demand_.reserve(max_experts);
@@ -1033,8 +1159,9 @@ bool ExpertStore::observe(ggml_tensor *tensor, bool ask, void *opaque) {
             // No graph split here: the residual stays allocated until the post-MoE add, so the lookahead
             // reads it from the top-k callback of the same layer.
             auto *next = store.layer_at(layer + 1);
-            const bool usable = store.options_.prefetch && tensor->ne[1] <= max_lookahead_rows && next && next->router &&
-                                next->norm && !next->banks.empty();
+            const bool usable = store.options_.prefetch && next && next->router && !next->banks.empty() &&
+                                ggml_nelements(tensor) % lookahead_width(*next) == 0 &&
+                                ggml_nelements(tensor) / static_cast<int64_t>(lookahead_width(*next)) <= max_lookahead_rows;
             if (layer < static_cast<int>(store.residuals_.size())) {
                 store.residuals_[layer] = usable ? tensor : nullptr;
             }
@@ -1048,31 +1175,34 @@ bool ExpertStore::observe(ggml_tensor *tensor, bool ask, void *opaque) {
     if (kind != Node::topk) {
         return true;
     }
+    // A lookahead still running when its layer is reached holds up the decode thread.
+    const auto predictor_wait = Clock::now();
     store.wait_predictor();
+    store.stats_.predict_wait_ms += since(predictor_wait);
     const ggml_tensor *residual = layer < static_cast<int>(store.residuals_.size()) ? store.residuals_[layer] : nullptr;
     if (layer < static_cast<int>(store.residuals_.size())) {
         store.residuals_[layer] = nullptr;
     }
-    const bool usable = residual && residual->type == GGML_TYPE_F32 && ggml_is_contiguous(residual);
+    // Rows of the next layer's lookahead width: one residual vector per token, or all its streams with a mixer.
+    const Layer *next = store.layer_at(layer + 1);
+    const bool usable = residual && next && residual->type == GGML_TYPE_F32 && ggml_is_contiguous(residual);
+    const size_t width = usable ? lookahead_width(*next) : 0;
+    const int64_t rows = usable ? ggml_nelements(residual) / static_cast<int64_t>(width) : 0;
     if (!usable || !store.predictor_.joinable()) {
         if (usable) {
-            store.predict(layer, static_cast<const float *>(residual->data), residual->ne[1], residual->nb[1]);
+            store.predict(layer, static_cast<const float *>(residual->data), rows, width * sizeof(float));
         }
         return store.ensure(layer, tensor);
     }
     // The residual stays allocated only until the post-MoE add, which the graph may reach before the
-    // predictor runs, so it is copied (8 KiB per row) first.
-    const size_t width = static_cast<size_t>(residual->ne[0]);
-    store.predict_input_.resize(width * residual->ne[1]);
-    for (int64_t row = 0; row < residual->ne[1]; ++row) {
-        std::memcpy(store.predict_input_.data() + row * width, static_cast<const char *>(residual->data) + row * residual->nb[1],
-                    width * sizeof(float));
-    }
+    // predictor runs, so it is copied (8-40 KiB per row) first.
+    store.predict_input_.resize(width * rows);
+    std::memcpy(store.predict_input_.data(), residual->data, width * rows * sizeof(float));
     const bool ok = store.ensure(layer, tensor);
     {
         std::lock_guard lock(store.predict_mutex_);
         store.predict_layer_ = layer;
-        store.predict_rows_ = residual->ne[1];
+        store.predict_rows_ = rows;
         store.predict_pending_ = true;
     }
     store.predict_ready_.notify_one();
@@ -1159,6 +1289,11 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
         ++stats_.overflow_events;
         overflow_layer_ = layer_index;
     }
+    // A prompt batch can demand almost every expert of a layer (all 512, ~0.9 GiB, in Qwen3.8-Flash-Next): other
+    // layers lend their entries, so the layer's working set fits inside the budget instead of on top of it.
+    if (rows > max_lookahead_rows) {
+        borrow(layer_index, missing_.size() * layer.entry_bytes);
+    }
     const bool decode = decode_phase_;
     if (decode) {
         stats_.decode_demanded += demand_.size();
@@ -1170,7 +1305,10 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
     load_runs(layer, missing_, true, overlap ? 0 : options_.coalesce_gap);
     if (rows > max_lookahead_rows && options_.prefill_prefetch_mib > 0) {
         if (auto *next = layer_at(layer_index + 1); next && !next->banks.empty()) {
-            prefetch_whole_layer(*next);
+            const double unused = std::pow(1.0 - static_cast<double>(experts_used_) / next->experts, static_cast<double>(rows));
+            if (1.0 - unused >= options_.prefill_prefetch_min_coverage) {
+                prefetch_whole_layer(*next);
+            }
         }
     }
     if (prefetch_layer_ >= 0) {
@@ -1234,21 +1372,27 @@ void ExpertStore::wait_predictor() {
 
 void ExpertStore::predict(int layer_index, const float *rows, int64_t count_rows, size_t row_bytes) {
     auto *next = layer_at(layer_index + 1);
-    if (!next || !next->router || !next->norm || count_rows <= 0 || row_bytes < next->width * sizeof(float)) {
+    if (!next || !next->router || !(next->norm || next->streams) || count_rows <= 0 ||
+        row_bytes < lookahead_width(*next) * sizeof(float)) {
         return;
     }
     const auto start = Clock::now();
     const size_t width = static_cast<size_t>(next->width);
     const int count = std::min(experts_used_ + options_.prefetch_extra, next->experts);
     next->prediction.clear();
-    // Approximates layer l+1's router input with the post-attention residual of layer l, normalized by
-    // layer l+1's RMS weight; a small batch (speculative verification) prefetches the union of its rows.
-    // It only drives speculative reads; routing still uses the exact top-k. Candidates are issued in score
-    // order, so extra candidates beyond top-k are read last.
+    // Approximates layer l+1's router input from the post-attention residual of layer l (skipping layer l's
+    // FFN and layer l+1's attention): normalized by layer l+1's RMS weight, or mixed by its FFN mixer. A small
+    // batch (speculative verification) prefetches the union of its rows. It only drives speculative reads;
+    // routing still uses the exact top-k. Candidates are issued in score order, so extra candidates beyond
+    // top-k are read last.
     for (int64_t row = 0; row < count_rows; ++row) {
         const auto *x = reinterpret_cast<const float *>(reinterpret_cast<const char *>(rows) + row * row_bytes);
-        const float scale = 1.0f / std::sqrt(simd::sum_squares(x, width) / width + norm_epsilon_);
-        simd::scale_mul(x, next->norm, scale, scratch_.data(), width);
+        if (next->streams) {
+            mix(*next, x, scratch_.data());
+        } else {
+            const float scale = 1.0f / std::sqrt(simd::sum_squares(x, width) / width + norm_epsilon_);
+            simd::scale_mul(x, next->norm, scale, scratch_.data(), width);
+        }
         simd::gemv_rows(next->router, scratch_.data(), scores_.data(), next->experts, width);
         for (int e = 0; e < next->experts; ++e) {
             order_[e] = e;
@@ -1265,6 +1409,76 @@ void ExpertStore::predict(int layer_index, const float *rows, int64_t count_rows
     next->prediction_valid = true;
     prefetch_layer_ = layer_index + 1;
     stats_.predict_ms += since(start);
+}
+
+// llama.cpp's qwen4exp build_hc_mix for one token: per-stream RMS norm times the stream's weights, a low-rank
+// gate silu(down(xn) / streams) projected back by `up`, and the mean of the sigmoid-gated streams. The int8
+// activation quantization of Q8_0 projections only affects which experts are prefetched.
+void ExpertStore::mix(const Layer &layer, const float *x, float *out) {
+    const size_t width = static_cast<size_t>(layer.width), streams = static_cast<size_t>(layer.streams);
+    float *normed = mix_normed_.data(), *gate = mix_gate_.data(), *low = mix_low_.data();
+    for (size_t s = 0; s < streams; ++s) {
+        const float *stream = x + s * width;
+        const float scale = 1.0f / std::sqrt(simd::sum_squares(stream, width) / width + norm_epsilon_);
+        simd::scale_mul(stream, layer.mixer_norm + s * width, scale, normed + s * width, width);
+    }
+    const float inverse = 1.0f / static_cast<float>(streams);
+    if (!options_.lookahead_gate) {
+        // Without the gate every stream weighs the same; the router's top-k does not depend on a common scale.
+        for (size_t i = 0; i < width; ++i) {
+            float sum = 0;
+            for (size_t s = 0; s < streams; ++s) {
+                sum += normed[s * width + i];
+            }
+            out[i] = sum * inverse;
+        }
+        return;
+    }
+    project(layer.mixer_down, normed, low);
+    for (int64_t j = 0; j < layer.mixer_down->ne[1]; ++j) {
+        const float v = low[j] * inverse;
+        low[j] = v / (1.0f + std::exp(-v));
+    }
+    project(layer.mixer_up, low, gate);
+    for (size_t i = 0; i < width; ++i) {
+        float sum = 0;
+        for (size_t s = 0; s < streams; ++s) {
+            sum += normed[s * width + i] / (1.0f + std::exp(-gate[s * width + i]));
+        }
+        out[i] = sum * inverse;
+    }
+}
+
+void ExpertStore::project(const ggml_tensor *weights, const float *x, float *out) {
+    const size_t n = static_cast<size_t>(weights->ne[0]), rows = static_cast<size_t>(weights->ne[1]);
+    if (weights->type == GGML_TYPE_F32) {
+        simd::gemv_rows(static_cast<const float *>(weights->data), x, out, rows, n);
+        return;
+    }
+    simd::quantize_blocks(x, n, quant_.data(), quant_scales_.data());
+    simd::gemv_q8_0(static_cast<const uint8_t *>(weights->data), weights->nb[1], quant_.data(), quant_scales_.data(),
+                    out, rows, n);
+}
+
+void ExpertStore::borrow(int layer_index, uint64_t bytes) {
+    const int count = static_cast<int>(layers_.size());
+    for (int step = 1; step < count && resident_bytes_ + bytes > effective_budget_; ++step) {
+        Layer *other = layers_[(layer_index - step + count) % count].get();
+        if (!other || other->banks.empty()) {
+            continue;
+        }
+        for (int e = 0; e < other->experts; ++e) {
+            reap(*other, e);
+        }
+        while (resident_bytes_ + bytes > effective_budget_) {
+            const int victim = least_recent(*other, 0);
+            if (victim < 0) {
+                break;
+            }
+            evict(*other, victim);
+            ++stats_.borrowed_evictions;
+        }
+    }
 }
 
 void ExpertStore::issue_prefetch(Layer &layer) {
@@ -1610,7 +1824,8 @@ Json ExpertStore::configuration() const {
         {"routing", "exact_top_k"},
         {"requested_budget_bytes", options_.budget_bytes},
         {"effective_budget_bytes", effective_budget_},
-        {"budget_kind", "routed_expert_pages; prefill batches may transiently exceed one layer quota"},
+        {"budget_kind", "routed_expert_pages; a prompt batch borrows other layers' entries and exceeds the budget "
+                        "only when one layer alone needs more, plus prefill_prefetch_mib"},
         {"layer_quotas", quotas},
         {"layer_weights", options_.layer_weights.empty() ? Json("uniform") : Json(options_.layer_weights)},
         {"routed_bytes", routed_bytes_},
@@ -1621,11 +1836,13 @@ Json ExpertStore::configuration() const {
         {"direct_io", options_.direct_io},
         {"prefetch", options_.prefetch ? "router_lookahead_1" : "none"},
         {"prefetch_extra", options_.prefetch_extra},
+        {"lookahead_gate", options_.lookahead_gate},
         {"demand_io_threads", std::min(options_.demand_threads, options_.io_threads - 1)},
         {"awake_demand_io_threads", little_cpus_.size() >= 2 ? std::min(options_.awake_demand_threads, std::min(options_.demand_threads, options_.io_threads - 1)) : 0},
         {"coalesce_kib", options_.coalesce_kib},
         {"coalesce_gap", options_.coalesce_gap},
         {"prefill_prefetch_mib", options_.prefill_prefetch_mib},
+        {"prefill_prefetch_min_coverage", options_.prefill_prefetch_min_coverage},
         {"slots", options_.slots},
         {"overlap_reads", overlap_reads_},
         {"prefetch_layers", predictable_layers_},
@@ -1648,6 +1865,7 @@ Json ExpertStore::statistics() const {
             {"predicted_correct", stats_.predicted_correct},
             {"evictions", stats_.evictions},
             {"overflow_events", stats_.overflow_events},
+            {"borrowed_evictions", stats_.borrowed_evictions},
             {"io_wait_ms", stats_.io_wait_ms},
             {"decode_demanded_experts", stats_.decode_demanded},
             {"decode_misses", stats_.decode_misses},
@@ -1659,6 +1877,7 @@ Json ExpertStore::statistics() const {
             {"demand_job_read_ms", stats_.demand_read_ms},
             {"compute_wait_thread_ms", compute_wait_ns_.load() / 1e6},
             {"predict_ms", stats_.predict_ms},
+            {"predict_wait_ms", stats_.predict_wait_ms},
             {"evict_ms", stats_.evict_ms},
             {"slot_cold_reuses", stats_.slot_cold_reuses},
             {"slot_arena_committed_bytes", arena_used_},
