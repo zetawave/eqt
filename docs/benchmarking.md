@@ -109,6 +109,21 @@ Request option: `prompt_cache` (default true) reuses the state the previous requ
 
 Result fields added: `reused_prompt_tokens`; `expert_cache.borrowed_evictions` (entries other layers lent to a prompt batch), `expert_cache.predict_wait_ms` (decode-thread time spent waiting for the lookahead). `prefill_tokens_per_second` counts evaluated tokens only.
 
+Decode-speed options (D029), all exact:
+
+- `speculative_pool` (default false): lookahead reads go to a pool beside the layer quota instead of evicting cached experts. A pooled expert joins the cache when routed; otherwise it is dropped after its layer has run.
+- `lookahead_layers` (1–2, default 1): with 2, the predictor also reads the top `lookahead2_count` (default 5) candidates of layer l+2. It uses the gate-less mixer and goes after the urgent l+1 reads.
+- `decode_uses_prompt_allowance` (default true): while decoding, `prefill_prefetch_mib` counts as cache quota.
+- `prefetch_count` (default 0, all): reads ahead only the first N predicted ranks per row.
+- `bank_spin_us` (default 20000): spin time before a compute thread sleeps on a pending bank.
+
+New `expert_cache` fields:
+
+- `predicted_by_rank` / `predicted_correct_by_rank`, and the `early_` variants for the l+2 prediction, by rank 0–15;
+- `decode_prefetch_issued` and `early_prefetch_issued`;
+- `decode_io_bytes`, and `decode_io_busy_ms` (decode wall time with at least one expert read in flight);
+- `decode_budget_bytes`.
+
 `eqt-io-bench` takes `threads` (1–32): concurrent readers, each with its own buffer, over the same random offsets; `bytes_per_second` is the aggregate rate. Flash-Next experts are read as 473,600-byte (gate, up) and 921,600-byte (down) slices, at most 117 and 226 pages once rounded to pages, so sweep `read_bytes` 479232 and 925696 with `direct: true` over `threads` 1, 4, 8, 16 and 32 on the model file itself.
 
 Decode-only replay of routing traces: `python tools/replay_decode.py --calibrate <trace> --evaluate <other trace> --entry-bytes 1884160 --expert-bytes 1875200 --layers 48 --budget-mib ...`. Prompt calls update the cache with native semantics; only single-token calls are scored.

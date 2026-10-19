@@ -404,3 +404,75 @@ Several sequences in one batch can change sparse-attention block selection when 
 
 These are technical compatibility checks. Effects on behavior and answer quality have not been evaluated for this model.
 
+## D029: Flash-Next decoding on the Galaxy: speculative pool, two-layer lookahead, decode-phase cache — 2026-10-19
+
+First controlled measurements of Qwen3.8-Flash-Next on the Galaxy S24+ (Exynos 2400). The CLI runs as the app user on the model in app storage (`tools/runner.py --run-as`), with the same 52-token prompt, 64 greedy tokens, 6 threads, 16 I/O threads, direct I/O and a 1 GiB expert cache unless stated. Each arm ran once. Two runs of the same baseline gave 1.58 and 1.47 tokens/s, so differences under about 8% are noise. Records: `results/2026-10-19/galaxy/flash-next-decode-ab.json` and `flash-next-storage-sweep.json`.
+
+**Storage.** `eqt-io-bench`, direct random reads over the model file. Values are GB/s, with p50 latency in parentheses:
+
+| Read size | 1 thread | 4 | 8 | 16 |
+|---|---|---|---|---|
+| 479 KB (one IQ2_XS gate or up slice) | 0.60 | 1.38 | 1.45 | 1.78 (3.9 ms) |
+| 926 KB (one IQ4_NL down slice) | 1.05 | 1.90 | 2.01 | 2.00 (6.2 ms) |
+| 1.88 MB | 1.23 | 2.17 | 2.19 | 2.10 |
+| 3.76 MB | 1.50 | 2.14 | 2.31 | 2.20 |
+
+Storage saturates at about 2–2.3 GB/s from queue depth 8. That is the upper end of D026's arithmetic, not a 1.2 GB/s phone.
+
+**Baseline: storage is busy, but on the wrong reads.** At 1 GiB the cache served only 26% of demanded experts and 35% missed. Lookahead reads evicted cached experts to make room for predictions, and 30% of those predictions were never used. A simpleperf profile of the decode threads put about 41% of samples in `wait_bank`, 18% in GGML barriers and 30% in kernels.
+
+**Speculative pool** (`speculative_pool`). Lookahead reads no longer evict. They go to a pool beside the layer's quota, at most one prediction (top-k plus `prefetch_extra`) per layer, about 60 MiB in total. A pooled expert becomes an ordinary cache entry when the router selects it, and unused ones are dropped once their layer has run. Quota trimming and excess counts exclude pooled entries. Same series:
+
+- 1.47 → 1.61 tokens/s;
+- cache hits 26% → 44%;
+- misses 34% → 17%;
+- expert reads 52 → 41 GB.
+
+**Two-layer lookahead** (`lookahead_layers: 2`, `lookahead2_count`). After the urgent prediction for layer l+1, the predictor applies layer l+2's gate-less mixer and router to the same streams and reads that layer's top `lookahead2_count` candidates into its pool. Reads that were still in flight when demanded fell from 23% to 16% of demand at 1 GiB, for 1.68 tokens/s; that step alone is within noise. Precision of the l+2 prediction by rank: 0.91, 0.88, 0.80, 0.75, 0.69, 0.61, 0.55, 0.49, 0.42, 0.35. Five candidates keep the precise ranks.
+
+**Cache size.** With pool and two-layer lookahead, a 1,792 MiB cache measured:
+
+| Metric | Value |
+|---|---|
+| Speed | 1.92 tokens/s |
+| p50 token latency | 488 ms |
+| Cache hits | 54% |
+| Prefetch hits | 20% |
+| In flight when demanded | 12% |
+| Misses | 14% |
+| Peak RSS | 6.03 GB |
+
+**Rejected:**
+
+| Variant | Speed | Why |
+|---|---|---|
+| `prefetch_count` 6 or 8 | 1.48 / 1.44 tokens/s | Fewer wasted reads, more misses. |
+| 8 demand I/O threads | 1.53 tokens/s | No gain. |
+| `bank_spin_us` 1000 | 1.11 tokens/s | Sleeping waits lose clocks, as in D024. |
+| Two-layer lookahead with 8 candidates plus 2 extra | 1.918 against 1.915 tokens/s | Same speed, with 21% more reads and 73% more unused predictions. |
+
+**Decode-phase cache** (`decode_uses_prompt_allowance`, default on). The next-layer prompt allowance (`prefill_prefetch_mib`) is cache quota while decoding. A prompt takes it back through D026's borrowing, layer by layer. In these CLI runs the allowance was 0, so this change is unmeasured on the phone; in the app it adds the allowance to the decode cache.
+
+**Also in this change:**
+
+- **n-gram row prefetch.** Patch 0004 now prefetches a token's 16 n-gram rows also when Equity maps the table itself. It is a madvise hint, with no numerical effect, and was not measured separately.
+- **Ready-first order.** MUL_MAT_ID already computes ready experts first (patch 0002, D024); nothing changed there.
+
+Where the time goes at 1,792 MiB:
+
+- 522 ms per token;
+- storage is busy 67% of decode wall time, at about 1.65 GB/s while busy, reading 0.58 GB per token including unused predictions;
+- compute threads wait about 170 ms per token.
+
+That leaves about 350 ms of compute and synchronization per token, about twice D026's 160–170 ms estimate. Reads alone would allow about 3.5 tokens/s at 2 GB/s with full overlap. That is arithmetic, not a measurement. The next levers are therefore CPU time per token (barriers, IQ2_XS/IQ4_NL expert kernels) as much as fewer reads.
+
+Correctness: on the qwen4exp and qwen35moe fixtures, all 46 streamed-versus-resident and lifecycle cases are bitwise equal, including the new `speculative_pool_prefetch`, `speculative_pool_chunk16_ranked` and `lookahead_two_layers_pool` (`results/2026-10-19/host/streaming-correctness-pool-lookahead2.json`). On the phone every arm produced the same 64 tokens.
+
+Catalog: Flash-Next sets `speculative_pool`, `lookahead_layers: 2` and `lookahead2_count: 5`, with `prefill_prefetch_min_coverage: 0.9`. The app's automatic cache, plus the decode-phase allowance, decides the cache size. With 6.5 GB available, about 1.9 GiB is expected while decoding; this is an estimate.
+
+Not verified:
+
+- speed in the app with this build;
+- sustained and thermal behavior beyond 64 tokens (thermal status rose from 0–1 to 1–2 within each run);
+- energy per token;
+- quality of the quantization.

@@ -21,8 +21,8 @@
       },
       {
         "file": "patches/llama.cpp/0004-qwen4exp-residual-name-and-control-vectors.patch",
-        "sha256": "44c855c5aa7ecfa4c026fc3da02d5a9cf4b7b877d4821b9104d3fb92512ecbf7",
-        "purpose": "qwen4exp: names the post-attention hyper-connection streams attn_residual, as qwen35 names its residual, so Equity's expert store can predict the next layer's routing from them; applies the control-vector adapter (addition and directional ablation) to every stream of each block output, which the upstream graph never called. A node name and an adapter call; no change while no control vector is set"
+        "sha256": "2bd5127614d2944ba805c95b231d49d6abb66b8e9aad901e9b93f6ff08b743df",
+        "purpose": "qwen4exp: names the post-attention hyper-connection streams attn_residual, as qwen35 names its residual, so Equity's expert store can predict the next layer's routing from them; applies the control-vector adapter (addition and directional ablation) to every stream of each block output, which the upstream graph never called; prefetches the n-gram rows of a token also when the table is a host file mapping (Equity maps it itself, so llama.cpp's lazy-read flag is unset). A node name, an adapter call and a madvise hint; no numerical change while no control vector is set"
       }
     ]
   },

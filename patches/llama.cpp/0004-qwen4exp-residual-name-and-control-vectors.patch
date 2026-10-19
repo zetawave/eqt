@@ -1,5 +1,5 @@
 diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
-index 250eb74..5cce3ef 100644
+index 250eb74..d05e784 100644
 --- a/src/models/qwen4exp.cpp
 +++ b/src/models/qwen4exp.cpp
 @@ -481,6 +481,8 @@ llama_model_qwen4exp::graph::graph(const llama_model & model, const llm_graph_pa
@@ -21,3 +21,13 @@ index 250eb74..5cce3ef 100644
          // "l_last" is the layer output name that build_cvec and imatrix look for
          cb(res_hc, "l_last", il);
      }
+@@ -1285,7 +1290,8 @@ void llm_graph_input_qwen4exp_ple::set_input(const llama_ubatch * ubatch) {
+     {
+         ggml_tensor * ple = model.per_layer_tok_embd;
+ 
+-        const bool prefetch = model.can_prefetch.count(ple);
++        // a host table read in place (a file mapping) is prefetched too, not only one loaded lazily by llama.cpp
++        const bool prefetch = model.can_prefetch.count(ple) || (ple->buffer && ggml_backend_buffer_is_host(ple->buffer));
+         if (prefetch) {
+             llama_prefetch_rows(ple, idx.data(), idx.size());
+         }

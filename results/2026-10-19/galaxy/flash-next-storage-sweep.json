@@ -1,0 +1,186 @@
+{
+ "date": "2026-10-19",
+ "device": "Galaxy S24+ (Exynos 2400), stock Android",
+ "measurement_kind": "local_measurement",
+ "tool": "eqt-io-bench, direct random reads over the model file",
+ "model": "files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+ "binary_sha256": {
+  "eqt-io-bench": "fd969234c45cc116470215b593e1bff63686370423c111b827a550f1e1a9643c",
+  "libggml-base.so": "732a3ca91ec20302d77d51c779430b3317ec81b45570b2d3850a4c21b82646e9",
+  "libggml-cpu-android_armv8.0_1.so": "fe3047a410ab24e8afb268fa6975ba61e9a7679f546af8325a8f3a75ed6667dd",
+  "libggml-cpu-android_armv8.2_1.so": "088ad975eb530e67201c89b59e64be1fb1e76ca0dc37d405507c6b1bc7cf41e2",
+  "libggml-cpu-android_armv8.2_2.so": "cad5ef9b3ebe2ee6d5ce92c12d9c34802ad1e1690fc824a28fb25a64f1c94679",
+  "libggml-cpu-android_armv8.6_1.so": "e2747963d1eb23020eec522a2e5f7cd7be9ed74e775cd73ab69c7aa044e2aefa",
+  "libggml-cpu-android_armv9.0_1.so": "96f627688d2a0e7710692dfad93eb16cd558338199c7722417b97c8e6a21e45a",
+  "libggml-cpu-android_armv9.2_1.so": "ae01db1054adef7f6a55a0c4302e50d614ddd0a70edb87003d5b13c99fddb8d5",
+  "libggml-cpu-android_armv9.2_2.so": "24af2cd4373df264e370f741f26d927e8819610659a21393055ee1ac7cc927d9",
+  "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+  "libllama.so": "49293dcf7cf529ae984acec8a343b43712716d74502fe9ae8ddb1ee452418788",
+  "libmtmd.so": "930a151cdfd9ec4cd2970421606fd568fa5121693f738856031522be270f3f6e",
+  "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+ },
+ "rows": [
+  {
+   "read_bytes": 479232,
+   "threads": 1,
+   "reads": 128,
+   "gb_per_s": 0.5972640028247255,
+   "p50_ms": 0.650703,
+   "p95_ms": 1.170742,
+   "direct": true
+  },
+  {
+   "read_bytes": 479232,
+   "threads": 4,
+   "reads": 128,
+   "gb_per_s": 1.3821971974484635,
+   "p50_ms": 1.188985,
+   "p95_ms": 2.534063,
+   "direct": true
+  },
+  {
+   "read_bytes": 479232,
+   "threads": 8,
+   "reads": 256,
+   "gb_per_s": 1.445803046906786,
+   "p50_ms": 2.002226,
+   "p95_ms": 4.35293,
+   "direct": true
+  },
+  {
+   "read_bytes": 479232,
+   "threads": 16,
+   "reads": 512,
+   "gb_per_s": 1.77500757446322,
+   "p50_ms": 3.860313,
+   "p95_ms": 6.790977,
+   "direct": true
+  },
+  {
+   "read_bytes": 479232,
+   "threads": 32,
+   "reads": 1024,
+   "gb_per_s": 1.772151379997105,
+   "p50_ms": 7.897344,
+   "p95_ms": 12.846172,
+   "direct": true
+  },
+  {
+   "read_bytes": 925696,
+   "threads": 1,
+   "reads": 128,
+   "gb_per_s": 1.0545937639999645,
+   "p50_ms": 0.790469,
+   "p95_ms": 1.471796,
+   "direct": true
+  },
+  {
+   "read_bytes": 925696,
+   "threads": 4,
+   "reads": 128,
+   "gb_per_s": 1.904372475429404,
+   "p50_ms": 1.759102,
+   "p95_ms": 2.924297,
+   "direct": true
+  },
+  {
+   "read_bytes": 925696,
+   "threads": 8,
+   "reads": 256,
+   "gb_per_s": 2.0109637658334916,
+   "p50_ms": 3.311211,
+   "p95_ms": 5.763204,
+   "direct": true
+  },
+  {
+   "read_bytes": 925696,
+   "threads": 16,
+   "reads": 512,
+   "gb_per_s": 1.9962636695423808,
+   "p50_ms": 6.238203,
+   "p95_ms": 13.572734,
+   "direct": true
+  },
+  {
+   "read_bytes": 925696,
+   "threads": 32,
+   "reads": 1024,
+   "gb_per_s": 1.9424816931955857,
+   "p50_ms": 9.447734,
+   "p95_ms": 37.666641,
+   "direct": true
+  },
+  {
+   "read_bytes": 1880064,
+   "threads": 1,
+   "reads": 128,
+   "gb_per_s": 1.2313442310649316,
+   "p50_ms": 1.396172,
+   "p95_ms": 2.326719,
+   "direct": true
+  },
+  {
+   "read_bytes": 1880064,
+   "threads": 4,
+   "reads": 128,
+   "gb_per_s": 2.1663138784732805,
+   "p50_ms": 3.064453,
+   "p95_ms": 5.959493,
+   "direct": true
+  },
+  {
+   "read_bytes": 1880064,
+   "threads": 8,
+   "reads": 256,
+   "gb_per_s": 2.1894291003215685,
+   "p50_ms": 5.703633,
+   "p95_ms": 11.658047,
+   "direct": true
+  },
+  {
+   "read_bytes": 1880064,
+   "threads": 16,
+   "reads": 512,
+   "gb_per_s": 2.10186771193294,
+   "p50_ms": 9.528554,
+   "p95_ms": 36.535937,
+   "direct": true
+  },
+  {
+   "read_bytes": 3760128,
+   "threads": 1,
+   "reads": 128,
+   "gb_per_s": 1.4962112494307096,
+   "p50_ms": 2.042696,
+   "p95_ms": 4.600313,
+   "direct": true
+  },
+  {
+   "read_bytes": 3760128,
+   "threads": 4,
+   "reads": 128,
+   "gb_per_s": 2.1377811976809045,
+   "p50_ms": 5.830508,
+   "p95_ms": 13.706367,
+   "direct": true
+  },
+  {
+   "read_bytes": 3760128,
+   "threads": 8,
+   "reads": 256,
+   "gb_per_s": 2.309665433642535,
+   "p50_ms": 10.110586,
+   "p95_ms": 26.554258,
+   "direct": true
+  },
+  {
+   "read_bytes": 3760128,
+   "threads": 16,
+   "reads": 512,
+   "gb_per_s": 2.2014309848007865,
+   "p50_ms": 15.025899,
+   "p95_ms": 94.051172,
+   "direct": true
+  }
+ ]
+}

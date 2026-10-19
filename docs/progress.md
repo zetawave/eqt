@@ -19,9 +19,9 @@
 - All models live in the app's private storage: `/data/user/0/org.equity.app/files/models/<id>/`, each with a `.sha256` marker (Qwen3-0.6B, UD-IQ2_M, UD-Q4_K_M MTP). `/data/local/tmp/eqt` no longer holds models.
 - The installed app is the debug build. Uninstalling it, or switching to a release signature, deletes the models.
 - CLI access works through `adb shell run-as org.equity.app`. It can read `/data/local/tmp` but cannot execute from it, so binaries and libraries must be copied into `files/bench/` and executed there. Executables staged in `/data/local/tmp` need mode 755 so `run-as` can copy them.
-- `tools/runner.py` has this run-as mode since 2026-10-19: `--run-as org.equity.app` on the sweep, quality, sustained and trace tools, with app-relative model paths. It stages into `files/bench`, reads models under `files/models` and reads results back with `run-as cat`. It has not been run on the phone yet.
+- `tools/runner.py` has this run-as mode since 2026-10-19: `--run-as org.equity.app` on the sweep, quality, sustained and trace tools, with app-relative model paths. It stages into `files/bench`, reads models under `files/models` and reads results back with `run-as cat`. The Flash-Next measurements of D029 ran through it.
 
-**Qwen3.8-Flash-Next (2026-10-19):** supported end to end and verified on the host. The owner subsequently reported an app result on the Galaxy: 1.8 tokens/s over 252 generated tokens, first token after 6.1 s (one screenshot, not a controlled benchmark). The device-session steps below remain the measurement plan. Chat turns now reuse the previous turn's state where the template allows it (D027).
+**Qwen3.8-Flash-Next (2026-10-19):** supported end to end and verified on the host. The owner reported an app result on the Galaxy: 1.8 tokens/s over 252 generated tokens, first token after 6.1 s (one screenshot, not a controlled benchmark). Controlled CLI runs on the Galaxy then took decoding from 1.47–1.58 to 1.92 tokens/s with identical tokens (D029): a speculative pool, a two-layer lookahead and a 1,792 MiB cache. Chat turns reuse the previous turn's state where the template allows it (D027).
 
 **Next performance goals, in order:**
 
@@ -30,9 +30,10 @@
    - CPU work per token;
    - why storage wait doubles in long runs (82 against about 31 ms per token).
 2. **Prefill:** i8mm microkernel register blocking (the kernels are about 42% of prefill cycles), DeltaNet and attention prefill kernels, 8k–32k context sweeps.
-3. **Cache policy:** eviction informed by router scores (the Belady gap is about 15 points), and a speculative pool that never displaces demanded experts.
-4. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
-5. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
+3. **Cache policy:** eviction informed by router scores (the Belady gap is about 15 points). The speculative pool that never displaces cached experts is in place (D029).
+4. **Flash-Next CPU time per token:** about 350 ms of compute and synchronization per token at 1,792 MiB, twice the estimate. Targets: barriers, IQ2_XS/IQ4_NL expert kernels, then larger contiguous expert reads (D029).
+5. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
+6. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
 
 ## Qwen3.8-Flash-Next: 2026-10-19 (branch `experimental/005-Flash-Next-120b`)
 
@@ -82,9 +83,21 @@
 
 **Owner-reported Galaxy observation (2026-10-19):** the model runs in the app; the supplied statistics screenshot shows 1.8 tokens/s, 252 generated tokens and 6.1 s to first token. Record: `results/2026-10-19/galaxy/flash-next-owner-observation.json`. Prompt length, cache budget, batch, prefix reuse, thinking state, thermal state, peak RSS and energy were not captured and remain null. This is a single app observation, not a controlled speed, sustained or quality result. The website now includes the model alongside both 35B builds, separates host checks from this observation, and retains the 35B scope on its earlier performance figures. Local preview from the repository root: `npm start`, then `http://localhost:8377`.
 
-**Not verified:** controlled or sustained Galaxy speed, peak memory, dotprod lookahead, storage throughput at queue depth, the in-app download, and the quality of this quantization.
+**Galaxy decode speed (D029, branch `experimental/flash-next-speed-001`):** these are CLI runs as the app user, 64 greedy tokens, one repetition per arm. Records: `results/2026-10-19/galaxy/`.
 
-**Device session, when ~80 GB are free on the phone:**
+- **Storage:** direct random reads reach 1.78 GB/s for 479 KB slices and 2.0–2.3 GB/s for 0.9–3.8 MB reads, from queue depth 8.
+- **Baseline at 1 GiB:** 1.47–1.58 tokens/s. 26% cache hits, because lookahead reads evicted cached experts.
+- **Speculative pool:** lookahead reads sit beside the quota and join the cache only when routed. Result: 1.61 tokens/s, 44% hits, 17% misses.
+- **Two-layer lookahead (5 candidates):** 1.68 tokens/s at 1 GiB. At 1,792 MiB it reaches 1.92 tokens/s: p50 488 ms, 54% hits, peak RSS 6.03 GB. Every arm generated the same tokens.
+- **Rejected:** `prefetch_count` 6/8, 8 demand I/O threads, a 1 ms spin limit (1.11 tokens/s), and 8+2 two-layer candidates (same speed, 21% more reads).
+- **Decode-phase cache:** decoding now uses the prompt-time next-layer allowance as cache. It is unmeasured on the phone because the CLI runs had no allowance.
+- **n-gram row prefetch:** applies also to Equity's own mapping. Not measured separately.
+- **Catalog:** Flash-Next enables the pool and the two-layer lookahead.
+- **Correctness:** 46/46 fixture cases are bitwise equal with the new options.
+
+**Not verified:** Flash-Next speed in the app with this build, sustained and thermal behaviour beyond 64 tokens, energy per token, the in-app download, and the quality of this quantization.
+
+**Device session, when ~80 GB are free on the phone** (steps 1–2 and the storage and A/B parts of step 4 are done; see D029):
 
 1. Install the debug build in place, which keeps the installed models: `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`, or `./scripts/android-app.ps1 -Variant Debug -Install`.
 2. Copy the model: `python tools/acquire_model.py configs/flash-next-model.json --push-local models/flash-next/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf --model-id qwen3.8-flash-next-ud-q2kxl`. It resumes if interrupted, and hashing 79 GB on the phone takes a few minutes.

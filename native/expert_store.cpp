@@ -830,6 +830,8 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
         throw std::invalid_argument("expert_layer_weights must not all be zero");
     }
     int max_experts = 0;
+    const uint64_t decode_extra = options_.decode_uses_prompt_allowance
+                                      ? static_cast<uint64_t>(options_.prefill_prefetch_mib) << 20 : 0;
     for (size_t i = 0; i < layers_.size(); ++i) {
         auto *layer = layers_[i].get();
         if (!layer || layer->banks.empty()) {
@@ -837,11 +839,18 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
         }
         const double weight = options_.layer_weights.empty() ? 1.0 : options_.layer_weights[i];
         const double share = static_cast<double>(options_.budget_bytes) * weight / weight_total;
-        layer->quota = std::min(layer->experts, static_cast<int>(share / layer->entry_bytes));
+        const double decode_share = static_cast<double>(options_.budget_bytes + decode_extra) * weight / weight_total;
+        layer->prompt_quota = std::min(layer->experts, static_cast<int>(share / layer->entry_bytes));
+        layer->decode_quota = std::min(layer->experts, static_cast<int>(decode_share / layer->entry_bytes));
+        layer->quota = layer->prompt_quota;
         layer->entries = std::make_unique<Entry[]>(layer->experts);
         layer->seen.assign(layer->experts, 0);
         layer->prediction.reserve(static_cast<size_t>(experts_used + options_.prefetch_extra) * max_lookahead_rows);
+        layer->prediction_rank.reserve(layer->prediction.capacity());
+        layer->early_prediction.reserve(layer->prediction.capacity());
+        layer->early_rank.reserve(layer->prediction.capacity());
         effective_budget_ += static_cast<uint64_t>(layer->quota) * layer->entry_bytes;
+        decode_budget_ += static_cast<uint64_t>(layer->decode_quota) * layer->entry_bytes;
         max_experts = std::max(max_experts, layer->experts);
         // A mixer must map `streams` streams of the router's width through one rank and back.
         const auto *down = layer->mixer_down, *up = layer->mixer_up;
@@ -867,6 +876,7 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
     if (options_.prefetch && predictable_layers_ == 0) {
         throw std::invalid_argument("prefetch requires an F32 ffn_gate_inp with post_attention_norm or an FFN mixer");
     }
+    prompt_budget_ = effective_budget_;
     residuals_.assign(layers_.size(), nullptr);
     demand_.reserve(max_experts);
     missing_.reserve(max_experts);
@@ -991,7 +1001,7 @@ void ExpertStore::wait_bank(const BankRef &ref, int expert) const {
         const auto start = Clock::now();
         for (uint32_t spins = 0; !((ready = entry.ready.load(std::memory_order_acquire)) & bit); ++spins) {
             // A read that takes this long is stalled; stop burning the core while it finishes.
-            if ((spins & 1023) == 0 && Clock::now() - start > std::chrono::milliseconds(20)) {
+            if ((spins & 1023) == 0 && Clock::now() - start > std::chrono::microseconds(options_.bank_spin_us)) {
                 entry.ready.wait(ready, std::memory_order_acquire);
                 continue;
             }
@@ -1056,6 +1066,15 @@ void ExpertStore::release_slot(Layer &layer, int expert) {
 // pages are returned once when decoding starts and reused slots fault in again only if needed.
 void ExpertStore::set_decode_phase(bool decode) {
     wait_predictor();
+    if (decode != decode_phase_) {
+        // Decoding uses the prompt allowance as cache; a prompt's borrowing gives it back layer by layer.
+        for (auto &layer : layers_) {
+            if (layer && !layer->banks.empty()) {
+                layer->quota = decode ? layer->decode_quota : layer->prompt_quota;
+            }
+        }
+        effective_budget_ = decode ? decode_budget_ : prompt_budget_;
+    }
     if (decode && !decode_phase_ && options_.slots) {
         for (auto &slots : slot_classes_) {
             for (uint8_t *slot : slots.warm) {
@@ -1252,10 +1271,22 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
     }
     if (layer.prediction_valid) {
         stats_.predicted += layer.prediction.size();
-        for (const int expert : layer.prediction) {
-            stats_.predicted_correct += layer.seen[expert] == epoch_;
+        for (size_t i = 0; i < layer.prediction.size(); ++i) {
+            const bool correct = layer.seen[layer.prediction[i]] == epoch_;
+            const int rank = std::min<int>(layer.prediction_rank[i], 15);
+            stats_.predicted_correct += correct;
+            ++stats_.rank_predicted[rank];
+            stats_.rank_correct[rank] += correct;
         }
         layer.prediction_valid = false;
+    }
+    if (layer.early_valid) {
+        for (size_t i = 0; i < layer.early_prediction.size(); ++i) {
+            const int rank = std::min<int>(layer.early_rank[i], 15);
+            ++stats_.early_rank_predicted[rank];
+            stats_.early_rank_correct[rank] += layer.seen[layer.early_prediction[i]] == epoch_;
+        }
+        layer.early_valid = false;
     }
     ++clock_;
     stats_.demanded += demand_.size();
@@ -1263,6 +1294,10 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
     for (const int expert : demand_) {
         auto &entry = layer.entries[expert];
         reap(layer, expert);
+        if (entry.pooled) {
+            entry.pooled = false; // selected: an ordinary cache entry from now on
+            --layer.pooled;
+        }
         entry.stamp = clock_;
         if (entry.state == State::resident) {
             ++stats_.hits;
@@ -1275,7 +1310,15 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
         }
         entry.prefetched = false;
     }
-    int excess = layer.resident + static_cast<int>(missing_.size()) - layer.quota;
+    if (layer.pooled > 0) {
+        // Predictions this layer did not use; one still being read is dropped by a later call.
+        for (int e = 0; e < layer.experts && layer.pooled > 0; ++e) {
+            if (layer.entries[e].pooled && reap(layer, e) && layer.entries[e].state == State::resident) {
+                evict(layer, e);
+            }
+        }
+    }
+    int excess = layer.resident - layer.pooled + static_cast<int>(missing_.size()) - layer.quota;
     while (excess > 0) {
         const int victim = least_recent(layer, epoch_);
         if (victim < 0) {
@@ -1316,6 +1359,10 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
             issue_prefetch(*next);
         }
         prefetch_layer_ = -1;
+        if (auto *after = layer_at(early_layer_)) {
+            issue_reads_ahead(*after, after->early_prediction, after->early_rank, options_.lookahead2_count, true);
+        }
+        early_layer_ = -1;
     }
     if (overlap) {
         stats_.overlapped_layers += decode && !missing_.empty();
@@ -1355,8 +1402,12 @@ void ExpertStore::predictor() {
             if (auto *next = layer_at(prefetch_layer_)) {
                 issue_prefetch(*next);
             }
+            if (auto *after = layer_at(early_layer_)) {
+                issue_reads_ahead(*after, after->early_prediction, after->early_rank, options_.lookahead2_count, true);
+            }
         }
         prefetch_layer_ = -1;
+        early_layer_ = -1;
         {
             std::lock_guard lock(predict_mutex_);
             predict_pending_ = false;
@@ -1377,44 +1428,62 @@ void ExpertStore::predict(int layer_index, const float *rows, int64_t count_rows
         return;
     }
     const auto start = Clock::now();
-    const size_t width = static_cast<size_t>(next->width);
-    const int count = std::min(experts_used_ + options_.prefetch_extra, next->experts);
-    next->prediction.clear();
     // Approximates layer l+1's router input from the post-attention residual of layer l (skipping layer l's
     // FFN and layer l+1's attention): normalized by layer l+1's RMS weight, or mixed by its FFN mixer. A small
     // batch (speculative verification) prefetches the union of its rows. It only drives speculative reads;
     // routing still uses the exact top-k. Candidates are issued in score order, so extra candidates beyond
     // top-k are read last.
+    score(*next, rows, count_rows, row_bytes, options_.lookahead_gate, next->prediction, next->prediction_rank);
+    next->prediction_valid = true;
+    prefetch_layer_ = layer_index + 1;
+    // Two layers ahead the same residual also skips layer l+1's FFN and layer l+2's attention.
+    auto *after = options_.lookahead_layers > 1 ? layer_at(layer_index + 2) : nullptr;
+    if (after && after->router && (after->norm || after->streams) && lookahead_width(*after) == lookahead_width(*next)) {
+        score(*after, rows, count_rows, row_bytes, false, after->early_prediction, after->early_rank);
+        after->early_valid = true;
+        early_layer_ = layer_index + 2;
+    }
+    stats_.predict_ms += since(start);
+}
+
+void ExpertStore::score(Layer &target, const float *rows, int64_t count_rows, size_t row_bytes, bool gate,
+                        std::vector<int> &prediction, std::vector<uint8_t> &ranks) {
+    const size_t width = static_cast<size_t>(target.width);
+    const int count = std::min(experts_used_ + options_.prefetch_extra, target.experts);
+    prediction.clear();
+    ranks.clear();
     for (int64_t row = 0; row < count_rows; ++row) {
         const auto *x = reinterpret_cast<const float *>(reinterpret_cast<const char *>(rows) + row * row_bytes);
-        if (next->streams) {
-            mix(*next, x, scratch_.data());
+        if (target.streams) {
+            mix(target, x, scratch_.data(), gate);
         } else {
             const float scale = 1.0f / std::sqrt(simd::sum_squares(x, width) / width + norm_epsilon_);
-            simd::scale_mul(x, next->norm, scale, scratch_.data(), width);
+            simd::scale_mul(x, target.norm, scale, scratch_.data(), width);
         }
-        simd::gemv_rows(next->router, scratch_.data(), scores_.data(), next->experts, width);
-        for (int e = 0; e < next->experts; ++e) {
+        simd::gemv_rows(target.router, scratch_.data(), scores_.data(), target.experts, width);
+        for (int e = 0; e < target.experts; ++e) {
             order_[e] = e;
         }
         std::partial_sort(
-            order_.begin(), order_.begin() + count, order_.begin() + next->experts,
+            order_.begin(), order_.begin() + count, order_.begin() + target.experts,
             [this](int a, int b) { return scores_[a] > scores_[b] || (scores_[a] == scores_[b] && a < b); });
         for (int i = 0; i < count; ++i) {
-            if (std::find(next->prediction.begin(), next->prediction.end(), order_[i]) == next->prediction.end()) {
-                next->prediction.push_back(order_[i]);
+            const auto found = std::find(prediction.begin(), prediction.end(), order_[i]);
+            if (found == prediction.end()) {
+                prediction.push_back(order_[i]);
+                ranks.push_back(static_cast<uint8_t>(std::min(i, 255)));
+            } else {
+                auto &rank = ranks[found - prediction.begin()];
+                rank = std::min<uint8_t>(rank, static_cast<uint8_t>(std::min(i, 255)));
             }
         }
     }
-    next->prediction_valid = true;
-    prefetch_layer_ = layer_index + 1;
-    stats_.predict_ms += since(start);
 }
 
 // llama.cpp's qwen4exp build_hc_mix for one token: per-stream RMS norm times the stream's weights, a low-rank
 // gate silu(down(xn) / streams) projected back by `up`, and the mean of the sigmoid-gated streams. The int8
 // activation quantization of Q8_0 projections only affects which experts are prefetched.
-void ExpertStore::mix(const Layer &layer, const float *x, float *out) {
+void ExpertStore::mix(const Layer &layer, const float *x, float *out, bool use_gate) {
     const size_t width = static_cast<size_t>(layer.width), streams = static_cast<size_t>(layer.streams);
     float *normed = mix_normed_.data(), *gate = mix_gate_.data(), *low = mix_low_.data();
     for (size_t s = 0; s < streams; ++s) {
@@ -1423,7 +1492,7 @@ void ExpertStore::mix(const Layer &layer, const float *x, float *out) {
         simd::scale_mul(stream, layer.mixer_norm + s * width, scale, normed + s * width, width);
     }
     const float inverse = 1.0f / static_cast<float>(streams);
-    if (!options_.lookahead_gate) {
+    if (!use_gate) {
         // Without the gate every stream weighs the same; the router's top-k does not depend on a common scale.
         for (size_t i = 0; i < width; ++i) {
             float sum = 0;
@@ -1482,13 +1551,28 @@ void ExpertStore::borrow(int layer_index, uint64_t bytes) {
 }
 
 void ExpertStore::issue_prefetch(Layer &layer) {
-    for (const int expert : layer.prediction) {
+    issue_reads_ahead(layer, layer.prediction, layer.prediction_rank, options_.prefetch_count, false);
+}
+
+void ExpertStore::issue_reads_ahead(Layer &layer, const std::vector<int> &prediction, const std::vector<uint8_t> &ranks,
+                                    int limit, bool early) {
+    for (size_t i = 0; i < prediction.size(); ++i) {
+        if (limit > 0 && ranks[i] >= limit) {
+            continue;
+        }
+        const int expert = prediction[i];
         reap(layer, expert);
         auto &entry = layer.entries[expert];
         if (entry.state != State::absent) {
             continue; // Prediction never refreshes recency of resident entries.
         }
-        if (layer.resident >= layer.quota) {
+        if (options_.speculative_pool) {
+            if (layer.pooled >= experts_used_ + options_.prefetch_extra) {
+                return;
+            }
+            entry.pooled = true;
+            ++layer.pooled;
+        } else if (layer.resident >= layer.quota) {
             const int victim = least_recent(layer, 0);
             if (victim < 0 || layer.quota == 0) {
                 return;
@@ -1499,6 +1583,8 @@ void ExpertStore::issue_prefetch(Layer &layer) {
         entry.prefetched = true;
         entry.stamp = 0; // Unused speculative entries are the first eviction candidates.
         ++stats_.prefetch_issued;
+        stats_.decode_prefetch_issued += decode_phase_;
+        stats_.early_prefetch_issued += early;
     }
 }
 
@@ -1661,6 +1747,10 @@ void ExpertStore::evict(Layer &layer, int expert) {
     stats_.evictions += !entry.failed.load();
     entry.state = State::absent;
     entry.prefetched = false;
+    if (entry.pooled) {
+        entry.pooled = false;
+        --layer.pooled;
+    }
     entry.ready.store(0);
     --layer.resident;
     resident_bytes_ -= layer.entry_bytes;
@@ -1682,7 +1772,7 @@ void ExpertStore::trim(Layer &layer) {
     for (int e = 0; e < layer.experts; ++e) {
         reap(layer, e);
     }
-    while (layer.resident > layer.quota) {
+    while (layer.resident - layer.pooled > layer.quota) {
         const int victim = least_recent(layer, 0);
         if (victim < 0) {
             return;
@@ -1759,6 +1849,12 @@ void ExpertStore::worker(bool demand_only, bool awake) {
             queue.pop_front();
         }
         const auto read_start = Clock::now();
+        {
+            std::lock_guard lock(mutex_);
+            if (active_reads_++ == 0) {
+                busy_since_ = read_start;
+            }
+        }
         const auto &bank = job.layer->banks[job.bank];
         bool failed = false;
         try {
@@ -1786,6 +1882,13 @@ void ExpertStore::worker(bool demand_only, bool awake) {
         inflight_jobs_.fetch_sub(1);
         {
             std::lock_guard lock(mutex_);
+            const bool decoding = awake_decode_.load(std::memory_order_relaxed);
+            if (decoding) {
+                stats_.decode_io_bytes += bank.stride * static_cast<uint64_t>(job.count);
+            }
+            if (--active_reads_ == 0 && decoding) {
+                stats_.decode_io_busy_ms += since(busy_since_);
+            }
             if (demand) {
                 // Queue time is measured by the submitter's clock in queue_reads(); this is the read itself.
                 stats_.demand_read_ms += since(read_start);
@@ -1837,6 +1940,13 @@ Json ExpertStore::configuration() const {
         {"prefetch", options_.prefetch ? "router_lookahead_1" : "none"},
         {"prefetch_extra", options_.prefetch_extra},
         {"lookahead_gate", options_.lookahead_gate},
+        {"prefetch_count", options_.prefetch_count},
+        {"decode_uses_prompt_allowance", options_.decode_uses_prompt_allowance},
+        {"decode_budget_bytes", decode_budget_},
+        {"bank_spin_us", options_.bank_spin_us},
+        {"speculative_pool", options_.speculative_pool},
+        {"lookahead_layers", options_.lookahead_layers},
+        {"lookahead2_count", options_.lookahead2_count},
         {"demand_io_threads", std::min(options_.demand_threads, options_.io_threads - 1)},
         {"awake_demand_io_threads", little_cpus_.size() >= 2 ? std::min(options_.awake_demand_threads, std::min(options_.demand_threads, options_.io_threads - 1)) : 0},
         {"coalesce_kib", options_.coalesce_kib},
@@ -1878,6 +1988,15 @@ Json ExpertStore::statistics() const {
             {"compute_wait_thread_ms", compute_wait_ns_.load() / 1e6},
             {"predict_ms", stats_.predict_ms},
             {"predict_wait_ms", stats_.predict_wait_ms},
+            {"predicted_by_rank", std::vector<uint64_t>(std::begin(stats_.rank_predicted), std::end(stats_.rank_predicted))},
+            {"predicted_correct_by_rank", std::vector<uint64_t>(std::begin(stats_.rank_correct), std::end(stats_.rank_correct))},
+            {"decode_prefetch_issued", stats_.decode_prefetch_issued},
+            {"early_prefetch_issued", stats_.early_prefetch_issued},
+            {"early_predicted_by_rank", std::vector<uint64_t>(std::begin(stats_.early_rank_predicted), std::end(stats_.early_rank_predicted))},
+            {"early_predicted_correct_by_rank", std::vector<uint64_t>(std::begin(stats_.early_rank_correct), std::end(stats_.early_rank_correct))},
+            {"decode_io_bytes", stats_.decode_io_bytes},
+            {"decode_io_busy_ms", stats_.decode_io_busy_ms},
+            {"decode_budget_bytes", decode_budget_},
             {"evict_ms", stats_.evict_ms},
             {"slot_cold_reuses", stats_.slot_cold_reuses},
             {"slot_arena_committed_bytes", arena_used_},

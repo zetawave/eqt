@@ -33,6 +33,23 @@ struct ExpertOptions {
     bool direct_io = false;
     bool prefetch = false;
     int prefetch_extra = 0; // predicted candidates prefetched beyond the routed top-k, per row
+    // Only the first `prefetch_count` predicted candidates of each row are read ahead (0: all of them). The ranks
+    // below are still predicted and scored, so precision by rank stays comparable across settings.
+    int prefetch_count = 0;
+    // The prompt-time next-layer allowance (prefill_prefetch_mib) is cache while decoding: memory the plan reserved
+    // anyway, returned to prompts by the borrowing in ensure().
+    bool decode_uses_prompt_allowance = true;
+    // How long a compute thread spins on a pending expert bank before it sleeps on the bank's word.
+    int bank_spin_us = 20000;
+    // Lookahead reads go to a pool beside the layer's quota instead of evicting cached experts: a predicted expert
+    // joins the cache only when the router selects it, and the rest are dropped once their layer has run. The pool
+    // holds at most one prediction per layer (about 10 experts) for the one or two layers ahead.
+    bool speculative_pool = false;
+    // With 2, the lookahead also scores the layer after next from the same residual (without the mixer's gate,
+    // so the predictor thread keeps pace) and starts reading its `lookahead2_count` best candidates a layer
+    // earlier; the next layer's own prediction then adds the rest.
+    int lookahead_layers = 1;
+    int lookahead2_count = 5;
     // Hyper-connection lookahead: apply the mixer's low-rank gate (two Q8_0 GEMVs per layer) or average the normed
     // streams without it, which costs only the router product.
     bool lookahead_gate = true;
@@ -115,6 +132,7 @@ class ExpertStore {
     struct Entry {
         State state = State::absent;
         bool prefetched = false;
+        bool pooled = false; // a lookahead read held beside the quota (speculative_pool)
         uint8_t *slot = nullptr; // slot mode: page-aligned base of this expert's banks
         uint64_t stamp = 0;
         std::atomic<int> pending{0};
@@ -126,6 +144,8 @@ class ExpertStore {
         std::vector<Bank> banks;
         int experts = 0;
         int quota = 0;
+        int prompt_quota = 0, decode_quota = 0; // quota during prompts and while decoding
+        int pooled = 0;                         // entries held in the speculative pool
         int resident = 0;
         uint64_t entry_bytes = 0;
         size_t slot_bytes = 0; // slot mode: all banks of one expert, each page-rounded plus one page
@@ -144,7 +164,11 @@ class ExpertStore {
         const ggml_tensor *mixer_up = nullptr;   // rank -> streams * width
         int streams = 0;
         std::vector<int> prediction;
+        std::vector<uint8_t> prediction_rank; // best rank of each predicted expert over the batch rows
         bool prediction_valid = false;
+        std::vector<int> early_prediction; // two layers ahead (lookahead_layers = 2)
+        std::vector<uint8_t> early_rank;
+        bool early_valid = false;
     };
     // One contiguous read of experts [first, first + count) of one bank; bit i of `members` marks expert
     // first + i as loaded by this read (other experts in the range are resident and re-read unchanged).
@@ -165,6 +189,10 @@ class ExpertStore {
         double io_wait_ms = 0, decode_io_wait_ms = 0, predict_ms = 0, predict_wait_ms = 0, evict_ms = 0;
         uint64_t overlapped_layers = 0; // decode layers whose misses compute threads waited for per bank
         uint64_t demand_jobs = 0;
+        uint64_t decode_prefetch_issued = 0, decode_io_bytes = 0;
+        double decode_io_busy_ms = 0; // decoding wall time with at least one expert read in flight
+        uint64_t rank_predicted[16] = {}, rank_correct[16] = {};
+        uint64_t early_rank_predicted[16] = {}, early_rank_correct[16] = {}, early_prefetch_issued = 0;
         double demand_queue_ms = 0, demand_read_ms = 0;
         uint64_t peak_resident_bytes = 0;
     };
@@ -192,10 +220,15 @@ class ExpertStore {
     void setup_slots();
     bool ensure(int layer_index, const ggml_tensor *ids);
     void predict(int layer_index, const float *rows, int64_t count, size_t row_bytes);
+    // Scores `target`'s router on the lookahead rows; candidates in rank order, deduplicated over rows.
+    void score(Layer &target, const float *rows, int64_t count_rows, size_t row_bytes, bool gate,
+               std::vector<int> &prediction, std::vector<uint8_t> &ranks);
+    void issue_reads_ahead(Layer &layer, const std::vector<int> &prediction, const std::vector<uint8_t> &ranks, int limit,
+                           bool early);
     // Floats per lookahead input row for the layer whose experts are predicted (all streams with a mixer).
     static size_t lookahead_width(const Layer &layer);
     // The router input of `layer` computed from one row of residual streams.
-    void mix(const Layer &layer, const float *streams, float *out);
+    void mix(const Layer &layer, const float *streams, float *out, bool use_gate);
     void project(const ggml_tensor *weights, const float *x, float *out);
     // Prompt batches: makes room for `bytes` more by evicting other layers' resident entries, those whose next
     // use in a layer-ordered sweep lies furthest ahead first, so a layer's whole working set fits the budget.
@@ -259,9 +292,12 @@ private:
     std::ofstream trace_;
     Stats stats_;
     uint64_t clock_ = 0, resident_bytes_ = 0, routed_bytes_ = 0, effective_budget_ = 0;
+    uint64_t prompt_budget_ = 0, decode_budget_ = 0;
+    int active_reads_ = 0;                    // guarded by mutex_
+    std::chrono::steady_clock::time_point busy_since_;
     uint32_t epoch_ = 0;
     uint64_t requests_ = 0;
-    int experts_used_ = 0, overflow_layer_ = -1, prefetch_layer_ = -1, predictable_layers_ = 0;
+    int experts_used_ = 0, overflow_layer_ = -1, prefetch_layer_ = -1, early_layer_ = -1, predictable_layers_ = 0;
     float norm_epsilon_ = 1e-6f;
     size_t max_stride_ = 0;
     std::vector<int> demand_, missing_, order_, whole_layer_;

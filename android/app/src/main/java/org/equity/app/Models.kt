@@ -178,8 +178,11 @@ object Catalog {
             // Compute buffers measured on the host: 518 MiB at 512 tokens and 4,096 context, 534 at 16,384; linear
             // in the batch. 512 experts: a prompt shorter than ~118 tokens uses under 90% of a layer's experts, so
             // reading the next layer whole wastes reads (52 tokens: 54 GB read instead of 31, measured on the host).
+            // Lookahead reads in a pool beside the cache, two layers ahead (D029, Galaxy): 1.47 -> 1.68 tokens/s
+            // at 1 GiB, 1.92 at 1.75 GiB, identical tokens. The pool holds about 60 MiB within the reserve.
             stream = StreamProfile(layerExpertsMiB = 916, experts = 512, expertsUsed = 10, computeMiBPer512 = 540,
-                tuning = mapOf("prefill_prefetch_min_coverage" to 0.9)),
+                tuning = mapOf("prefill_prefetch_min_coverage" to 0.9, "speculative_pool" to true,
+                    "lookahead_layers" to 2, "lookahead2_count" to 5)),
             parts = listOf(
                 ArtifactPart("UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00001-of-00003.gguf", 10_946_624L),
                 ArtifactPart("UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00002-of-00003.gguf", 49_979_779_296L),

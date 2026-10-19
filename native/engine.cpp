@@ -711,6 +711,12 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         expert_options.prefetch = options.value("prefetch", false);
         expert_options.prefetch_extra = integer(options, "prefetch_extra", 0, 0, 32);
         expert_options.lookahead_gate = options.value("lookahead_gate", true);
+        expert_options.prefetch_count = integer(options, "prefetch_count", 0, 0, 64);
+        expert_options.decode_uses_prompt_allowance = options.value("decode_uses_prompt_allowance", true);
+        expert_options.bank_spin_us = integer(options, "bank_spin_us", 20000, 0, 1000000);
+        expert_options.speculative_pool = options.value("speculative_pool", false);
+        expert_options.lookahead_layers = integer(options, "lookahead_layers", 1, 1, 2);
+        expert_options.lookahead2_count = integer(options, "lookahead2_count", 5, 1, 64);
         expert_options.coalesce_kib = integer(options, "coalesce_kib", 0, 0, 65536);
         expert_options.coalesce_gap = integer(options, "coalesce_gap", 1, 0, 8);
         expert_options.prefill_prefetch_mib = integer(options, "prefill_prefetch_mib", 0, 0, 4096);
