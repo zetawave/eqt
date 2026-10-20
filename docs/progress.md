@@ -21,7 +21,13 @@
 - CLI access works through `adb shell run-as org.equity.app`. It can read `/data/local/tmp` but cannot execute from it, so binaries and libraries must be copied into `files/bench/` and executed there. Executables staged in `/data/local/tmp` need mode 755 so `run-as` can copy them.
 - `tools/runner.py` has this run-as mode since 2026-10-19: `--run-as org.equity.app` on the sweep, quality, sustained and trace tools, with app-relative model paths. It stages into `files/bench`, reads models under `files/models` and reads results back with `run-as cat`. The Flash-Next measurements of D029 ran through it.
 
-**Qwen3.8-Flash-Next (2026-10-19):** supported end to end and verified on the host. The owner reported an app result on the Galaxy: 1.8 tokens/s over 252 generated tokens, first token after 6.1 s (one screenshot, not a controlled benchmark). Controlled CLI runs on the Galaxy then took decoding from 1.47–1.58 to 1.92 tokens/s with identical tokens (D029): a speculative pool, a two-layer lookahead and a 1,792 MiB cache. Chat turns reuse the previous turn's state where the template allows it (D027).
+**Qwen3.8-Flash-Next (2026-10-19/20):** supported end to end and verified on the host. Controlled CLI decoding on the Galaxy, with identical tokens throughout:
+
+- 1.47–1.58 tokens/s at the start;
+- 1.92 with a speculative pool, a two-layer lookahead and a 1,792 MiB cache (D029);
+- 2.39–2.41 with demand-first read scheduling, against 2.12 for D029's configuration in the same session (D030).
+
+The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 tokens/s (224 tokens). Chat turns reuse the previous turn's state where the template allows it (D027).
 
 **Next performance goals, in order:**
 
@@ -31,7 +37,7 @@
    - why storage wait doubles in long runs (82 against about 31 ms per token).
 2. **Prefill:** i8mm microkernel register blocking (the kernels are about 42% of prefill cycles), DeltaNet and attention prefill kernels, 8k–32k context sweeps.
 3. **Cache policy:** eviction informed by router scores (the Belady gap is about 15 points). The speculative pool that never displaces cached experts is in place (D029).
-4. **Flash-Next CPU time per token:** about 350 ms of compute and synchronization per token at 1,792 MiB, twice the estimate. Targets: barriers, IQ2_XS/IQ4_NL expert kernels, then larger contiguous expert reads (D029).
+4. **Flash-Next prediction lead time:** the predictor takes about 6 ms of a ~8 ms layer on a small core, so next-layer reads start late. Faster or parallel prediction comes first, then larger contiguous expert reads (D030).
 5. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
 6. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
 
@@ -94,6 +100,24 @@
 - **n-gram row prefetch:** applies also to Equity's own mapping. Not measured separately.
 - **Catalog:** Flash-Next enables the pool and the two-layer lookahead.
 - **Correctness:** 46/46 fixture cases are bitwise equal with the new options.
+
+**Owner app observation after D029:** "Di che colore è il cielo?": 2.1 tokens/s over 224 tokens, first token after 6.4 s. This is a single observation.
+
+**D030 (2026-10-20, Galaxy CLI, 1,792 MiB, 64 tokens):**
+
+- **Read scheduling.** Demand reads come first. Queued predictions are promoted when routed, and unused ones are cancelled before any read. At most 3 speculative reads are in flight. Result: 2.12 → 2.39–2.41 tokens/s in the same session, p50 448 → 386–399 ms.
+- **Why.** Demand bank reads take 4.13 → 3.13 ms, compute threads wait 158 → 127 ms per token, and decode reads fall by 4.8 GB. Nine arms gave identical tokens.
+- **Plateau.** From 2 to 6 in flight, and with 2 extra candidates, results are within 2.38–2.41.
+- **Q8_0 router copy.** It left the predictor's 5.9 ms per layer unchanged on the phone and is not used. The predictor is the next lever.
+- **Vectorized gate.** `eqt-simd-test` passes on the Galaxy.
+- **Correctness.** 75/75 fixture cases are bitwise equal, and the real model on the host gives identical tokens and bitwise-equal logits. Records: `results/2026-10-20/galaxy/flash-next-d030-ab.json`, `results/2026-10-19/host/flash-next-d030-host-check.json`.
+- **Catalog.** Flash-Next adds `read_priority` and `prefetch_inflight: 3`. The installed debug build has it.
+
+**Model configuration in the app (D031):** import is per model, in each model's card in Models. Chats show the configuration button only while the loaded model has a verified package. Configuration values, answer length and creativity each have a slider and a typed field.
+
+Model-specific packages are stored in the app's private storage, using the same layout as an in-app import. The app verifies compatibility natively when the model loads.
+
+Not yet observed in the app: the new configuration screens and their effect on generated answers.
 
 **Not verified:** Flash-Next speed in the app with this build, sustained and thermal behaviour beyond 64 tokens, energy per token, the in-app download, and the quality of this quantization.
 

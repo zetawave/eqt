@@ -271,7 +271,7 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
         )
     }
     viewing?.let { ImageViewer(it) { viewing = null } }
-    if (configuring) ChatConfigurationDialog(engine, chats.steering) { configuring = false }
+    if (configuring && engine.steeringProfile != null) ChatConfigurationDialog(engine, chats.steering) { configuring = false }
 }
 
 @Composable
@@ -611,7 +611,8 @@ private fun Composer(
                             )
                         }
                     }
-                    IconButton(onClick = onConfigure) {
+                    // Steering is the only chat setting: offered only while the loaded model has an imported vector.
+                    if (engine.steeringProfile != null) IconButton(onClick = onConfigure) {
                         Icon(Icons.Outlined.Tune, contentDescription = "Chat configuration",
                             tint = if (steeringEnabled) colors.primary else colors.onSurfaceVariant)
                     }

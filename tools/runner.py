@@ -29,7 +29,9 @@ class Runner:
     def __init__(self, target, serial=None, cpu_variant=None, run_as=None):
         self.target, self.serial, self.cpu_variant = target, serial, cpu_variant
         # host: Windows MSVC build; linux: native Linux build (e.g. in a container); android: NDK build over ADB.
-        self.bin = ROOT / "build" / target / "bin" / ("Release" if target == "host" else "")
+        # EQT_HOST_BUILD selects another host build tree (e.g. while a long job runs from build/host).
+        build = Path(os.environ["EQT_HOST_BUILD"]) if target == "host" and os.environ.get("EQT_HOST_BUILD") else ROOT / "build" / target
+        self.bin = build / "bin" / ("Release" if target == "host" else "")
         self.local = target != "android"
         # Models in an app's private storage (files/models/<id>/) are readable only by that app's user. With
         # `run_as`, tools run as the app through `run-as`, which can read /data/local/tmp but not execute from it:

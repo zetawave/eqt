@@ -28,7 +28,13 @@ data class SteeringProfile(val metadata: String) {
         .put("path", vector(context).absolutePath).put("metadata", json).put("strength", strength.toDouble())
 }
 
-/** All access runs on EngineController's worker. Imported files are copied, verified, then published atomically. */
+/** What the Models screen shows for a model's imported vector; the vector is verified natively when the model loads. */
+data class SteeringSummary(val vectorHash: String, val layer: Int, val direction: String)
+
+/**
+ * Imports, reads and removals run on EngineController's worker. Imported files are copied, verified, then published
+ * atomically, so [summary] can read the published JSON from any thread for display.
+ */
 object SteeringFiles {
     private const val VECTOR_LIMIT = 8 * 1024 * 1024
     private const val METADATA_LIMIT = 1024 * 1024
@@ -56,7 +62,21 @@ object SteeringFiles {
         return profile
     }
 
-    fun importVector(context: Context, uris: List<Uri>, cancelled: () -> Boolean): SteeringProfile {
+    /** The imported vector associated with [modelHash], from its published metadata; null when there is none. */
+    fun summary(context: Context, modelHash: String): SteeringSummary? = runCatching {
+        val folder = modelDirectory(context, modelHash)
+        val index = File(folder, "current.json")
+        if (!index.exists() && !File(index.path + ".bak").exists()) return@runCatching null
+        val vectorHash = JSONObject(AtomicFile(index).openRead().bufferedReader().use { it.readText() }).getString("vector_sha256")
+        require(hashPattern.matches(vectorHash))
+        val manifest = File(File(folder, vectorHash), "metadata.json")
+        require(manifest.length() in 1..METADATA_LIMIT.toLong())
+        val json = JSONObject(manifest.readText())
+        SteeringSummary(vectorHash, json.getInt("layer_index"), json.optString("direction"))
+    }.getOrNull()
+
+    /** [expectedModelHash], when known, is the model the import was started from; a vector for another file is refused. */
+    fun importVector(context: Context, uris: List<Uri>, expectedModelHash: String?, cancelled: () -> Boolean): SteeringProfile {
         require(uris.size == 2 && uris.distinct().size == 2) { "Select the vector GGUF and its matching .gguf.json file together" }
         val staging = File(root(context), ".import-${UUID.randomUUID()}").apply { check(mkdir()) }
         try {
@@ -87,6 +107,9 @@ object SteeringFiles {
             val manifest = files.single { it != vector }
             require(manifest.length() in 1..METADATA_LIMIT.toLong()) { "Steering metadata exceeds 1 MiB" }
             val profile = SteeringProfile(NativeBridge.inspectSteering(vector.absolutePath.toByteArray(), manifest.readBytes()).decodeToString())
+            require(expectedModelHash == null || profile.modelHash == expectedModelHash) {
+                "This vector was made for a different model file"
+            }
             check(!cancelled()) { "Steering import cancelled" }
             check(vector.renameTo(File(staging, "vector.gguf"))) { "Cannot stage vector" }
             check(manifest.renameTo(File(staging, "metadata.json"))) { "Cannot stage metadata" }
@@ -117,8 +140,8 @@ object SteeringFiles {
         }
     }
 
-    fun remove(context: Context, profile: SteeringProfile) {
+    fun remove(context: Context, modelHash: String) {
         // Removing the association leaves the small verified package available for a later re-import.
-        AtomicFile(File(modelDirectory(context, profile.modelHash), "current.json")).delete()
+        AtomicFile(File(modelDirectory(context, modelHash), "current.json")).delete()
     }
 }

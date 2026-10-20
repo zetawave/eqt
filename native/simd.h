@@ -18,5 +18,8 @@ void quantize_blocks(const float *x, size_t n, int8_t *q, float *scales);
 // an FP16 scale and 32 int8 values) of width n, row r starting at rows + r * row_stride.
 void gemv_q8_0(const uint8_t *rows, size_t row_stride, const int8_t *q, const float *scales, float *scores,
                size_t row_count, size_t n);
+// out[i] = mean over s < streams of normed[s * width + i] * sigmoid(gate[s * width + i]); the NEON path
+// evaluates e^x with a polynomial (a few ulp), the scalar path with std::exp.
+void gated_mean(const float *normed, const float *gate, float *out, size_t width, size_t streams);
 const char *implementation();
 } // namespace eqt::simd

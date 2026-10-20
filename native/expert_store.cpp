@@ -614,8 +614,9 @@ ExpertStore::~ExpertStore() {
     {
         std::lock_guard lock(mutex_);
         stopping_ = true;
-        demand_queue_.clear();
-        prefetch_queue_.clear();
+        for (auto &queue : queues_) {
+            queue.clear();
+        }
     }
     queue_ready_.notify_all();
     for (auto &worker : workers_) {
@@ -871,6 +872,14 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
             const size_t widest = static_cast<size_t>(std::max<int64_t>(total, down->ne[1]));
             quant_.resize(std::max(quant_.size(), widest));
             quant_scales_.resize(std::max(quant_scales_.size(), widest / 32));
+        }
+        if (layer->router && options_.lookahead_router_q8 && layer->width % 32 == 0) {
+            const size_t row_bytes = ggml_row_size(GGML_TYPE_Q8_0, layer->width);
+            layer->router_q8.resize(row_bytes * static_cast<size_t>(layer->experts));
+            ggml_quantize_chunk(GGML_TYPE_Q8_0, layer->router, layer->router_q8.data(), 0, layer->experts, layer->width,
+                                nullptr);
+            quant_.resize(std::max<size_t>(quant_.size(), layer->width));
+            quant_scales_.resize(std::max<size_t>(quant_scales_.size(), layer->width / 32));
         }
     }
     if (options_.prefetch && predictable_layers_ == 0) {
@@ -1210,6 +1219,7 @@ bool ExpertStore::observe(ggml_tensor *tensor, bool ask, void *opaque) {
     if (!usable || !store.predictor_.joinable()) {
         if (usable) {
             store.predict(layer, static_cast<const float *>(residual->data), rows, width * sizeof(float));
+            store.predict_after(layer, static_cast<const float *>(residual->data), rows, width * sizeof(float));
         }
         return store.ensure(layer, tensor);
     }
@@ -1291,6 +1301,7 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
     ++clock_;
     stats_.demanded += demand_.size();
     missing_.clear();
+    bool queued_reads = false;
     for (const int expert : demand_) {
         auto &entry = layer.entries[expert];
         reap(layer, expert);
@@ -1298,23 +1309,38 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
             entry.pooled = false; // selected: an ordinary cache entry from now on
             --layer.pooled;
         }
+        entry.early = false;
         entry.stamp = clock_;
         if (entry.state == State::resident) {
             ++stats_.hits;
             stats_.prefetch_hits += entry.prefetched;
         } else if (entry.state == State::loading) {
             ++stats_.inflight_hits;
+            queued_reads = true;
         } else {
             ++stats_.misses;
             missing_.push_back(expert);
         }
         entry.prefetched = false;
     }
+    if (queued_reads && options_.read_priority) {
+        // Speculative reads this layer now waits for, and that no worker has started, are read next.
+        stats_.promoted_reads += move_queued(layer, queue_demand, nullptr);
+    }
     if (layer.pooled > 0) {
-        // Predictions this layer did not use; one still being read is dropped by a later call.
+        // Predictions this layer did not use; one still being read is dropped by a later call, and one not
+        // started yet is never read (read_priority).
         for (int e = 0; e < layer.experts && layer.pooled > 0; ++e) {
-            if (layer.entries[e].pooled && reap(layer, e) && layer.entries[e].state == State::resident) {
-                evict(layer, e);
+            auto &entry = layer.entries[e];
+            if (!entry.pooled) {
+                continue;
+            }
+            if (reap(layer, e)) {
+                if (entry.state == State::resident) {
+                    evict(layer, e);
+                }
+            } else if (options_.read_priority) {
+                cancel_unread(layer, e);
             }
         }
     }
@@ -1397,12 +1423,14 @@ void ExpertStore::predictor() {
             rows = predict_rows_;
         }
         const size_t width = rows ? predict_input_.size() / static_cast<size_t>(rows) : 0;
+        // The next layer's reads are queued before the layer after is scored: they are needed first.
         predict(layer, predict_input_.data(), rows, width * sizeof(float));
         if (prefetch_layer_ >= 0 && !cancelled_.load()) {
             if (auto *next = layer_at(prefetch_layer_)) {
                 issue_prefetch(*next);
             }
-            if (auto *after = layer_at(early_layer_)) {
+            predict_after(layer, predict_input_.data(), rows, width * sizeof(float));
+            if (auto *after = layer_at(early_layer_); after && !cancelled_.load()) {
                 issue_reads_ahead(*after, after->early_prediction, after->early_rank, options_.lookahead2_count, true);
             }
         }
@@ -1436,13 +1464,20 @@ void ExpertStore::predict(int layer_index, const float *rows, int64_t count_rows
     score(*next, rows, count_rows, row_bytes, options_.lookahead_gate, next->prediction, next->prediction_rank);
     next->prediction_valid = true;
     prefetch_layer_ = layer_index + 1;
+    stats_.predict_ms += since(start);
+}
+
+void ExpertStore::predict_after(int layer_index, const float *rows, int64_t count_rows, size_t row_bytes) {
     // Two layers ahead the same residual also skips layer l+1's FFN and layer l+2's attention.
-    auto *after = options_.lookahead_layers > 1 ? layer_at(layer_index + 2) : nullptr;
-    if (after && after->router && (after->norm || after->streams) && lookahead_width(*after) == lookahead_width(*next)) {
-        score(*after, rows, count_rows, row_bytes, false, after->early_prediction, after->early_rank);
-        after->early_valid = true;
-        early_layer_ = layer_index + 2;
+    auto *next = layer_at(layer_index + 1);
+    auto *after = options_.lookahead_layers > 1 && prefetch_layer_ == layer_index + 1 ? layer_at(layer_index + 2) : nullptr;
+    if (!after || !after->router || !(after->norm || after->streams) || lookahead_width(*after) != lookahead_width(*next)) {
+        return;
     }
+    const auto start = Clock::now();
+    score(*after, rows, count_rows, row_bytes, false, after->early_prediction, after->early_rank);
+    after->early_valid = true;
+    early_layer_ = layer_index + 2;
     stats_.predict_ms += since(start);
 }
 
@@ -1460,7 +1495,13 @@ void ExpertStore::score(Layer &target, const float *rows, int64_t count_rows, si
             const float scale = 1.0f / std::sqrt(simd::sum_squares(x, width) / width + norm_epsilon_);
             simd::scale_mul(x, target.norm, scale, scratch_.data(), width);
         }
-        simd::gemv_rows(target.router, scratch_.data(), scores_.data(), target.experts, width);
+        if (!target.router_q8.empty()) {
+            simd::quantize_blocks(scratch_.data(), width, quant_.data(), quant_scales_.data());
+            simd::gemv_q8_0(target.router_q8.data(), ggml_row_size(GGML_TYPE_Q8_0, target.width), quant_.data(),
+                            quant_scales_.data(), scores_.data(), target.experts, width);
+        } else {
+            simd::gemv_rows(target.router, scratch_.data(), scores_.data(), target.experts, width);
+        }
         for (int e = 0; e < target.experts; ++e) {
             order_[e] = e;
         }
@@ -1509,13 +1550,7 @@ void ExpertStore::mix(const Layer &layer, const float *x, float *out, bool use_g
         low[j] = v / (1.0f + std::exp(-v));
     }
     project(layer.mixer_up, low, gate);
-    for (size_t i = 0; i < width; ++i) {
-        float sum = 0;
-        for (size_t s = 0; s < streams; ++s) {
-            sum += normed[s * width + i] / (1.0f + std::exp(-gate[s * width + i]));
-        }
-        out[i] = sum * inverse;
-    }
+    simd::gated_mean(normed, gate, out, width, streams);
 }
 
 void ExpertStore::project(const ggml_tensor *weights, const float *x, float *out) {
@@ -1556,6 +1591,11 @@ void ExpertStore::issue_prefetch(Layer &layer) {
 
 void ExpertStore::issue_reads_ahead(Layer &layer, const std::vector<int> &prediction, const std::vector<uint8_t> &ranks,
                                     int limit, bool early) {
+    if (!early && options_.read_priority && options_.lookahead_layers > 1) {
+        // Reads the two-layer lookahead queued for experts this closer prediction also lists are needed sooner.
+        stats_.confirmed_reads += move_queued(layer, queue_next, &prediction);
+    }
+    const Queue queue = early && options_.read_priority ? queue_after : queue_next;
     for (size_t i = 0; i < prediction.size(); ++i) {
         if (limit > 0 && ranks[i] >= limit) {
             continue;
@@ -1563,6 +1603,9 @@ void ExpertStore::issue_reads_ahead(Layer &layer, const std::vector<int> &predic
         const int expert = prediction[i];
         reap(layer, expert);
         auto &entry = layer.entries[expert];
+        if (!early) {
+            entry.early = false;
+        }
         if (entry.state != State::absent) {
             continue; // Prediction never refreshes recency of resident entries.
         }
@@ -1579,8 +1622,9 @@ void ExpertStore::issue_reads_ahead(Layer &layer, const std::vector<int> &predic
             }
             evict(layer, victim);
         }
-        start_load(layer, expert, false);
+        start_load(layer, expert, queue);
         entry.prefetched = true;
+        entry.early = early;
         entry.stamp = 0; // Unused speculative entries are the first eviction candidates.
         ++stats_.prefetch_issued;
         stats_.decode_prefetch_issued += decode_phase_;
@@ -1588,9 +1632,79 @@ void ExpertStore::issue_reads_ahead(Layer &layer, const std::vector<int> &predic
     }
 }
 
-void ExpertStore::start_load(Layer &layer, int expert, bool demand) {
-    if (begin_load(layer, expert, demand)) {
-        queue_reads(layer, expert, 1, 1, demand);
+int ExpertStore::move_queued(Layer &layer, Queue to, const std::vector<int> *experts) {
+    const auto selected = [&](const Job &job) {
+        if (job.layer != &layer || job.count != 1) {
+            return false; // multi-expert runs are prompt reads, never reordered
+        }
+        return experts ? std::find(experts->begin(), experts->end(), job.first) != experts->end()
+                       : layer.seen[job.first] == epoch_;
+    };
+    int moved = 0;
+    {
+        std::lock_guard lock(mutex_);
+        for (int from = to + 1; from < queue_count; ++from) {
+            auto &queue = queues_[from];
+            for (auto it = queue.begin(); it != queue.end();) {
+                if (!selected(*it)) {
+                    ++it;
+                    continue;
+                }
+                queues_[to].push_back(*it);
+                if (to == queue_demand) {
+                    queues_[to].back().queued = Clock::now(); // demand latency counts from here
+                }
+                it = queue.erase(it);
+                ++moved;
+            }
+        }
+    }
+    if (moved && to == queue_demand) {
+        demand_signal_.fetch_add(1, std::memory_order_release);
+        demand_signal_.notify_all();
+    }
+    if (moved) {
+        queue_ready_.notify_all();
+    }
+    return moved;
+}
+
+bool ExpertStore::cancel_unread(Layer &layer, int expert) {
+    auto &entry = layer.entries[expert];
+    const int banks = static_cast<int>(layer.banks.size());
+    if (entry.state != State::loading) {
+        return false;
+    }
+    {
+        std::lock_guard lock(mutex_);
+        // Workers pop a job under this lock before reading it, so a job still queued has not started.
+        const auto mine = [&](const Job &job) { return job.layer == &layer && job.count == 1 && job.first == expert; };
+        int queued = 0;
+        for (int q = queue_next; q < queue_count; ++q) {
+            queued += static_cast<int>(std::count_if(queues_[q].begin(), queues_[q].end(), mine));
+        }
+        if (queued != banks || entry.pending.load() != banks) {
+            return false;
+        }
+        for (int q = queue_next; q < queue_count; ++q) {
+            queues_[q].erase(std::remove_if(queues_[q].begin(), queues_[q].end(), mine), queues_[q].end());
+        }
+    }
+    inflight_jobs_.fetch_sub(banks);
+    entry.pending.store(0);
+    for (const auto &bank : layer.banks) {
+        stats_.prefetch_read_bytes -= bank.stride; // as begin_load() counted it
+    }
+    ++stats_.cancelled_prefetches;
+    entry.prefetched = false; // not counted as a wasted read: none happened
+    evict(layer, expert);
+    job_done_.notify_all();
+    return true;
+}
+
+void ExpertStore::start_load(Layer &layer, int expert, Queue queue) {
+    if (begin_load(layer, expert, queue == queue_demand)) {
+        queue_reads(layer, expert, 1, 1, queue);
     }
 }
 
@@ -1627,7 +1741,7 @@ bool ExpertStore::begin_load(Layer &layer, int expert, bool demand) {
     return true;
 }
 
-void ExpertStore::queue_reads(Layer &layer, int first, int count, uint64_t members, bool demand) {
+void ExpertStore::queue_reads(Layer &layer, int first, int count, uint64_t members, Queue queue) {
     const int banks = static_cast<int>(layer.banks.size());
     stats_.read_jobs += banks;
     stats_.coalesced_reads += count > 1 ? banks : 0;
@@ -1635,10 +1749,10 @@ void ExpertStore::queue_reads(Layer &layer, int first, int count, uint64_t membe
     {
         std::lock_guard lock(mutex_);
         for (int bank = 0; bank < banks; ++bank) {
-            (demand ? demand_queue_ : prefetch_queue_).push_back({&layer, bank, first, count, members, Clock::now()});
+            queues_[queue].push_back({&layer, bank, first, count, members, Clock::now()});
         }
     }
-    if (demand) {
+    if (queue == queue_demand) {
         demand_signal_.fetch_add(1, std::memory_order_release);
     }
     queue_ready_.notify_all();
@@ -1698,7 +1812,7 @@ void ExpertStore::load_runs(Layer &layer, std::vector<int> &experts, bool demand
             count = span;
             ++i;
         }
-        queue_reads(layer, first, count, members, demand);
+        queue_reads(layer, first, count, members, demand ? queue_demand : queue_next);
     }
 }
 
@@ -1747,6 +1861,7 @@ void ExpertStore::evict(Layer &layer, int expert) {
     stats_.evictions += !entry.failed.load();
     entry.state = State::absent;
     entry.prefetched = false;
+    entry.early = false;
     if (entry.pooled) {
         entry.pooled = false;
         --layer.pooled;
@@ -1828,25 +1943,34 @@ void ExpertStore::worker(bool demand_only, bool awake) {
             if (stopping_) {
                 return;
             }
-            if (demand_queue_.empty()) {
+            if (queues_[queue_demand].empty()) {
                 continue;
             }
-            job = demand_queue_.front();
-            demand_queue_.pop_front();
+            job = queues_[queue_demand].front();
+            queues_[queue_demand].pop_front();
             demand = taken = true;
         }
         if (!taken) {
             std::unique_lock lock(mutex_);
-            queue_ready_.wait(lock, [this, demand_only] {
-                return stopping_ || !demand_queue_.empty() || (!demand_only && !prefetch_queue_.empty());
+            // The cap applies while decoding; a prompt's whole-layer reads keep the device's full queue depth.
+            const auto speculative = [this] {
+                return (!queues_[queue_next].empty() || !queues_[queue_after].empty()) &&
+                       (options_.prefetch_inflight == 0 || !awake_decode_.load(std::memory_order_relaxed) ||
+                        speculative_inflight_ < options_.prefetch_inflight);
+            };
+            queue_ready_.wait(lock, [&] {
+                return stopping_ || !queues_[queue_demand].empty() || (!demand_only && speculative());
             });
             if (stopping_) {
                 return;
             }
-            demand = !demand_queue_.empty();
-            auto &queue = demand ? demand_queue_ : prefetch_queue_;
-            job = queue.front();
-            queue.pop_front();
+            const int from = !queues_[queue_demand].empty() ? queue_demand
+                             : !queues_[queue_next].empty() ? queue_next
+                                                            : queue_after;
+            demand = from == queue_demand;
+            job = queues_[from].front();
+            queues_[from].pop_front();
+            speculative_inflight_ += !demand;
         }
         const auto read_start = Clock::now();
         {
@@ -1894,7 +2018,16 @@ void ExpertStore::worker(bool demand_only, bool awake) {
                 stats_.demand_read_ms += since(read_start);
                 stats_.demand_queue_ms += std::chrono::duration<double, std::milli>(read_start - job.queued).count();
                 ++stats_.demand_jobs;
+                if (decoding) {
+                    ++stats_.decode_demand_jobs;
+                    stats_.decode_demand_job_ms += since(job.queued);
+                }
+            } else {
+                --speculative_inflight_;
             }
+        }
+        if (!demand && options_.prefetch_inflight > 0) {
+            queue_ready_.notify_all(); // a capped speculative read may start now (demand-only workers ignore it)
         }
         job_done_.notify_all();
     }
@@ -1947,6 +2080,9 @@ Json ExpertStore::configuration() const {
         {"speculative_pool", options_.speculative_pool},
         {"lookahead_layers", options_.lookahead_layers},
         {"lookahead2_count", options_.lookahead2_count},
+        {"read_priority", options_.read_priority},
+        {"prefetch_inflight", options_.prefetch_inflight},
+        {"lookahead_router_q8", options_.lookahead_router_q8},
         {"demand_io_threads", std::min(options_.demand_threads, options_.io_threads - 1)},
         {"awake_demand_io_threads", little_cpus_.size() >= 2 ? std::min(options_.awake_demand_threads, std::min(options_.demand_threads, options_.io_threads - 1)) : 0},
         {"coalesce_kib", options_.coalesce_kib},
@@ -1997,6 +2133,11 @@ Json ExpertStore::statistics() const {
             {"decode_io_bytes", stats_.decode_io_bytes},
             {"decode_io_busy_ms", stats_.decode_io_busy_ms},
             {"decode_budget_bytes", decode_budget_},
+            {"decode_demand_jobs", stats_.decode_demand_jobs},
+            {"decode_demand_job_ms", stats_.decode_demand_job_ms},
+            {"promoted_reads", stats_.promoted_reads},
+            {"confirmed_reads", stats_.confirmed_reads},
+            {"cancelled_prefetches", stats_.cancelled_prefetches},
             {"evict_ms", stats_.evict_ms},
             {"slot_cold_reuses", stats_.slot_cold_reuses},
             {"slot_arena_committed_bytes", arena_used_},

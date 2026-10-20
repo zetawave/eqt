@@ -25,7 +25,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,29 +46,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.equity.app.BuildConfigInfo
 import org.equity.app.EngineState
-import org.equity.app.EngineController
-import org.equity.app.ChatStore
-import org.equity.app.Phase
 import org.equity.app.SettingsStore
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val Lengths = listOf(128, 256, 512, 1024, 2048)
+private const val MIN_ANSWER_TOKENS = 128
+private const val MAX_ANSWER_TOKENS = 2048
+private const val MAX_TEMPERATURE = 1.2f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(engine: EngineState) {
     val context = LocalContext.current
     val settings by SettingsStore.state.collectAsStateWithLifecycle()
-    val chats by ChatStore.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var licenses by remember { mutableStateOf<List<String>?>(null) }
     var licenseText by remember { mutableStateOf<Pair<String, String>?>(null) }
     var exported by remember { mutableStateOf<String?>(null) }
-    val steeringImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) EngineController.importSteering(context, uris)
-    }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         val text = engine.lastResult
         if (uri != null && text != null) scope.launch {
@@ -96,45 +90,25 @@ fun SettingsScreen(engine: EngineState) {
                 textStyle = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.fillMaxWidth(),
             )
-            val lengthIndex = Lengths.indexOf(settings.maxTokens).coerceAtLeast(0)
-            Labeled("Maximum answer length", "${settings.maxTokens} tokens")
-            Slider(
-                value = lengthIndex.toFloat(),
-                onValueChange = { index -> SettingsStore.update(context) { it.copy(maxTokens = Lengths[index.roundToInt()]) } },
-                valueRange = 0f..(Lengths.size - 1).toFloat(),
-                steps = Lengths.size - 2,
+            SliderField(
+                label = "Maximum answer length",
+                value = settings.maxTokens.toFloat(),
+                onValueChange = { value -> SettingsStore.update(context) { it.copy(maxTokens = value.roundToInt()) } },
+                range = MIN_ANSWER_TOKENS.toFloat()..MAX_ANSWER_TOKENS.toFloat(),
+                step = 128f,
+                format = { it.roundToInt().toString() },
+                integer = true,
+                hint = "Tokens, $MIN_ANSWER_TOKENS to $MAX_ANSWER_TOKENS. Thinking uses part of them.",
             )
-            Labeled("Creativity", if (settings.temperature == 0f) "0.0 · most predictable" else "%.1f".format(Locale.US, settings.temperature))
-            Slider(
+            SliderField(
+                label = "Creativity",
                 value = settings.temperature,
-                onValueChange = { value -> SettingsStore.update(context) { it.copy(temperature = (value * 10).roundToInt() / 10f) } },
-                valueRange = 0f..1.2f,
-                steps = 11,
+                onValueChange = { value -> SettingsStore.update(context) { it.copy(temperature = value) } },
+                range = 0f..MAX_TEMPERATURE,
+                step = 0.1f,
+                format = { formatDecimal(it, 2) },
+                hint = if (settings.temperature == 0f) "0 · most predictable" else "Higher values vary answers more.",
             )
-        }
-
-        Section("Directional steering", "A separate vector for the exact model; enabled per chat.") {
-            SteeringControls(engine, chats.steering)
-            Text(engine.steeringNote ?: if (engine.steeringProfile != null) "Compatible vector imported for the loaded model."
-                else "Load a model to see its compatible vector.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(enabled = !engine.busy, onClick = { steeringImporter.launch(arrayOf("*/*")) }) {
-                Text("Import vector + JSON")
-            }
-            Text("Select the generated vector .gguf and its matching .gguf.json together. Model weights and datasets are not needed.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            engine.steeringImportMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            if (engine.steeringOperation) {
-                Text(engine.status, style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = { EngineController.stop() }) { Text("Cancel") }
-            }
-            if (engine.phase == Phase.Ready && engine.modelSha256 == null) {
-                OutlinedButton(onClick = { EngineController.verifySteeringModel(context) }) { Text("Verify local model") }
-                Text("Reads and reloads the local model once to check its exact fingerprint.", style = MaterialTheme.typography.bodySmall)
-            }
-            if (engine.steeringProfile != null) {
-                TextButton(enabled = !engine.busy, onClick = { EngineController.removeSteering(context) }) { Text("Remove vector") }
-            }
         }
 
         Section("Performance", "Applies the next time a model is loaded.") {

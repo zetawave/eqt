@@ -50,6 +50,16 @@ struct ExpertOptions {
     // earlier; the next layer's own prediction then adds the rest.
     int lookahead_layers = 1;
     int lookahead2_count = 5;
+    // Reads are served demand first, then the next layer's predictions, then the layer after's. A queued
+    // speculative read moves to the demand queue when its layer routes to the expert, and is dropped unread when
+    // its layer has run without it; reads of the layer after that the next prediction confirms move up a queue.
+    bool read_priority = false;
+    // While decoding, at most this many speculative reads in flight (0: no limit), so a demanded read queues
+    // behind fewer of them inside the storage device.
+    int prefetch_inflight = 0;
+    // The lookahead scores routers from a Q8_0 copy instead of the F32 tensor: about a quarter of the bytes for
+    // the predictor thread, which usually runs on a small core. Only speculative reads depend on it.
+    bool lookahead_router_q8 = false;
     // Hyper-connection lookahead: apply the mixer's low-rank gate (two Q8_0 GEMVs per layer) or average the normed
     // streams without it, which costs only the router product.
     bool lookahead_gate = true;
@@ -133,6 +143,7 @@ class ExpertStore {
         State state = State::absent;
         bool prefetched = false;
         bool pooled = false; // a lookahead read held beside the quota (speculative_pool)
+        bool early = false;  // issued from the two-layer lookahead, not yet confirmed by the next layer's
         uint8_t *slot = nullptr; // slot mode: page-aligned base of this expert's banks
         uint64_t stamp = 0;
         std::atomic<int> pending{0};
@@ -153,6 +164,7 @@ class ExpertStore {
         std::unique_ptr<Entry[]> entries;
         std::vector<uint32_t> seen;
         const float *router = nullptr; // [experts][width], F32
+        std::vector<uint8_t> router_q8; // lookahead_router_q8: the router in GGML Q8_0 blocks, one row per expert
         const float *norm = nullptr;   // [width], F32
         int width = 0;
         int router_rows = 0;
@@ -194,8 +206,12 @@ class ExpertStore {
         uint64_t rank_predicted[16] = {}, rank_correct[16] = {};
         uint64_t early_rank_predicted[16] = {}, early_rank_correct[16] = {}, early_prefetch_issued = 0;
         double demand_queue_ms = 0, demand_read_ms = 0;
+        uint64_t decode_demand_jobs = 0, promoted_reads = 0, confirmed_reads = 0, cancelled_prefetches = 0;
+        double decode_demand_job_ms = 0; // decoding: from demand (or promotion) to the bank's bytes in place
         uint64_t peak_resident_bytes = 0;
     };
+    // Read queues in service order (read_priority); without it speculative reads all use queue_next.
+    enum Queue { queue_demand, queue_next, queue_after, queue_count };
 
     // Slots of one size; warm ones keep their pages, cold ones were released and fault once when reused.
     struct SlotClass {
@@ -219,7 +235,10 @@ class ExpertStore {
     void read_slots(const Job &job) const;
     void setup_slots();
     bool ensure(int layer_index, const ggml_tensor *ids);
+    // Predicts layer_index + 1 (predict) and, with lookahead_layers 2, layer_index + 2 (predict_after) from the
+    // same rows; the predictor thread queues the first prediction's reads before computing the second.
     void predict(int layer_index, const float *rows, int64_t count, size_t row_bytes);
+    void predict_after(int layer_index, const float *rows, int64_t count, size_t row_bytes);
     // Scores `target`'s router on the lookahead rows; candidates in rank order, deduplicated over rows.
     void score(Layer &target, const float *rows, int64_t count_rows, size_t row_bytes, bool gate,
                std::vector<int> &prediction, std::vector<uint8_t> &ranks);
@@ -239,9 +258,15 @@ class ExpertStore {
     void predictor();
     void wait_predictor();
     void issue_prefetch(Layer &layer);
-    void start_load(Layer &layer, int expert, bool demand);
+    void start_load(Layer &layer, int expert, Queue queue);
     bool begin_load(Layer &layer, int expert, bool demand);
-    void queue_reads(Layer &layer, int first, int count, uint64_t members, bool demand);
+    void queue_reads(Layer &layer, int first, int count, uint64_t members, Queue queue);
+    // read_priority: moves the queued single-expert reads of `layer` that `layer.seen` marks for this epoch (or,
+    // for the layer after, that its new prediction lists) from the speculative queues to `to`; returns the count.
+    int move_queued(Layer &layer, Queue to, const std::vector<int> *experts);
+    // Drops a speculative read of `expert` that no worker has started (all bank jobs still queued) and releases
+    // the entry; a read with a bank started is left to complete.
+    bool cancel_unread(Layer &layer, int expert);
     void load_runs(Layer &layer, std::vector<int> &experts, bool demand, int max_gap);
     void prefetch_whole_layer(Layer &layer);
     bool reap(Layer &layer, int expert);
@@ -270,7 +295,8 @@ private:
 #endif
     std::vector<std::unique_ptr<Layer>> layers_;
     std::vector<std::thread> workers_;
-    std::deque<Job> demand_queue_, prefetch_queue_;
+    std::deque<Job> queues_[queue_count]; // guarded by mutex_
+    int speculative_inflight_ = 0;        // guarded by mutex_
     mutable std::mutex mutex_;
     std::condition_variable queue_ready_, job_done_;
     std::thread predictor_;

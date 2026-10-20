@@ -51,6 +51,14 @@ CASES = [
     dict(name="lookahead_two_layers_pool", batch=128,
          load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, lookahead_layers=2,
                    lookahead2_count=3)),
+    # One speculative read in flight leaves most of them queued: promoted, confirmed and cancelled reads.
+    dict(name="read_priority_capped_two_layers", batch=128,
+         load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, lookahead_layers=2,
+                   lookahead2_count=3, prefetch_extra=2, read_priority=True, prefetch_inflight=1,
+                   lookahead_router_q8=True)),
+    dict(name="read_priority_chunk16_no_pool", batch=16,
+         load=dict(expert_cache_mib=1, io_threads=2, prefetch=True, read_priority=True, prefetch_inflight=2,
+                   coalesce_kib=512, prefill_prefetch_mib=8)),
     dict(name="nonuniform_layer_weights", batch=128,
          load=dict(expert_cache_mib=2, io_threads=2, expert_layer_weights=[4, 1, 1, 1, 1, 1, 1, 4])),
 ]

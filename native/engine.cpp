@@ -684,11 +684,17 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
             throw std::runtime_error("Cannot parse GGUF metadata");
         }
         const std::regex routed(routed_bank_pattern);
-        uint64_t routed_bytes = 0;
+        uint64_t routed_bytes = 0, router_q8_bytes = 0;
         const bool map_embeddings = options.value("map_embeddings", true);
         for (int64_t i = 0; i < gguf_get_n_tensors(state->meta.get()); ++i) {
             const char *name = gguf_get_tensor_name(state->meta.get(), i);
             const uint64_t offset = gguf_get_data_offset(state->meta.get()) + gguf_get_tensor_offset(state->meta.get(), i);
+            const size_t length = std::strlen(name), suffix = std::strlen(".ffn_gate_inp.weight");
+            if (length > suffix && std::strcmp(name + length - suffix, ".ffn_gate_inp.weight") == 0 &&
+                gguf_get_tensor_type(state->meta.get(), i) == GGML_TYPE_F32) {
+                const ggml_tensor *router = ggml_get_tensor(state->shapes.get(), name);
+                router_q8_bytes += router && router->ne[0] % 32 == 0 ? ggml_row_size(GGML_TYPE_Q8_0, router->ne[0]) * router->ne[1] : 0;
+            }
             if (std::regex_search(name, routed)) {
                 routed_bytes += gguf_get_tensor_size(state->meta.get(), i);
                 routed_offsets[name] = offset;
@@ -717,6 +723,9 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         expert_options.speculative_pool = options.value("speculative_pool", false);
         expert_options.lookahead_layers = integer(options, "lookahead_layers", 1, 1, 2);
         expert_options.lookahead2_count = integer(options, "lookahead2_count", 5, 1, 64);
+        expert_options.read_priority = options.value("read_priority", false);
+        expert_options.prefetch_inflight = integer(options, "prefetch_inflight", 0, 0, 16);
+        expert_options.lookahead_router_q8 = options.value("lookahead_router_q8", false);
         expert_options.coalesce_kib = integer(options, "coalesce_kib", 0, 0, 65536);
         expert_options.coalesce_gap = integer(options, "coalesce_gap", 1, 0, 8);
         expert_options.prefill_prefetch_mib = integer(options, "prefill_prefetch_mib", 0, 0, 4096);
@@ -733,6 +742,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         }
         resident_bytes = size - routed_bytes - mapped_bytes + expert_options.budget_bytes +
                          (static_cast<uint64_t>(expert_options.prefill_prefetch_mib) << 20);
+        // The lookahead's Q8_0 router copies stay resident beside the F32 routers the graph uses.
+        resident_bytes += expert_options.prefetch && expert_options.lookahead_router_q8 ? router_q8_bytes : 0;
     } else if (options.contains("expert_cache_mib") || options.value("prefetch", false)) {
         throw std::invalid_argument("Expert cache options require expert_streaming=true");
     }

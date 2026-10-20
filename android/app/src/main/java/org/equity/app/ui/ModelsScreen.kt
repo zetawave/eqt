@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.SdStorage
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material3.AlertDialog
@@ -67,7 +68,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.work.WorkInfo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import org.equity.app.Artifact
 import org.equity.app.Catalog
 import org.equity.app.CatalogModel
@@ -76,6 +79,8 @@ import org.equity.app.EngineController
 import org.equity.app.EngineState
 import org.equity.app.ModelFiles
 import org.equity.app.Phase
+import org.equity.app.SteeringFiles
+import org.equity.app.SteeringSummary
 import org.equity.app.formatBytes
 
 @Composable
@@ -101,6 +106,11 @@ fun ModelsScreen(engine: EngineState, onOpenChat: () -> Unit) {
         }
         item { DeviceCard() }
         items(Catalog.models, key = { it.id }) { model -> ModelCard(model, engine, onOpenChat) }
+        // A local file is loaded (catalog models have their own card); a steering operation keeps it shown.
+        if (engine.modelId == null && engine.modelName != null &&
+            (engine.phase == Phase.Ready || engine.phase == Phase.Generating || engine.steeringOperation)) {
+            item { LocalModelCard(engine) }
+        }
         item {
             val enabled = engine.phase == Phase.Empty || engine.phase == Phase.Ready
             Card(
@@ -346,6 +356,7 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                 }
             }
             model.projector?.let { ProjectorSection(model, it, engine) }
+            if (installed) SteeringSection(model.sha256, engine, loaded)
         }
     }
 
@@ -362,6 +373,113 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                 }) { Text("Delete", color = colors.error) }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Keep") } },
+            containerColor = colors.surfaceContainerHigh,
+        )
+    }
+}
+
+/** A GGUF opened from the phone's files: shown while loaded, for its steering vector. */
+@Composable
+private fun LocalModelCard(engine: EngineState) {
+    val colors = MaterialTheme.colorScheme
+    Card(
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainer),
+        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(24.dp),
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(engine.modelName ?: "Local model", style = MaterialTheme.typography.titleMedium)
+                    Text("Opened from this phone's files", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                }
+                Pill("Active", colors.primaryContainer, colors.onPrimaryContainer)
+            }
+            SteeringSection(engine.modelSha256, engine, loaded = true)
+        }
+    }
+}
+
+/**
+ * The directional steering vector of one exact model file (by fingerprint): imported here and offered in that
+ * model's chats while it is loaded.
+ */
+@Composable
+private fun SteeringSection(modelHash: String?, engine: EngineState, loaded: Boolean) {
+    val context = LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    val summary by produceState<SteeringSummary?>(null, modelHash, engine.steeringRevision) {
+        value = modelHash?.let { hash -> withContext(Dispatchers.IO) { SteeringFiles.summary(context, hash) } }
+    }
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) EngineController.importSteering(context, uris, modelHash)
+    }
+    var confirmRemove by remember { mutableStateOf(false) }
+    val current = summary
+    Spacer(Modifier.height(18.dp))
+    HorizontalDivider(color = colors.outlineVariant)
+    Spacer(Modifier.height(14.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Directional steering", style = MaterialTheme.typography.titleSmall)
+            Text(
+                when {
+                    modelHash == null -> "Verify this file's fingerprint to import a vector for it."
+                    current == null -> "Import a vector made for this exact file to steer its answers. Chats offer it while the model is loaded."
+                    loaded && engine.steeringProfile == null && engine.steeringNote != null -> engine.steeringNote
+                    else -> "Vector imported · layer ${current.layer}" +
+                        (current.direction.takeIf { it.isNotEmpty() }?.let { " · ${it.replace("_minus_", " − ").replace('_', ' ')}" } ?: "") +
+                        if (loaded) ". Turn it on per chat with the configuration button." else ". Available in chats once this model is loaded."
+                },
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+            )
+        }
+    }
+    if (engine.steeringMessageModel == modelHash) engine.steeringImportMessage?.let {
+        Spacer(Modifier.height(6.dp))
+        Text(it, style = MaterialTheme.typography.bodySmall, color = colors.primary)
+    }
+    Spacer(Modifier.height(10.dp))
+    when {
+        engine.steeringOperation && engine.steeringMessageModel == modelHash -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(engine.status, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
+            TextButton(onClick = { EngineController.stop() }) { Text("Cancel") }
+        }
+        modelHash == null -> Column {
+            OutlinedButton(onClick = { EngineController.verifySteeringModel(context) }, enabled = engine.phase == Phase.Ready) {
+                Text("Verify local model")
+            }
+            Text("Reads and reloads the model once to check its exact fingerprint.",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        }
+        else -> Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }, enabled = !engine.busy) {
+                    Text(if (current == null) "Import vector + JSON" else "Replace vector")
+                }
+                if (current != null) {
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { confirmRemove = true }, enabled = !engine.busy) { Text("Remove") }
+                }
+            }
+            Text("Select the vector .gguf and its matching .gguf.json together.",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        }
+    }
+    if (confirmRemove && modelHash != null) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Remove the steering vector?") },
+            text = { Text("Chats of this model stop offering steering. The vector can be imported again later.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = false
+                    EngineController.removeSteering(context, modelHash)
+                }) { Text("Remove", color = colors.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Keep") } },
             containerColor = colors.surfaceContainerHigh,
         )
     }

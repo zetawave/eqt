@@ -476,3 +476,57 @@ Not verified:
 - sustained and thermal behavior beyond 64 tokens (thermal status rose from 0–1 to 1–2 within each run);
 - energy per token;
 - quality of the quantization.
+
+## D030: Flash-Next read scheduling: demand first, few speculative reads in flight — 2026-10-20
+
+**Where decoding waited** (D029, 1,792 MiB):
+
+- Compute threads waited about 5.4 ms on every layer with a missing expert. A demanded read queued in the storage device behind up to 12 speculative reads.
+- GGML barrier time was mostly the other threads waiting for that one.
+- The predictor took about 6 ms per layer of the ~11 available.
+
+**Changes.** All are exact: routing never depends on them.
+
+- **Read priority** (`read_priority`). Reads are served from three queues: demand, then the next layer's predictions, then the two-layer lookahead's.
+  - A queued speculative read moves to the demand queue when its layer routes to the expert (promoted).
+  - A lookahead read that the next layer's own prediction also lists moves up a queue (confirmed).
+  - A pooled read no worker has started is dropped when its layer has run without it (cancelled). Only reads with every bank still queued are dropped, so no compute thread can wait on a missing bank.
+- **Speculative reads in flight** (`prefetch_inflight`). While decoding, at most N speculative reads are in the device at once. Prompt reads are not capped.
+- **Predictor.** The next layer's reads are queued before the two-layer score is computed, and the mixer gate's sigmoid uses a NEON polynomial exponential. `eqt-simd-test` on the Galaxy passes against double precision.
+- **Q8_0 router copy** (`lookahead_router_q8`, kept off). It lowers predictor bytes by 44%, but the predictor's time per layer on the Galaxy did not change (5.94 against 5.97 ms). The predictor is not limited by router bytes, so the 67 MB copy is not used.
+- **Cache policy, offline.** On the real decode traces at 1,792 MiB, segmented LRU adds at most 1.3 hit points and a cache shared across layers loses 3, so neither is pursued.
+
+**Galaxy, same session.** One repetition per arm, 64 tokens; all nine arms generated the same tokens. Records: `results/2026-10-20/galaxy/flash-next-d030-ab.json`.
+
+| Arm (1,792 MiB, pool, two-layer lookahead) | Tokens/s | p50 ms | Demand bank read, ms | Compute wait per token, ms | Decode reads |
+|---|---|---|---|---|---|
+| reference (D029) | 2.12 | 448 | 4.13 | 158 | 37.1 GB |
+| + Q8_0 router | 2.08 | 474 | 4.06 | 155 | 36.9 GB |
+| + read priority | 2.21 | 429 | 4.12 | 155 | 36.1 GB |
+| + at most 6 in flight | 2.31 | 394 | 3.44 | 132 | 34.4 GB |
+| + at most 3 in flight | 2.41 | 386 | 3.13 | 127 | 32.3 GB |
+| read priority, 3 in flight, F32 router | 2.39 | 399 | | | |
+| same, 2 in flight | 2.38 | 400 | | | |
+| same, 3 in flight + 2 extra candidates | 2.40 | 399 | | | |
+
+**Why it helps.** With 3 reads in flight, demanded reads finish a quarter sooner. Decode reads fall by 4.8 GB, mostly because 2,760 unused predictions are cancelled before any read, and the storage stays busy 78% of decode time. Cache hits do not change (54%). From 2 to 6 in flight, and with extra candidates, the gain levels off at 2.38–2.41 tokens/s.
+
+**Correctness:**
+
+- all 75 fixture cases are bitwise equal, including the capped and uncapped read-priority cases with promotion, confirmation and cancellation;
+- on the real model on the host, the reference, Q8_0-router and all-options arms give identical tokens and bitwise-equal first-token logits (`results/2026-10-19/host/flash-next-d030-host-check.json`);
+- with the Q8_0 router, 77.14% of predicted experts are routed, against 77.22% with F32.
+
+**Catalog.** Flash-Next adds `read_priority` and `prefetch_inflight: 3`.
+
+**Next lever.** The predictor still takes about 6 ms of a ~8 ms layer on its small core, so the next layer's reads start late. Faster prediction, or splitting it across cores, would leave more time for those reads.
+
+**Not verified:** speed in the app with this build, sustained and thermal behavior beyond 64 tokens, energy per token.
+
+## D031: Model-specific configuration import — 2026-10-20
+
+- Each model's card in Models offers Import, Replace and Remove for its configuration package. Association uses the exact model-file fingerprint; incompatible packages are rejected.
+- A local GGUF opened from the phone's files gets its own card while loaded. Verifying its fingerprint enables import.
+- Chats show the configuration button only while the loaded model has a verified package. Incompatible settings are disabled when another model is loaded, and answer details record the effective configuration.
+- Configuration values, maximum answer length and creativity can be set with sliders or typed fields.
+

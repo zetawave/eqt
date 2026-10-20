@@ -117,6 +117,22 @@ Decode-speed options (D029), all exact:
 - `prefetch_count` (default 0, all): reads ahead only the first N predicted ranks per row.
 - `bank_spin_us` (default 20000): spin time before a compute thread sleeps on a pending bank.
 
+Read scheduling and predictor options (D030), all exact; routing never depends on them:
+
+- `read_priority` (default false): three read queues served in order, demand → next layer → layer after. Rules:
+  - a queued speculative read moves to the demand queue when its layer routes to the expert;
+  - a read for the layer after moves up a queue when the next layer's own prediction lists it;
+  - a pooled read no worker has started is dropped when its layer has run without it.
+- `prefetch_inflight` (0–16, default 0 = no limit): while decoding, at most this many speculative reads in flight, so demanded reads queue behind fewer of them in the device. Prompts are not capped.
+- `lookahead_router_q8` (default false): the lookahead scores routers from a Q8_0 copy (1.39 MB instead of 5.24 MB per Flash-Next layer). The copies count toward admission (67 MB for Flash-Next). On the Galaxy it left the predictor's time unchanged (D030), so the catalog does not use it.
+
+Whatever the options, the predictor queues the next layer's reads before it scores the layer after. The hyper-connection gate's sigmoid uses a vectorized exponential on NEON (`eqt-simd-test` checks it against double precision).
+
+New `expert_cache` fields:
+
+- `decode_demand_jobs` and `decode_demand_job_ms`: bank reads demanded while decoding, timed from demand (or promotion) to completion;
+- `promoted_reads`, `confirmed_reads` and `cancelled_prefetches`.
+
 New `expert_cache` fields:
 
 - `predicted_by_rank` / `predicted_correct_by_rank`, and the `early_` variants for the l+2 prediction, by rank 0–15;

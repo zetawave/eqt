@@ -123,6 +123,32 @@ int main() {
             }
         }
     }
+    // Gated stream mean (hyper-connection mixer lookahead), against double precision, gates over the range the
+    // polynomial exponent covers and beyond its clamp.
+    for (size_t width : {3u, 4u, 2560u}) {
+        const size_t streams = 4;
+        std::vector<float> normed(streams * width), gate(streams * width), out(width);
+        std::uniform_real_distribution<float> wide(-100.0f, 100.0f);
+        for (size_t i = 0; i < normed.size(); ++i) {
+            normed[i] = normal(random);
+            gate[i] = i % 3 == 0 ? wide(random) : 4.0f * normal(random);
+        }
+        eqt::simd::gated_mean(normed.data(), gate.data(), out.data(), width, streams);
+        for (size_t i = 0; i < width; ++i) {
+            double expected = 0, magnitude = 0;
+            for (size_t s = 0; s < streams; ++s) {
+                const double term = normed[s * width + i] / (1.0 + std::exp(-static_cast<double>(gate[s * width + i])));
+                expected += term;
+                magnitude += std::abs(term);
+            }
+            expected /= streams;
+            if (std::abs(expected - out[i]) > 2e-6 * magnitude + 1e-7) {
+                std::printf("gated_mean mismatch width=%zu i=%zu\n", width, i);
+                ++failures;
+                break;
+            }
+        }
+    }
     // Router-shaped timing (256 experts x 2048 width); informative only, not a device benchmark.
     std::vector<float> router(256 * 2048), hidden(2048), scores(256);
     for (auto &v : router) {

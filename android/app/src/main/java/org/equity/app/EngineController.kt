@@ -98,6 +98,10 @@ data class EngineState(
     val steeringProfile: SteeringProfile? = null,
     val steeringNote: String? = null,
     val steeringImportMessage: String? = null,
+    /** The model fingerprint [steeringImportMessage] refers to, so its card shows it. */
+    val steeringMessageModel: String? = null,
+    /** Incremented after every import or removal, so per-model summaries are read again. */
+    val steeringRevision: Int = 0,
     val steeringOperation: Boolean = false,
 ) {
     val busy get() = steeringOperation || phase == Phase.Loading || phase == Phase.Generating || phase == Phase.Unloading
@@ -183,37 +187,41 @@ object EngineController {
         }
     }
 
-    fun importSteering(context: Context, uris: List<Uri>) {
+    /** Imports a vector for the model whose fingerprint is [modelHash] (null: whichever model the files name). */
+    fun importSteering(context: Context, uris: List<Uri>, modelHash: String? = null) {
         val previous = flow.value
         if (previous.busy) return
         val app = context.applicationContext
         update { it.copy(phase = Phase.Loading, loadPercent = null, status = "Importing steering vector…", error = null,
-            steeringImportMessage = null, steeringOperation = true) }
+            steeringImportMessage = null, steeringMessageModel = modelHash, steeringOperation = true) }
         task {
             try {
-                val imported = SteeringFiles.importVector(app, uris) { cancelled }
+                val imported = SteeringFiles.importVector(app, uris, modelHash) { cancelled }
                 refreshSteering(app)
-                val name = Catalog.models.firstOrNull { it.sha256 == imported.modelHash }?.name
-                update { it.copy(steeringImportMessage = if (name != null) "Vector imported for $name."
-                    else "Vector imported. Load the matching model to use it.") }
+                val loaded = imported.modelHash == flow.value.modelSha256
+                update { it.copy(steeringMessageModel = imported.modelHash,
+                    steeringImportMessage = if (loaded) "Vector imported. Steering is available in this model's chats."
+                        else "Vector imported. Steering appears in chats while this model is loaded.") }
             } catch (error: Exception) {
                 if (!cancelled) update { it.copy(error = error.message ?: "Steering import failed") }
             } finally {
+                update { it.copy(steeringRevision = it.steeringRevision + 1) }
                 finishSteeringOperation(previous)
             }
         }
     }
 
-    fun removeSteering(context: Context) {
+    fun removeSteering(context: Context, modelHash: String) {
         val previous = flow.value
         if (previous.busy) return
-        val profile = previous.steeringProfile ?: return
-        update { it.copy(phase = Phase.Loading, steeringOperation = true, status = "Removing steering vector…") }
+        update { it.copy(phase = Phase.Loading, steeringOperation = true, status = "Removing steering vector…",
+            steeringImportMessage = null) }
         task {
             try {
-                SteeringFiles.remove(context.applicationContext, profile)
+                SteeringFiles.remove(context.applicationContext, modelHash)
                 refreshSteering(context.applicationContext)
             } finally {
+                update { it.copy(steeringRevision = it.steeringRevision + 1) }
                 finishSteeringOperation(previous)
             }
         }
@@ -592,11 +600,10 @@ object EngineController {
         val engine = flow.value
         if (engine.phase != Phase.Ready || engine.steeringOperation || (text.isEmpty() && attachments.isEmpty())) return false
         if (attachments.any { it.kind == AttachmentKind.Image } && !engine.vision) return false
-        val steering = ChatStore.state.value.steering
-        if (steering.enabled && (engine.steeringProfile == null || engine.modelSha256 == null)) {
-            update { it.copy(error = "Import a compatible steering vector or turn steering off for this chat.") }
-            return false
-        }
+        // A chat's steering applies while a model with an imported vector is loaded; chats offer it only then, and
+        // the answer's details show whether it was applied.
+        val chatSteering = ChatStore.state.value.steering
+        val steering = chatSteering.takeIf { engine.steeringProfile != null && engine.modelSha256 != null } ?: SteeringOptions()
         val app = context.applicationContext
         val settings = SettingsStore.state.value
         val thinking = settings.thinking && engine.thinkingSupported

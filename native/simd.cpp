@@ -174,6 +174,48 @@ void gemv_q8_0(const uint8_t *rows, size_t row_stride, const int8_t *q, const fl
     }
 }
 
+namespace {
+// e^x = 2^n e^r with n = round(x / ln 2), r = x - n ln 2 in two parts and Cephes' degree-6 polynomial for e^r
+// (a few ulp). x is clamped to [-87, 88], so 2^n stays a normal float built in the exponent field.
+float32x4_t exp4(float32x4_t x) {
+    x = vminq_f32(vmaxq_f32(x, vdupq_n_f32(-87.0f)), vdupq_n_f32(88.0f));
+    const float32x4_t n = vrndnq_f32(vmulq_n_f32(x, 1.44269504088896341f));
+    float32x4_t r = vfmsq_f32(x, n, vdupq_n_f32(0.693359375f));
+    r = vfmsq_f32(r, n, vdupq_n_f32(-2.12194440e-4f));
+    float32x4_t p = vdupq_n_f32(1.9875691500e-4f);
+    p = vfmaq_f32(vdupq_n_f32(1.3981999507e-3f), p, r);
+    p = vfmaq_f32(vdupq_n_f32(8.3334519073e-3f), p, r);
+    p = vfmaq_f32(vdupq_n_f32(4.1665795894e-2f), p, r);
+    p = vfmaq_f32(vdupq_n_f32(1.6666665459e-1f), p, r);
+    p = vfmaq_f32(vdupq_n_f32(5.0000001201e-1f), p, r);
+    const float32x4_t e = vaddq_f32(vfmaq_f32(r, p, vmulq_f32(r, r)), vdupq_n_f32(1.0f));
+    const int32x4_t power = vshlq_n_s32(vaddq_s32(vcvtq_s32_f32(n), vdupq_n_s32(127)), 23);
+    return vmulq_f32(e, vreinterpretq_f32_s32(power));
+}
+} // namespace
+
+void gated_mean(const float *normed, const float *gate, float *out, size_t width, size_t streams) {
+    const float inverse = 1.0f / static_cast<float>(streams);
+    const float32x4_t one = vdupq_n_f32(1.0f);
+    size_t i = 0;
+    for (; i + 4 <= width; i += 4) {
+        float32x4_t sum = vdupq_n_f32(0);
+        for (size_t s = 0; s < streams; ++s) {
+            const float32x4_t g = vld1q_f32(gate + s * width + i);
+            const float32x4_t sigmoid = vdivq_f32(one, vaddq_f32(one, exp4(vnegq_f32(g))));
+            sum = vfmaq_f32(sum, vld1q_f32(normed + s * width + i), sigmoid);
+        }
+        vst1q_f32(out + i, vmulq_n_f32(sum, inverse));
+    }
+    for (; i < width; ++i) {
+        float sum = 0;
+        for (size_t s = 0; s < streams; ++s) {
+            sum += normed[s * width + i] / (1.0f + std::exp(-gate[s * width + i]));
+        }
+        out[i] = sum * inverse;
+    }
+}
+
 const char *implementation() {
     return has_dotprod() ? "neon+dotprod" : "neon";
 }
@@ -218,6 +260,17 @@ void gemv_q8_0(const uint8_t *rows, size_t row_stride, const int8_t *q, const fl
             sum += half_to_float(block) * scales[b] * static_cast<float>(acc);
         }
         scores[r] = sum;
+    }
+}
+
+void gated_mean(const float *normed, const float *gate, float *out, size_t width, size_t streams) {
+    const float inverse = 1.0f / static_cast<float>(streams);
+    for (size_t i = 0; i < width; ++i) {
+        float sum = 0;
+        for (size_t s = 0; s < streams; ++s) {
+            sum += normed[s * width + i] / (1.0f + std::exp(-gate[s * width + i]));
+        }
+        out[i] = sum * inverse;
     }
 }
 
