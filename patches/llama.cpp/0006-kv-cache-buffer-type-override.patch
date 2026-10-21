@@ -1,0 +1,56 @@
+diff --git a/src/llama-ext.h b/src/llama-ext.h
+index fcc78f4..dccb90d 100644
+--- a/src/llama-ext.h
++++ b/src/llama-ext.h
+@@ -9,6 +9,12 @@
+ #include <cstdint>
+ #include <map>
+ 
++// Buffer type for one layer of a KV cache, chosen by the host instead of the device default: name_tag names the
++// cache ("" for attention keys and values, "idx_" for a sparse-attention indexer). Returning nullptr keeps the
++// default. One per process; set it only while no context is being created.
++typedef ggml_backend_buffer_type_t (*llama_kv_buft_override_fn)(const char * name_tag, int32_t il, void * user);
++LLAMA_API void llama_set_kv_buft_override(llama_kv_buft_override_fn fn, void * user);
++
+ // Reserve a new compute graph. It is valid until the next call to llama_graph_reserve.
+ LLAMA_API struct ggml_cgraph * llama_graph_reserve(
+         struct llama_context * ctx,
+diff --git a/src/llama-kv-cache.cpp b/src/llama-kv-cache.cpp
+index 463510c..5852f1c 100644
+--- a/src/llama-kv-cache.cpp
++++ b/src/llama-kv-cache.cpp
+@@ -1,4 +1,5 @@
+ #include "llama-kv-cache.h"
++#include "llama-ext.h"
+ 
+ #include "llama-impl.h"
+ #include "llama-io.h"
+@@ -58,6 +59,14 @@ static void ggml_gen_hadamard(ggml_tensor * tensor) {
+     }
+ }
+ 
++static llama_kv_buft_override_fn kv_buft_override = nullptr;
++static void * kv_buft_override_user = nullptr;
++
++void llama_set_kv_buft_override(llama_kv_buft_override_fn fn, void * user) {
++    kv_buft_override = fn;
++    kv_buft_override_user = user;
++}
++
+ //
+ // llama_kv_cache
+ //
+@@ -220,6 +229,13 @@ llama_kv_cache::llama_kv_cache(
+             dev_name = ggml_backend_dev_name(dev);
+         }
+ 
++        if (kv_buft_override) {
++            if (ggml_backend_buffer_type_t chosen = kv_buft_override(name_tag, (int32_t) il, kv_buft_override_user)) {
++                buft = chosen;
++                dev_name = ggml_backend_buft_name(chosen);
++            }
++        }
++
+         LLAMA_LOG_DEBUG("%s: layer %3d: dev = %s\n", __func__, il, dev_name);
+ 
+         ggml_context * ctx = ctx_for_buft(buft);

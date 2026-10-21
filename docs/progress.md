@@ -28,7 +28,7 @@
 - 2.39–2.41 with demand-first read scheduling, against 2.12 for D029's configuration in the same session (D030);
 - 2.89–3.06 (2.99 mean over four runs) with the experts in an expert pack, 2 whole-expert reads in flight, demanded experts in two parts and the Q8_0 lookahead router with a four-row kernel, against 2.45 for D030's options in the same session (D032).
 
-The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 tokens/s (224 tokens). Chat turns reuse the previous turn's state where the template allows it (D027).
+The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 tokens/s (224 tokens). Chat turns reuse the previous turn's state where the template allows it (D027). A chat can keep that state on storage between sessions (D033, opt-in). Flash-Next keeps its attention keys and values in a file on storage, so long windows need only the indexer in memory (D034). Neither has been measured on the phone yet.
 
 **Flash-Next on the phone is moved (2026-10-20, D032).** `eqt-pack move` moved its experts into `files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack`; the GGUF beside it has holes in its routed ranges and loads only with the pack. The installed debug app (built 20:31) passes the pack automatically, with D030's tuning. The catalog in the working tree has D032's tuning, not yet installed. `eqt-pack unpack MODEL PACK` restores the original GGUF byte for byte. `eqt-pack sha256` against the pinned hash has not been run on the phone yet.
 
@@ -49,6 +49,36 @@ The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 
    - misses stay at 13.7% of demanded experts: the late lookahead adds only 4 points of precision.
 5. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
 6. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
+
+## App: 2026-10-21 — answer length, context window, compact Models, context gauge, saved sessions, KV on storage
+
+Built and linted. Not yet seen on the phone.
+
+- **Answer length.** It has no limit by default: an answer runs until the model ends it or the loaded window is full (the engine's new `context` termination; stats say "context full"). Turning the limit on gives a slider and typed field up to 32,768 tokens. Requests leave at most 2,048 tokens of room for the answer (`output_reserve`); the window still grows when a prompt needs more.
+- **Context window.** The choices are Auto · 2K · 4K · 8K · Max, Auto by default.
+  - Auto gives the KV cache half of the free memory left once a streamed model has its full-speed expert cache (`speedCacheMiB`: Flash-Next 1,792, 35B 2,048), or once a resident model fits.
+  - Max takes all of it, with the cache at its floor.
+  - Both stop at the trained context (catalog `trainedContext`; for picked files the engine caps the window, `context_up_to_trained`) and never start below 4K.
+- **Models screen.** Compact cards show a badge, the name, size and kind, a status, and the primary action. Description, tagline, license, memory details and the Wi-Fi note sit in a collapsible row. Image support, steering and deletion moved to an options sheet behind the ⋮ button. A memory shortfall still shows on the card.
+- **Chat.** A small circle beside Send shows the share of the loaded window the chat uses: the last answer's prompt plus answer tokens (saved per message as `context_tokens`), plus tokens arriving. A tap shows the numbers.
+- **Saved sessions (D033).** "Remember this chat" in the Chat settings dialog (tune button, beside directional steering), off by default. After each answer the next turn can continue from, the state is written to `chats/<id>/session.state`. Coming back to the chat restores it and evaluates only the new text. The dialog shows the size and deletes the state. Deleting the chat, turning the switch off or deleting the model also deletes it. Thinking turns are not saved.
+- **Keys and values on storage (D034).** Flash-Next maps its attention keys and values from an unlinked file in `files/kv`, which disappears with the load. Auto and Max size its window from the indexer's 6 MiB per 1K tokens and from free storage.
+
+Engine: `output_reserve`, the `context` termination and `context_up_to_trained`, checked on the host with Qwen3-0.6B.
+- A 256-token window filled exactly (22 prompt + 234 answer tokens).
+- A reserve that does not fit is refused with the usual overflow error.
+- 100,000 is capped to the trained 40,960.
+
+Engine: sessions and keys and values on storage are bitwise equal to the in-memory paths on the host fixtures, on Qwen3.5-0.8B and Qwen3-0.6B (keys and values) and on the real Flash-Next (a 75-token session restored), and in the Linux container (30/30 cases per fixture, lifecycle 9/9 with both).
+
+**Tonight's Galaxy session:** `python .cache/phone_tonight.py` (about 35 minutes, app closed):
+1. install the new APK;
+2. `exact`: fixture exactness on the phone's f2fs (keys and values on storage, sessions in the lifecycle checks, pack with direct I/O);
+3. `unpack`, then the best options without the pack (the attribution D032 lacks);
+4. `move`, then the pack alone, with `decode_reclaims_compute` and with keys and values on storage (short context: it should cost nothing);
+5. a cool `profile_ops` run.
+
+The UI then needs a manual look.
 
 ## Qwen3.8-Flash-Next: 2026-10-19 (branch `experimental/005-Flash-Next-120b`)
 

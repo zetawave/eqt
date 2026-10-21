@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "expert_pack.h"
 #include "expert_store.h"
+#include "kv_file.h"
 #include "gpu_offload.h"
 #include "steering.h"
 #include <string_view>
@@ -21,6 +22,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <optional>
 #include <fstream>
 #include <mutex>
 #include <regex>
@@ -306,6 +308,7 @@ int64_t gguf_integer(const gguf_context *meta, const std::string &key) {
 struct ContextCost {
     int64_t trained = -1;            // <arch>.context_length; -1 when the file does not say
     uint64_t kv_bytes_per_token = 0; // F16 keys and values of full-attention layers; 0 when unknown
+    uint64_t attention_bytes_per_token = 0; // of which the attention keys and values (kv_file_dir puts them on storage)
 };
 
 // Hybrid models (<arch>.full_attention_interval) keep fixed-size recurrent state in the other layers, so only
@@ -335,6 +338,7 @@ ContextCost context_cost(const gguf_context *meta) {
     }
     const int64_t attention_layers = interval > 1 ? (layers + interval - 1) / interval : layers;
     cost.kv_bytes_per_token = static_cast<uint64_t>(attention_layers * kv_heads * (key + val) * 2);
+    cost.attention_bytes_per_token = cost.kv_bytes_per_token;
     // A sparse-attention indexer (qwen4exp QSA) keeps one F16 key row per attention cell; with pooled blocks the
     // row holds the raw and the pooled key.
     if (const int64_t indexer_key = value(".attention.indexer.key_length"); indexer_key > 0) {
@@ -445,8 +449,8 @@ using MediaChunks = std::unique_ptr<mtmd_input_chunks, decltype(&mtmd_input_chun
 struct OpProfile {
     using Setter = void (*)(bool (*)(ggml_tensor *, int, int, void *), void *);
     Setter setter = nullptr;
-    std::vector<double> ms = std::vector<double>(GGML_OP_COUNT * GGML_TYPE_COUNT);
-    std::vector<uint64_t> count = std::vector<uint64_t>(GGML_OP_COUNT * GGML_TYPE_COUNT);
+    std::vector<double> ms = std::vector<double>(size_t{GGML_OP_COUNT} * GGML_TYPE_COUNT);
+    std::vector<uint64_t> count = std::vector<uint64_t>(size_t{GGML_OP_COUNT} * GGML_TYPE_COUNT);
     int last = -1;
     std::chrono::steady_clock::time_point at;
 
@@ -564,6 +568,43 @@ struct ComputePages {
     }
 };
 
+// Saved chat sessions (request "session"): the context's KV cache, recurrent state and tokens after a completed
+// turn, in llama.cpp's sequence-state file, beside an Equity record of the model and engine that wrote it. A session
+// is restored only into the same model and engine, and only when the new prompt extends its tokens.
+constexpr const char *session_format = "equity-session";
+constexpr int session_version = 1;
+
+struct SessionRequest {
+    std::string path;
+    bool restore = true, save = true;
+    bool force = false; // writes a state the chat's next prompt cannot extend (checks)
+};
+
+std::string session_engine() {
+    return std::string(EQT_LLAMA_STATE) + "/seq-state-" + std::to_string(LLAMA_STATE_SEQ_VERSION);
+}
+
+// The token list at the head of a llama.cpp sequence-state file: magic, version, count, then the tokens.
+std::vector<llama_token> session_tokens(const std::string &path) {
+    std::ifstream file(std::filesystem::path(path), std::ios::binary);
+    uint32_t header[3]{};
+    if (!file.read(reinterpret_cast<char *>(header), sizeof(header)) || header[0] != LLAMA_STATE_SEQ_MAGIC ||
+        header[1] != LLAMA_STATE_SEQ_VERSION || header[2] > (1u << 22)) {
+        throw std::runtime_error("unreadable session");
+    }
+    std::vector<llama_token> tokens(header[2]);
+    if (!file.read(reinterpret_cast<char *>(tokens.data()), static_cast<std::streamsize>(tokens.size() * sizeof(llama_token)))) {
+        throw std::runtime_error("truncated session");
+    }
+    return tokens;
+}
+
+void remove_session(const std::string &path) {
+    std::error_code ignored;
+    std::filesystem::remove(std::filesystem::path(path), ignored);
+    std::filesystem::remove(std::filesystem::path(path + ".json"), ignored);
+}
+
 } // namespace
 
 Json process_memory() {
@@ -630,6 +671,8 @@ struct AbortSource {
 struct Engine::State {
     // Members are destroyed in reverse order: context and model release expert buffers before the store
     // joins its I/O workers and frees the buffer type those buffers reference.
+    // Outlives the context, whose attention keys and values it maps from storage (kv_file_dir).
+    std::unique_ptr<KvFile> kv_file;
     std::unique_ptr<ExpertStore> store;
     // Uses the store's experts; removed before it.
     std::unique_ptr<GpuOffload> gpu;
@@ -741,7 +784,7 @@ void Engine::unload() {
 Json Engine::load(const std::string &path, const Json &options, const Emit &progress) {
     unload();
     const auto start = Clock::now();
-    const int context_size = integer(options, "context", 2048, 128, 1 << 20);
+    int context_size = integer(options, "context", 2048, 128, 1 << 20);
     const int batch_size = integer(options, "batch", 128, 1, 2048);
     const int threads = integer(options, "threads", 4, 1, 16);
     const int budget = integer(options, "memory_budget_mib", 2048, 768, 16384);
@@ -932,11 +975,24 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                                                        static_cast<int>(value(".expert_used_count", 1)));
     }
     header.reset();
+    // context_up_to_trained: a request for more than the model was trained on gets its trained context (the app's
+    // "Max" and "Auto" sizes for files whose trained context it cannot know before loading).
     if (context_cost_estimate.trained > 0 && context_size > context_cost_estimate.trained) {
-        throw std::invalid_argument("context exceeds the model's trained context of " +
-                                    std::to_string(context_cost_estimate.trained) + " tokens");
+        if (!options.value("context_up_to_trained", false)) {
+            throw std::invalid_argument("context exceeds the model's trained context of " +
+                                        std::to_string(context_cost_estimate.trained) + " tokens");
+        }
+        context_size = static_cast<int>(context_cost_estimate.trained);
     }
-    const uint64_t kv_bytes = static_cast<uint64_t>(context_size) * context_cost_estimate.kv_bytes_per_token;
+    // kv_file_dir keeps the attention keys and values on storage: memory holds the rest (a sparse-attention index) and
+    // the pages attention reads, at most a selection of every attention layer; the storage holds them all.
+    const bool kv_on_storage = options.contains("kv_file_dir");
+    const uint64_t attention_bytes = static_cast<uint64_t>(context_size) * context_cost_estimate.attention_bytes_per_token;
+    uint64_t kv_bytes = static_cast<uint64_t>(context_size) * context_cost_estimate.kv_bytes_per_token;
+    if (kv_on_storage) {
+        constexpr uint64_t page_allowance = 128ull << 20;
+        kv_bytes = kv_bytes - attention_bytes + std::min(attention_bytes, page_allowance);
+    }
     resident_bytes += kv_bytes;
     // Admission is conservative, not an allocator-enforced RSS limit.
     if (resident_bytes > static_cast<uint64_t>(budget - 512) * 1024 * 1024) {
@@ -1062,9 +1118,19 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         params.cb_eval = &ExpertStore::observe;
         params.cb_eval_user_data = state->store.get();
     }
+    if (kv_on_storage) {
+        state->kv_file = std::make_unique<KvFile>(options.at("kv_file_dir").get<std::string>());
+        // Only the attention cache (tag ""); an indexer ("idx_") is scored over every cell each token and stays in memory.
+        llama_set_kv_buft_override([](const char *tag, int32_t, void *user) -> ggml_backend_buffer_type_t {
+            return tag && tag[0] == '\0' ? static_cast<KvFile *>(user)->buffer_type() : nullptr;
+        }, state->kv_file.get());
+    }
     state->context.reset(llama_init_from_model(state->model.get(), params));
+    llama_set_kv_buft_override(nullptr, nullptr);
     if (!state->context) {
-        throw std::runtime_error("Context allocation failed; lower context or memory pressure");
+        throw std::runtime_error(kv_on_storage ? "Context allocation failed: not enough free storage for the context's "
+                                                 "keys and values, or not enough memory"
+                                               : "Context allocation failed; lower context or memory pressure");
     }
     Json pool_info = {{"persistent", false}};
     if (options.value("threadpool", true)) {
@@ -1150,6 +1216,9 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                    {"context", state->context_size},
                    {"tiled_mm", options.contains("tiled_mm") ? options.at("tiled_mm") : Json(nullptr)},
                    {"trained_context", context_cost_estimate.trained > 0 ? Json(context_cost_estimate.trained) : Json(nullptr)},
+                   {"kv_on_storage", state->kv_file ? Json{{"directory", state->kv_file->directory()},
+                                                           {"reserved_bytes", state->kv_file->reserved_bytes()}}
+                                                     : Json(nullptr)},
                    {"kv_bytes_per_token_estimate", context_cost_estimate.kv_bytes_per_token
                                                        ? Json(context_cost_estimate.kv_bytes_per_token) : Json(nullptr)},
                    {"batch", batch_size},
@@ -1206,8 +1275,21 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     if (has_media && s.projector_path.empty()) {
         throw std::invalid_argument("This model was loaded without image support");
     }
-    // Bounded by the context window, checked with the prompt length below.
+    // Decoding stops at max_tokens or when the context window is full ("context"), whichever comes first. The
+    // prompt must leave output_reserve tokens of room (all of max_tokens unless set), or the request is refused
+    // with ContextOverflowError before anything is evaluated.
     const int maximum = integer(request, "max_tokens", 128, 1, 1 << 20);
+    const int reserve = std::min(maximum, integer(request, "output_reserve", maximum, 1, 1 << 20));
+    std::optional<SessionRequest> session;
+    if (request.contains("session")) {
+        const auto &value = request.at("session");
+        session = SessionRequest{value.at("path").get<std::string>(), value.value("restore", true), value.value("save", true),
+                                 value.value("force", false)};
+        if (session->path.empty()) {
+            throw std::invalid_argument("session.path must name a file");
+        }
+    }
+    Json session_info = nullptr;
     const int seed = integer(request, "seed", 42, 0, 2147483647);
     const double temperature = request.value("temperature", 0.0);
     if (!std::isfinite(temperature) || temperature < 0 || temperature > 2) {
@@ -1232,7 +1314,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     double media_load_ms = 0;
     if (!has_media) {
         count = -llama_tokenize(vocab, prompt.data(), static_cast<int>(prompt.size()), nullptr, 0, true, true);
-        if (count > 0 && count + maximum <= s.context_size) {
+        if (count > 0 && count + reserve <= s.context_size) {
             tokens.resize(count);
             if (llama_tokenize(vocab, prompt.data(), static_cast<int>(prompt.size()), tokens.data(), count, true,
                                true) != count) {
@@ -1290,9 +1372,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     if (count <= 0) {
         throw std::invalid_argument("The prompt contains no tokens");
     }
-    if (count + maximum > s.context_size) {
-        throw ContextOverflowError(count, maximum, s.context_size);
+    if (count + reserve > s.context_size) {
+        throw ContextOverflowError(count, reserve, s.context_size);
     }
+    // The last sampled token is never evaluated, so `limit` tokens need count + limit - 1 cells.
+    const int limit = std::min(maximum, s.context_size - count);
     Json steering_info = nullptr;
     struct SteeringScope {
         llama_context *context;
@@ -1408,6 +1492,68 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     // always safe for hybrid recurrent state and after cancellation. Reused and rebuilt states evaluate the same
     // tokens in different batch shapes: float rounding, which can flip near-tie expert choices (D027).
     const bool reusable = request.value("prompt_cache", true) && !has_media && !steering_scope.active && !s.draft;
+    // A saved session stands in for the state this context no longer holds (another chat answered last, or the
+    // model was loaded since). It is read only when its tokens are a strict prefix of this prompt; a session of this
+    // chat that the prompt no longer extends (an edited or regenerated turn) or that this engine cannot read is
+    // deleted, one of another model is kept for that model.
+    if (session) {
+        session_info = {{"status", "none"}, {"restored_tokens", 0}};
+        const bool held = s.resident_valid && s.resident.size() < tokens.size() &&
+                          std::equal(s.resident.begin(), s.resident.end(), tokens.begin());
+        const std::string meta_path = session->path + ".json";
+        std::error_code missing;
+        if (!reusable || !session->restore) {
+            session_info["status"] = "not_requested";
+        } else if (held) {
+            session_info["status"] = "in_memory";
+        } else if (std::filesystem::exists(std::filesystem::path(session->path), missing) &&
+                   std::filesystem::exists(std::filesystem::path(meta_path), missing)) {
+            const auto restore_start = Clock::now();
+            const char *status = nullptr;
+            Json meta;
+            std::vector<llama_token> saved;
+            try {
+                std::ifstream file{std::filesystem::path(meta_path)};
+                meta = Json::parse(file);
+                saved = session_tokens(session->path);
+            } catch (const std::exception &) {
+                status = "unreadable";
+            }
+            if (!status && (meta.value("format", std::string()) != session_format ||
+                            meta.value("version", 0) != session_version ||
+                            meta.value("engine", std::string()) != session_engine())) {
+                status = "incompatible";
+            }
+            const Json &model_hash = s.info.at("model_sha256");
+            const bool other_model = !status && (model_hash.is_null() || meta.value("model_sha256", Json()) != model_hash);
+            if (!status && !other_model &&
+                (saved.empty() || saved.size() >= tokens.size() || !std::equal(saved.begin(), saved.end(), tokens.begin()))) {
+                status = "mismatch";
+            }
+            if (!status && !other_model) {
+                llama_memory_clear(llama_get_memory(s.context.get()), true);
+                std::vector<llama_token> loaded(saved.size());
+                size_t loaded_count = 0;
+                const size_t bytes = llama_state_seq_load_file(s.context.get(), session->path.c_str(), 0, loaded.data(),
+                                                               loaded.size(), &loaded_count);
+                if (!bytes || loaded_count != saved.size() || loaded != saved) {
+                    llama_memory_clear(llama_get_memory(s.context.get()), true);
+                    status = "failed";
+                } else {
+                    s.resident = std::move(saved);
+                    s.resident_valid = true;
+                    session_info = {{"status", "restored"}, {"restored_tokens", loaded_count}, {"bytes", bytes},
+                                    {"restore_ms", milliseconds(restore_start)}};
+                }
+            }
+            if (other_model) {
+                session_info["status"] = "other_model";
+            } else if (status) {
+                remove_session(session->path);
+                session_info["status"] = status;
+            }
+        }
+    }
     size_t reused = 0;
     if (reusable && s.resident_valid && s.resident.size() < tokens.size() &&
         std::equal(s.resident.begin(), s.resident.end(), tokens.begin())) {
@@ -1685,8 +1831,8 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     auto last_token = decode_start;
     std::vector<double> latencies;
     std::vector<llama_token> generated;
-    generated.reserve(maximum);
-    latencies.reserve(maximum);
+    generated.reserve(std::min(limit, 1 << 16));
+    latencies.reserve(std::min(limit, 1 << 16));
     const bool capture = request.value("capture_logits", false);
     Json first_logits = nullptr;
     Json ttft = nullptr;
@@ -1730,7 +1876,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         if (emit) {
             emit(chunk);
         }
-        return static_cast<int>(generated.size()) < maximum;
+        return static_cast<int>(generated.size()) < limit;
     };
     int steps = 0, drafted = 0, accepted_total = 0;
     if (!speculative) {
@@ -1764,7 +1910,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
                 reason = "cancelled";
                 break;
             }
-            const int room = maximum - static_cast<int>(generated.size());
+            const int room = limit - static_cast<int>(generated.size());
             draft.clear();
             if (room > 1 && !draft_tokens(last, past, std::min(s.draft_max, room - 1), draft)) {
                 reason = "cancelled";
@@ -1814,6 +1960,9 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     }
     if (s.store) {
         s.store->set_decode_phase(false);
+    }
+    if (reason == "length" && limit < maximum && static_cast<int>(generated.size()) >= limit) {
+        reason = "context"; // the window filled before max_tokens
     }
     const Json op_rows = op_profile ? op_profile->finish(generated.size()) : Json(nullptr);
     op_profile.reset();
@@ -1896,12 +2045,80 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     // The context keeps this turn's state when it holds exactly the prompt and the evaluated answer: an answer that
     // ended at the output limit has its last token sampled but not evaluated; EOS is never part of the answer.
     if (reusable && prefill_complete && reason != "cancelled" && !cancelled_) {
-        const size_t evaluated = generated.size() - (reason == "length" && !generated.empty() ? 1 : 0);
+        const size_t evaluated = generated.size() - ((reason == "length" || reason == "context") && !generated.empty() ? 1 : 0);
         s.resident = std::move(tokens);
         s.resident.insert(s.resident.end(), generated.begin(), generated.begin() + static_cast<ptrdiff_t>(evaluated));
         s.resident_valid = true;
     } else {
         llama_memory_clear(llama_get_memory(s.context.get()), true);
+    }
+    // A state is written only when the chat's next prompt will extend it: rendered with this answer and a following
+    // user message, the template must reproduce the context's tokens. Templates that render earlier answers
+    // differently (D027) and answers that re-tokenize differently would otherwise write a session per turn only to
+    // delete it on the next.
+    bool extendable = false;
+    if (session && session->save && s.resident_valid && !s.info.at("model_sha256").is_null()) {
+        try {
+            Json next = input.messages;
+            next.push_back({{"role", "assistant"}, {"content", text}});
+            next.push_back({{"role", "user"}, {"content", "."}});
+            const auto rendered = render_chat(s.chat_template, next, thinking, piece(vocab, llama_vocab_bos(vocab)),
+                                              piece(vocab, llama_vocab_eos(vocab)));
+            const int size = -llama_tokenize(vocab, rendered.data(), static_cast<int>(rendered.size()), nullptr, 0, true, true);
+            std::vector<llama_token> rendered_tokens(std::max(size, 0));
+            extendable = size > 0 && static_cast<size_t>(size) > s.resident.size() &&
+                         llama_tokenize(vocab, rendered.data(), static_cast<int>(rendered.size()), rendered_tokens.data(),
+                                        size, true, true) == size &&
+                         std::equal(s.resident.begin(), s.resident.end(), rendered_tokens.begin());
+        } catch (const std::exception &) {
+            extendable = false;
+        }
+        if (!extendable) {
+            session_info["save_skipped"] = "not_extendable";
+        }
+    }
+    // The completed turn's state replaces the chat's session: written beside it and renamed, so a failure or a crash
+    // leaves the previous session (an earlier prefix of the same chat) or none. A turn whose state is not reusable
+    // (cancelled, steered, images) leaves the previous session in place.
+    if (session && session->save && s.resident_valid && !s.info.at("model_sha256").is_null() &&
+        (extendable || session->force)) {
+        const auto save_start = Clock::now();
+        const std::string partial = session->path + ".partial", meta_partial = session->path + ".json.partial";
+        try {
+            std::filesystem::create_directories(std::filesystem::path(session->path).parent_path());
+            const size_t bytes = llama_state_seq_save_file(s.context.get(), partial.c_str(), 0, s.resident.data(),
+                                                           s.resident.size());
+            if (!bytes) {
+                throw std::runtime_error("the context state could not be written");
+            }
+            {
+                std::ofstream meta(std::filesystem::path(meta_partial), std::ios::trunc);
+                meta << Json({{"format", session_format},
+                              {"version", session_version},
+                              {"engine", session_engine()},
+                              {"model_sha256", s.info.at("model_sha256")},
+                              {"architecture", s.info.at("architecture")},
+                              {"tokens", s.resident.size()},
+                              {"bytes", bytes}})
+                            .dump();
+                if (!meta.flush()) {
+                    throw std::runtime_error("the session record could not be written");
+                }
+            }
+            std::filesystem::rename(std::filesystem::path(partial), std::filesystem::path(session->path));
+            std::filesystem::rename(std::filesystem::path(meta_partial), std::filesystem::path(session->path + ".json"));
+            session_info["saved_tokens"] = s.resident.size();
+            session_info["saved_bytes"] = bytes;
+            session_info["save_ms"] = milliseconds(save_start);
+        } catch (const std::exception &error) {
+            std::error_code ignored;
+            std::filesystem::remove(std::filesystem::path(partial), ignored);
+            std::filesystem::remove(std::filesystem::path(meta_partial), ignored);
+            session_info["save_error"] = error.what();
+        }
+    }
+    if (session) {
+        result["session"] = session_info;
     }
     return result;
 }

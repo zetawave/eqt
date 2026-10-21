@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -144,11 +145,76 @@ int main(int argc, char **argv) {
         engine.load(argv[1], options);
         outcomes.push_back(compare("reload", reference, engine.generate(request)));
 
+        // Saved sessions. A turn is saved only when the next turn will reuse its state; saved to disk and restored
+        // into a freshly loaded context it continues exactly as the state kept in memory. A session of another model
+        // is kept and not read; one the prompt does not extend is deleted, and the prompt is rebuilt. The
+        // random-weight fixtures' answers do not re-tokenize to their tokens: their state is written anyway (force)
+        // to exercise those paths.
+        const std::string session_path = std::string(argv[3]) + ".session";
+        std::filesystem::remove(session_path);
+        std::filesystem::remove(session_path + ".json");
+        const auto with_model = [&](char digit) {
+            auto loaded = options;
+            loaded["model_sha256"] = std::string(64, digit);
+            engine.unload();
+            engine.prepare();
+            engine.load(argv[1], loaded);
+        };
+        auto first_turn = request;
+        first_turn["session"] = {{"path", session_path}};
+        auto next_turn = conversation;
+        next_turn["session"] = {{"path", session_path}, {"save", false}};
+        with_model('a');
+        auto saved = engine.generate(first_turn);
+        const bool extendable = saved.at("session").contains("saved_bytes");
+        if (!extendable) {
+            require(saved.at("session").at("save_skipped") == "not_extendable" && !std::filesystem::exists(session_path),
+                    "session_save: a skipped state was written");
+            first_turn["session"]["force"] = true;
+            saved = engine.generate(first_turn);
+        }
+        require(saved.at("session").contains("saved_bytes") && std::filesystem::exists(session_path),
+                "session_save: no session was written");
+        with_model('b');
+        const auto other = engine.generate(next_turn);
+        require(other.at("session").at("status") == "other_model" && other.at("reused_prompt_tokens") == 0 &&
+                    std::filesystem::exists(session_path),
+                "session_other_model: a session of another model was read or deleted");
+        with_model('a');
+        engine.generate(request);
+        const auto in_memory = engine.generate(conversation);
+        with_model('a');
+        const auto restored = engine.generate(next_turn);
+        const auto reused = in_memory.at("reused_prompt_tokens").get<size_t>();
+        require(extendable == (reused > 0), "session_save: the saved state's reuse was mispredicted");
+        if (reused > 0) {
+            require(restored.at("session").at("status") == "restored" && restored.at("reused_prompt_tokens") == reused &&
+                        restored.at("session").at("restored_tokens") == reused,
+                    "session_restore: the saved state was not used");
+            require(restored.at("first_logits") == in_memory.at("first_logits") &&
+                        restored.at("token_ids") == in_memory.at("token_ids"),
+                    "session_restore: output differs from the in-memory state");
+        } else {
+            require(restored.at("session").at("status") == "mismatch" && !std::filesystem::exists(session_path) &&
+                        restored.at("first_logits") == rebuilt.at("first_logits") &&
+                        restored.at("token_ids") == rebuilt.at("token_ids"),
+                    "session_mismatch: an unusable session was kept or the rebuild changed");
+        }
+        outcomes.push_back({{"case", "session_save_restore"},
+                            {"saved_bytes", saved.at("session").at("saved_bytes")},
+                            {"extendable", extendable},
+                            {"restore_status", restored.at("session").at("status")},
+                            {"reused_prompt_tokens", restored.at("reused_prompt_tokens")},
+                            {"bitwise_equal", true},
+                            {"passed", true}});
+        std::filesystem::remove(session_path);
+        std::filesystem::remove(session_path + ".json");
+
         std::ofstream output(argv[3]);
         output << eqt::Json({{"configuration", configuration},
                              {"tolerance_absolute", 0.002},
                              {"outcomes", outcomes},
-                             {"scope", "State reset, full-prefix replay, prompt-cache reuse against a rebuild, "
+                             {"scope", "State reset, full-prefix replay, prompt-cache reuse against a rebuild, saved sessions, "
                                        "cancellation recovery and reload; no rollback"}})
                       .dump(2)
                << '\n';

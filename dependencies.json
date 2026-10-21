@@ -28,6 +28,11 @@
         "file": "patches/llama.cpp/0005-ggml-sched-compute-buffer-chunks.patch",
         "sha256": "a820844626b00daa5e67c8256360f4ba0fc54e9e2d83af0fb70d0b6ddf0e7581",
         "purpose": "ggml_backend_sched_get_buffer_chunk / ggml_gallocr_get_buffer_chunk: the scheduler's compute buffer chunks, so Equity can return a prompt's activation pages while decoding (decode_reclaims_compute). Accessors only"
+      },
+      {
+        "file": "patches/llama.cpp/0006-kv-cache-buffer-type-override.patch",
+        "sha256": "b6dedb418566e5740ea3206f82d0a0b10e4993b588825fecade0e8f3a65001cb",
+        "purpose": "llama_set_kv_buft_override: the host may choose the buffer type of each KV cache layer (by cache tag and layer); Equity maps the attention keys and values of sparse-attention models from a file on storage (kv_file_dir). Unused unless set"
       }
     ]
   },

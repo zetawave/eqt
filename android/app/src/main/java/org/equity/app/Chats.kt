@@ -38,6 +38,8 @@ data class Message(
     val reasoning: String? = null,
     /** How long the model reasoned, once known. */
     val reasoningMs: Long? = null,
+    /** Context tokens in use once this answer was written: its prompt, the conversation before it and the answer. */
+    val contextTokens: Int? = null,
 )
 
 internal fun String.hasVisibleContent(): Boolean = any {
@@ -69,6 +71,8 @@ data class Chat(
     val updatedAt: Long,
     val messages: List<Message>,
     val steering: SteeringOptions = SteeringOptions(),
+    /** The model's state after each answer is saved to storage and restored when the chat continues (D033). */
+    val session: Boolean = false,
 ) {
     val nextMessageId get() = (messages.maxOfOrNull { it.id } ?: 0L) + 1
 }
@@ -83,10 +87,15 @@ data class ChatsState(
     /** The current chat and the chat being answered, if different. */
     val loaded: Map<String, Chat> = emptyMap(),
     val draftSteering: SteeringOptions = SteeringOptions(),
+    val draftSession: Boolean = false,
 ) {
     val current: Chat? get() = currentId?.let { loaded[it] }
     val steering get() = current?.steering ?: draftSteering
+    val session get() = current?.session ?: draftSession
 }
+
+/** A chat's saved model state: tokens it holds and bytes on storage. */
+data class SessionSummary(val tokens: Int, val bytes: Long)
 
 /**
  * Conversations in app-private storage (`files/chats/<id>/chat.json` plus a `media` folder), excluded from
@@ -110,7 +119,53 @@ object ChatStore {
     fun media(chatId: String) = File(directory(chatId), "media")
     fun file(chatId: String, attachment: Attachment) = File(media(chatId), attachment.file)
 
-    fun newChat() = flow.update { it.copy(currentId = null, loaded = it.loaded.filterKeys(::busy), draftSteering = SteeringOptions()) }
+    fun newChat() = flow.update {
+        it.copy(currentId = null, loaded = it.loaded.filterKeys(::busy), draftSteering = SteeringOptions(), draftSession = false)
+    }
+
+    /** The engine writes the state here (and a `.json` record beside it); deleting the chat deletes both. */
+    fun sessionFile(chatId: String) = File(directory(chatId), "session.state")
+
+    fun sessionSummary(chatId: String): SessionSummary? {
+        val state = sessionFile(chatId)
+        val record = File(state.path + ".json")
+        if (!state.isFile || !record.isFile) return null
+        val tokens = runCatching { JSONObject(record.readText()).getInt("tokens") }.getOrNull() ?: return null
+        return SessionSummary(tokens, state.length() + record.length())
+    }
+
+    /** Turning the saved state off deletes it at once. */
+    fun setSession(enabled: Boolean) {
+        val current = flow.value.current
+        if (current == null) flow.update { it.copy(draftSession = enabled) }
+        else if (!busy(current.id)) {
+            put(current.copy(session = enabled), persist = true)
+            if (!enabled) deleteSession(current.id)
+        }
+    }
+
+    fun deleteSession(chatId: String) {
+        val state = sessionFile(chatId)
+        io.execute {
+            for (file in listOf(state, File(state.path + ".json"), File(state.path + ".partial"), File(state.path + ".json.partial"))) {
+                file.delete()
+            }
+        }
+    }
+
+    /** Saved states of a model that was deleted can never be restored again. */
+    fun deleteSessionsOf(modelSha256: String) {
+        io.execute {
+            root.listFiles().orEmpty().filter { it.isDirectory && !it.name.startsWith(".") }.forEach { dir ->
+                val record = File(dir, "session.state.json")
+                val model = runCatching { JSONObject(record.readText()).optString("model_sha256") }.getOrNull()
+                if (model == modelSha256) {
+                    File(dir, "session.state").delete()
+                    record.delete()
+                }
+            }
+        }
+    }
 
     fun setSteering(options: SteeringOptions) {
         require(SteeringOptions.valid(options.strength)) { "Strength must be nonzero within [-1, 2]" }
@@ -139,7 +194,8 @@ object ChatStore {
     /** Appends a user message and its pending answer, creating the chat when [chatId] is null. */
     fun startTurn(chatId: String?, text: String, attachments: List<Attachment>, now: Long = System.currentTimeMillis()): Pair<Chat, Long> {
         val existing = chatId?.let { flow.value.loaded[it] ?: read(it) }
-        val chat = existing ?: Chat(UUID.randomUUID().toString(), title(text, attachments), now, now, emptyList(), flow.value.draftSteering)
+        val chat = existing ?: Chat(UUID.randomUUID().toString(), title(text, attachments), now, now, emptyList(),
+            flow.value.draftSteering, flow.value.draftSession)
         val userId = chat.nextMessageId
         // Attachments move from staging into the chat before the request refers to them.
         val media = media(chat.id).apply { mkdirs() }
@@ -240,10 +296,12 @@ object ChatStore {
             messages.put(JSONObject().put("id", m.id).put("user", m.fromUser).put("text", m.text)
                 .put("attachments", attachments).put("streaming", m.streaming).put("stats", m.stats ?: JSONObject.NULL)
                 .put("failed", m.failed).put("stopped", m.stopped).put("steering", m.steering ?: JSONObject.NULL)
-                .put("reasoning", m.reasoning ?: JSONObject.NULL).put("reasoning_ms", m.reasoningMs ?: JSONObject.NULL))
+                .put("reasoning", m.reasoning ?: JSONObject.NULL).put("reasoning_ms", m.reasoningMs ?: JSONObject.NULL)
+                .put("context_tokens", m.contextTokens ?: JSONObject.NULL))
         }
         return JSONObject().put("version", 1).put("id", chat.id).put("title", chat.title)
             .put("steering_enabled", chat.steering.enabled).put("steering_strength", chat.steering.strength.toDouble())
+            .put("session_enabled", chat.session)
             .put("created", chat.createdAt).put("updated", chat.updatedAt).put("messages", messages)
     }
 
@@ -264,12 +322,14 @@ object ChatStore {
                 steering = if (m.isNull("steering")) null else m.getString("steering"),
                 reasoning = if (m.isNull("reasoning")) null else m.getString("reasoning"),
                 reasoningMs = if (m.isNull("reasoning_ms")) null else m.getLong("reasoning_ms"),
+                contextTokens = if (m.isNull("context_tokens")) null else m.getInt("context_tokens"),
             )
         }
         val strength = json.optDouble("steering_strength", 1.0).toFloat()
         // Strengths saved under the former [-10, 10] scale are not reinterpreted: such chats reopen with steering off.
         val valid = SteeringOptions.valid(strength)
         return Chat(json.getString("id"), json.getString("title"), json.getLong("created"), json.getLong("updated"), messages,
-            SteeringOptions(valid && json.optBoolean("steering_enabled"), if (valid) strength else 1f))
+            SteeringOptions(valid && json.optBoolean("steering_enabled"), if (valid) strength else 1f),
+            session = json.optBoolean("session_enabled"))
     }
 }

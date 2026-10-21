@@ -26,6 +26,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,15 +45,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.equity.app.ANSWER_UNLIMITED
 import org.equity.app.BuildConfigInfo
+import org.equity.app.CONTEXT_AUTO
+import org.equity.app.CONTEXT_MAX
 import org.equity.app.EngineState
 import org.equity.app.SettingsStore
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private const val MIN_ANSWER_TOKENS = 128
-private const val MAX_ANSWER_TOKENS = 2048
+private const val MIN_ANSWER_TOKENS = 256
+// The slider's end; beyond it, "No limit" lets the answer run as long as the model and the context window allow.
+private const val MAX_ANSWER_TOKENS = 32_768
 private const val MAX_TEMPERATURE = 1.2f
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,12 +95,26 @@ fun SettingsScreen(engine: EngineState) {
                 textStyle = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.fillMaxWidth(),
             )
-            SliderField(
+            val unlimited = settings.maxTokens == ANSWER_UNLIMITED
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Answer length without limit", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (unlimited) "Answers run until the model ends them or the context window is full."
+                        else "Answers stop at the length below.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = unlimited, onCheckedChange = { on ->
+                    SettingsStore.update(context) { it.copy(maxTokens = if (on) ANSWER_UNLIMITED else 2048) }
+                })
+            }
+            if (!unlimited) SliderField(
                 label = "Maximum answer length",
                 value = settings.maxTokens.toFloat(),
                 onValueChange = { value -> SettingsStore.update(context) { it.copy(maxTokens = value.roundToInt()) } },
                 range = MIN_ANSWER_TOKENS.toFloat()..MAX_ANSWER_TOKENS.toFloat(),
-                step = 128f,
+                step = 256f,
                 format = { it.roundToInt().toString() },
                 integer = true,
                 hint = "Tokens, $MIN_ANSWER_TOKENS to $MAX_ANSWER_TOKENS. Thinking uses part of them.",
@@ -122,8 +141,22 @@ fun SettingsScreen(engine: EngineState) {
             Text("CPU threads", style = MaterialTheme.typography.labelLarge)
             Choice(listOf(2, 4, 6), settings.threads, { "$it" }) { value -> SettingsStore.update(context) { it.copy(threads = value) } }
             Text("Context window", style = MaterialTheme.typography.labelLarge)
-            Choice(listOf(2048, 4096, 8192), settings.context, { "${it / 1024}K" }) { value -> SettingsStore.update(context) { it.copy(context = value) } }
-            Text("Starting size. Grows for longer messages and attachments when memory allows.",
+            Choice(listOf(CONTEXT_AUTO, 2048, 4096, 8192, CONTEXT_MAX), settings.context, { value ->
+                when (value) {
+                    CONTEXT_AUTO -> "Auto"
+                    CONTEXT_MAX -> "Max"
+                    else -> "${value / 1024}K"
+                }
+            }) { value -> SettingsStore.update(context) { it.copy(context = value) } }
+            Text(
+                when (settings.context) {
+                    CONTEXT_AUTO -> "Auto sizes the window from free memory at load, without taking the expert cache a " +
+                        "large model needs for its speed."
+                    CONTEXT_MAX -> "Max loads the model's full trained length, or as much as free memory allows. Large " +
+                        "models then keep a smaller expert cache and answer more slowly."
+                    else -> "Starting size."
+                } + " The window grows for longer messages and attachments when memory allows; the circle beside " +
+                    "Send shows how much of it a chat uses.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Expert cache (large model)", style = MaterialTheme.typography.labelLarge)
             Choice(listOf(0, 1024, 2048, 3072), settings.expertCacheMiB, { if (it == 0) "Auto" else "${it / 1024} GB" }) { value ->

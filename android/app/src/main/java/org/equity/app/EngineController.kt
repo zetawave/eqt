@@ -23,13 +23,21 @@ import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.Executors
 
+/** [Settings.context]: the largest window that fits while the model keeps its speed. */
+const val CONTEXT_AUTO = 0
+/** [Settings.context]: the model's trained length, or the largest window free memory allows. */
+const val CONTEXT_MAX = -1
+/** [Settings.maxTokens]: answers end only with the model or a full context window. */
+const val ANSWER_UNLIMITED = 0
+
 data class Settings(
     val systemPrompt: String = "You are Equity, a helpful assistant running privately on this phone. Answer in the user's language, clearly and concisely.",
-    val maxTokens: Int = 512,
+    val maxTokens: Int = ANSWER_UNLIMITED,
     val temperature: Float = 0f,
     // The six big cores (one X4, five A720) on the Exynos 2400: 26% faster decoding than four, measured.
     val threads: Int = 6,
-    val context: Int = 4096,
+    /** A fixed window in tokens, [CONTEXT_AUTO] or [CONTEXT_MAX]; long messages and attachments still enlarge it. */
+    val context: Int = CONTEXT_AUTO,
     /** 0 selects the expert-cache budget from available RAM at load time. */
     val expertCacheMiB: Int = 0,
     /** Prompts and images are read on the GPU (Vulkan); answers are still generated on the CPU. */
@@ -103,6 +111,8 @@ data class EngineState(
     /** Incremented after every import or removal, so per-model summaries are read again. */
     val steeringRevision: Int = 0,
     val steeringOperation: Boolean = false,
+    /** Context window of the loaded model, in tokens. */
+    val contextSize: Int? = null,
 ) {
     val busy get() = steeringOperation || phase == Phase.Loading || phase == Phase.Generating || phase == Phase.Unloading
 }
@@ -125,6 +135,10 @@ object EngineController {
         val projectorPath: String? = null,
         val visionMiB: Int = 0,
         val stream: StreamProfile = StreamProfile(),
+        /** 0 when unknown before loading (a picked file); the engine then caps the window at the trained length. */
+        val trainedContext: Int = 0,
+        val kvStorageMiBPer1k: Int = 0,
+        val kvMemoryMiBPer1k: Int = 0,
     )
     private var loadedSource: ModelSource? = null
     private var trainedContext: Int? = null
@@ -144,6 +158,16 @@ object EngineController {
     // 310 MiB of GPU staging while a prompt is read, released before the answer is written. Measured peak RSS.
     private const val GPU_WORK_MIB = 192
     private const val GPU_STAGING_MIB = 384
+    // Room the prompt must leave for the answer; the context window is enlarged when it does not. Longer answers
+    // continue until the window is full.
+    private const val ANSWER_RESERVE = 2048
+    // Windows chosen from free memory never start smaller than this, and stop here for files of unknown length.
+    private const val MIN_AUTO_CONTEXT = 4096
+    private const val MAX_UNKNOWN_CONTEXT = 131_072
+    // With keys and values on storage, the page cache keeps the selected blocks attention reads (the engine's figure).
+    private const val KV_PAGE_ALLOWANCE_MIB = 128
+    // Storage left free when a window on storage is sized.
+    private const val KV_STORAGE_MARGIN_MIB = 2048
     // Answer text reaches the screen at most this often: every update re-lays out the Markdown on the UI thread,
     // which then takes a big core from the compute threads (about two thirds of a core at 60 ms, measured).
     private const val UPDATE_INTERVAL_MS = 200L
@@ -289,7 +313,8 @@ object EngineController {
                 val visionMiB = projector?.let { (it.sizeBytes shr 20).toInt() + VISION_WORK_MIB } ?: 0
                 loadSource(app, ModelSource(path.absolutePath, model.sha256, model.streamed, model.residentMiB,
                     model.contextMiBPer1k, path.length(), settings,
-                    projector?.let { ModelFiles.final(app, it).absolutePath }, visionMiB, model.stream))
+                    projector?.let { ModelFiles.final(app, it).absolutePath }, visionMiB, model.stream, model.trainedContext,
+                    model.kvStorageMiBPer1k, model.kvMemoryMiBPer1k))
             }
         }
     }
@@ -337,7 +362,8 @@ object EngineController {
                 val sized = Catalog.models.firstOrNull { it.streamed && streamed && it.sizeBytes == stat.st_size }
                 loadSource(app, ModelSource("/proc/self/fd/${pfd.fd}", hash, streamed,
                     sized?.residentMiB ?: if (streamed) 2448 else sizeMiB, sized?.contextMiBPer1k ?: 112, stat.st_size,
-                    settings, stream = sized?.stream ?: StreamProfile()))
+                    settings, stream = sized?.stream ?: StreamProfile(), trainedContext = sized?.trainedContext ?: 0,
+                    kvStorageMiBPer1k = sized?.kvStorageMiBPer1k ?: 0, kvMemoryMiBPer1k = sized?.kvMemoryMiBPer1k ?: 0))
             }
         }
     }
@@ -393,7 +419,10 @@ object EngineController {
     /** Free memory, in MiB, that [model] needs to load with full prompt batches and the next-layer allowance. */
     fun fullSpeedMemoryMiB(model: CatalogModel): Int {
         val settings = SettingsStore.state.value
-        val kvMiB = model.contextMiBPer1k * settings.context / 1024
+        // A window chosen from free memory starts at its smallest size.
+        val tokens = settings.context.takeIf { it > 0 } ?: MIN_AUTO_CONTEXT
+        val kvMiB = if (model.kvStorageMiBPer1k > 0) model.kvMemoryMiBPer1k * tokens / 1024 + KV_PAGE_ALLOWANCE_MIB
+            else model.contextMiBPer1k * tokens / 1024
         if (!model.streamed) return (model.sizeBytes shr 20).toInt() + kvMiB + 512 + 512
         return streamPlan(null, model.residentMiB, kvMiB, settings, 0, model.stream,
             if (settings.gpu) 2048 else 512, 512).requiredMiB
@@ -405,21 +434,65 @@ object EngineController {
         return (memory.availMem shr 20).toInt()
     }
 
+    /**
+     * The context window to load. Fixed sizes are kept. Otherwise the KV cache gets memory nothing else needs: Auto
+     * takes half of what is left once a streamed model has its full-speed expert cache (resident models: once the
+     * model fits), leaving the rest to the phone; Max takes all of it with the expert cache at its floor, up to the
+     * trained length. Long messages and attachments still enlarge the window afterwards.
+     */
+    private fun resolveContext(available: Int, streamed: Boolean, residentMiB: Int, contextMiBPer1k: Int, fileBytes: Long,
+                               settings: Settings, visionMiB: Int, stream: StreamProfile, trained: Int,
+                               extraMiB: Int = 0, storageTokens: Int = Int.MAX_VALUE): Int {
+        if (settings.context > 0) return if (trained > 0) minOf(settings.context, trained) else settings.context
+        val max = settings.context == CONTEXT_MAX
+        val gpuStagingMiB = if (settings.gpu) GPU_STAGING_MIB else 0
+        val gpuWorkMiB = if (settings.gpu) GPU_WORK_MIB else 0
+        val fixedMiB = if (!streamed) {
+            (fileBytes shr 20).toInt() + 512 + gpuWorkMiB + 512 + maxOf(visionMiB, gpuStagingMiB)
+        } else {
+            val batch = if (settings.gpu) 2048 else 512
+            val workMiB = if (batch == 2048) 512 + GPU_WORK_MIB else stream.computeMiBPer512
+            val layerMiB = stream.layerWorkingSetMiB(batch)
+            val floor = maxOf(512, layerMiB)
+            val cache = settings.expertCacheMiB.takeIf { it > 0 } ?: if (max) floor else maxOf(floor, stream.speedCacheMiB)
+            residentMiB + cache + maxOf(0, layerMiB - cache) + maxOf(gpuStagingMiB, visionMiB) + workMiB + SYSTEM_RESERVE_MIB
+        }
+        val spareMiB = maxOf(0, available - fixedMiB - extraMiB).toLong().let { if (max) it else it / 2 }
+        val tokens = (spareMiB * 1024 / maxOf(1, contextMiBPer1k) / 1024 * 1024).toInt()
+        val limit = minOf(if (trained > 0) trained else MAX_UNKNOWN_CONTEXT, maxOf(MIN_AUTO_CONTEXT, storageTokens / 1024 * 1024))
+        return tokens.coerceIn(minOf(MIN_AUTO_CONTEXT, limit), limit)
+    }
+
     /** [visionMiB] is memory kept free for image encoding; 0 for a text-only load. */
     private fun loadOptions(context: Context, streamed: Boolean, residentMiB: Int, contextMiBPer1k: Int, fileBytes: Long,
-                            settings: Settings, visionMiB: Int, stream: StreamProfile): JSONObject {
+                            settings: Settings, visionMiB: Int, stream: StreamProfile, trained: Int,
+                            kvStorageMiBPer1k: Int = 0, kvMemoryMiBPer1k: Int = 0): JSONObject {
         val available = availableMiB(context)
+        // Keys and values on storage: memory holds the indexer rows and the pages attention reads; the window is also
+        // bounded by free storage (the engine reserves its whole file at load).
+        val onStorage = kvStorageMiBPer1k > 0
+        val memoryPerK = if (onStorage) kvMemoryMiBPer1k else contextMiBPer1k
+        val allowanceMiB = if (onStorage) KV_PAGE_ALLOWANCE_MIB else 0
+        val storageTokens = if (!onStorage) Int.MAX_VALUE else {
+            val freeMiB = ((ModelFiles.freeBytes(context) shr 20) - KV_STORAGE_MARGIN_MIB).coerceAtLeast(0)
+            (freeMiB * 1024 / kvStorageMiBPer1k).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+        val contextSize = resolveContext(available, streamed, residentMiB, memoryPerK, fileBytes, settings, visionMiB,
+            stream, trained, allowanceMiB, storageTokens)
         // Context state and compute buffers are allocated at load; admitting without them invites the low-memory killer.
         // Prompt batches of 512 tokens take the tiled GEMM path and need larger compute buffers.
         // GPU mode reads prompts in batches of 2048 tokens (fewer passes over the streamed experts, fuller GPU
         // tiles): larger compute buffers, plus staging for one GPU operation that is released after each prompt.
         val gpuWorkMiB = if (settings.gpu) GPU_WORK_MIB else 0
         val gpuStagingMiB = if (settings.gpu) GPU_STAGING_MIB else 0
-        val kvMiB = contextMiBPer1k * settings.context / 1024
+        val kvMiB = memoryPerK * contextSize / 1024 + allowanceMiB
         val workMiB = kvMiB + 512 + gpuWorkMiB
         val firstBatch = if (settings.gpu) 2048 else 512
-        val options = JSONObject().put("context", settings.context).put("batch", firstBatch)
+        val options = JSONObject().put("context", contextSize).put("batch", firstBatch)
             .put("threads", settings.threads)
+        // A picked file's trained length is known only to the engine, which caps an automatic window at it.
+        if (settings.context <= 0 && trained <= 0) options.put("context_up_to_trained", true)
+        if (onStorage) options.put("kv_file_dir", File(context.filesDir, "kv").apply { mkdirs() }.path)
         if (settings.gpu) options.put("gpu", true)
         if (!streamed) {
             val fileMiB = (fileBytes shr 20).toInt()
@@ -462,7 +535,8 @@ object EngineController {
         NativeBridge.unload()
         loadedSource = null
         fun options(visionMiB: Int) = loadOptions(context, source.streamed, source.residentMiB,
-            source.contextMiBPer1k, source.fileBytes, source.settings, visionMiB, source.stream)
+            source.contextMiBPer1k, source.fileBytes, source.settings, visionMiB, source.stream, source.trainedContext,
+            source.kvStorageMiBPer1k, source.kvMemoryMiBPer1k)
         val withVision = source.projectorPath?.let { path ->
             if (growing) options(source.visionMiB).put("mmproj", path)
             else runCatching { options(source.visionMiB).put("mmproj", path) }.getOrNull()
@@ -527,7 +601,7 @@ object EngineController {
                 status = if (growing) "Reading your message…" else "Ready", vision = vision)
                 .copy(modelSha256 = hash, architecture = info.getString("architecture"),
                     embeddingSize = info.getInt("embedding_size"), decoderBlocks = info.getInt("decoder_blocks"),
-                    thinkingSupported = info.optBoolean("thinking_supported"))
+                    thinkingSupported = info.optBoolean("thinking_supported"), contextSize = info.getInt("context"))
         }
     }
 
@@ -633,9 +707,19 @@ object EngineController {
             val result = try {
                 val messages = JSONArray().put(JSONObject().put("role", "system").put("content", settings.systemPrompt))
                 requestMessages(chat, engine.vision).forEach { messages.put(it) }
-                request.put("messages", messages).put("max_tokens", settings.maxTokens)
+                // Without a limit the answer may run to the end of the model's trained context, as far as the
+                // loaded window allows; the prompt only has to leave ANSWER_RESERVE tokens of room.
+                val maxTokens = settings.maxTokens.takeIf { it > 0 } ?: trainedContext ?: (1 shl 20)
+                request.put("messages", messages).put("max_tokens", maxTokens)
+                    .put("output_reserve", minOf(maxTokens, ANSWER_RESERVE))
                     .put("temperature", settings.temperature.toDouble()).put("seed", 42).put("thinking", thinking)
                     .put("ignore_eos", false)
+                // A chat that keeps its state restores it when another chat or a reload replaced it in memory, and
+                // saves it after each answer. It needs a verified model, and thinking turns are rebuilt anyway
+                // (their reasoning is not sent back), so they neither read nor write it.
+                if (chat.session && modelHash != null && !thinking) {
+                    request.put("session", JSONObject().put("path", ChatStore.sessionFile(chat.id).absolutePath))
+                }
                 if (steering.enabled) {
                     request.put("model_sha256", engine.modelSha256)
                         .put("steering", requireNotNull(engine.steeringProfile).request(app, steering.strength))
@@ -699,11 +783,17 @@ object EngineController {
                 if (thoughtMs != null) append(" · thought %.1f s".format(Locale.US, thoughtMs / 1000.0))
                 if (termination == "cancelled") append(" · stopped")
                 if (termination == "length") append(" · length limit")
+                if (termination == "context") append(" · context full")
+                json.optJSONObject("session")?.takeIf { it.optString("status") == "restored" }?.let {
+                    append(" · resumed ${it.optInt("restored_tokens")} saved tokens")
+                }
                 if (!json.isNull("steering")) append(" · steering %+.2f".format(Locale.US, steering.strength))
             }
             val stopped = termination == "cancelled"
+            val contextTokens = json.getInt("prompt_tokens") + json.getInt("generated_tokens")
             ChatStore.updateMessage(chat.id, answerId, true) { it.copy(text = answer, streaming = false, stats = stats, stopped = stopped,
-                steering = json.optJSONObject("steering")?.toString(), reasoning = split?.reasoning, reasoningMs = thoughtMs) }
+                steering = json.optJSONObject("steering")?.toString(), reasoning = split?.reasoning, reasoningMs = thoughtMs,
+                contextTokens = contextTokens) }
             update { s ->
                 s.copy(phase = Phase.Ready, status = "Ready", lastResult = json.toString(2), lastSpeed = speed, generation = null)
             }

@@ -70,6 +70,11 @@ data class StreamProfile(
     val computeMiBPer512: Int = 512,
     /** Engine load options measured for this model, applied over the streamed defaults. */
     val tuning: Map<String, Any> = emptyMap(),
+    /**
+     * Expert cache the model needs for its measured speed; the automatic context window takes only memory beyond it
+     * (Flash-Next: 1,792 MiB in D032; the 35B builds: 2 GiB, D024).
+     */
+    val speedCacheMiB: Int = 2048,
 ) {
     /** MiB of one layer's experts that a batch of [batch] tokens holds resident. */
     fun layerWorkingSetMiB(batch: Int): Int {
@@ -100,6 +105,14 @@ data class CatalogModel(
     val residentMiB: Int,
     /** KV cache plus recurrent state per 1024 context tokens, in MiB (F16 cache). */
     val contextMiBPer1k: Int,
+    /** The context length the model was trained for (GGUF context_length). */
+    val trainedContext: Int,
+    /**
+     * Sparse-attention models whose attention keys and values can live on storage (kv_file_dir, D034): storage and
+     * memory per 1024 context tokens then; 0 keeps them in memory.
+     */
+    val kvStorageMiBPer1k: Int = 0,
+    val kvMemoryMiBPer1k: Int = 0,
     /** Vision encoder (mmproj) that lets this model read images; null for text-only models. */
     val projector: Artifact? = null,
     /** Parameter count shown on the model's badge. */
@@ -131,7 +144,8 @@ object Catalog {
             repository = "Qwen/Qwen3-0.6B-GGUF", revision = "23749fefcc72300e3a2ad315e1317431b06b590a",
             file = "Qwen3-0.6B-Q8_0.gguf", sizeBytes = 639_446_688L,
             sha256 = "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
-            license = "Apache-2.0", streamed = false, residentMiB = 610, contextMiBPer1k = 112, badge = "0.6B",
+            license = "Apache-2.0", streamed = false, residentMiB = 610, contextMiBPer1k = 112, trainedContext = 40_960,
+            badge = "0.6B",
         ),
         CatalogModel(
             id = "qwen3.6-35b-a3b-iq2m", name = "Qwen3.6 35B-A3B · 2.7-bit",
@@ -142,7 +156,7 @@ object Catalog {
             repository = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF", revision = "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
             file = "Qwen3.6-35B-A3B-UD-IQ2_M.gguf", sizeBytes = 11_882_969_376L,
             sha256 = "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
-            license = "Apache-2.0", streamed = true, residentMiB = 1430, contextMiBPer1k = 40,
+            license = "Apache-2.0", streamed = true, residentMiB = 1430, contextMiBPer1k = 40, trainedContext = 262_144,
             projector = qwen36Projector, badge = "35B",
             stream = StreamProfile(layerExpertsMiB = 240, experts = 256, expertsUsed = 8),
         ),
@@ -155,7 +169,7 @@ object Catalog {
             repository = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF", revision = "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
             file = "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", sizeBytes = 22_663_387_424L,
             sha256 = "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
-            license = "Apache-2.0", streamed = true, residentMiB = 1935, contextMiBPer1k = 40,
+            license = "Apache-2.0", streamed = true, residentMiB = 1935, contextMiBPer1k = 40, trainedContext = 262_144,
             projector = qwen36Projector, badge = "35B",
             stream = StreamProfile(layerExpertsMiB = 466, experts = 256, expertsUsed = 8),
         ),
@@ -173,7 +187,10 @@ object Catalog {
             file = "Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf", sizeBytes = 78_869_128_640L,
             sha256 = "f26a5e679710fb4cd048f481ff082d9af9c79fbd640d1867ef58c425518659d7",
             // Shared weights 3,372 MiB, recurrent state 113 MiB; the expert banks and n-gram table are file-backed.
-            license = "Qwen Community 1.0", streamed = true, residentMiB = 3500, contextMiBPer1k = 30,
+            license = "Qwen Community 1.0", streamed = true, residentMiB = 3500, contextMiBPer1k = 30, trainedContext = 262_144,
+            // QSA reads 2,048 selected cells per layer: its 24 KiB per token of keys and values stay on storage and
+            // only the 6 KiB of indexer rows in memory.
+            kvStorageMiBPer1k = 24, kvMemoryMiBPer1k = 6,
             badge = "125B",
             // Compute buffers measured on the host: 518 MiB at 512 tokens and 4,096 context, 534 at 16,384; linear
             // in the batch. 512 experts: a prompt shorter than ~118 tokens uses under 90% of a layer's experts, so
@@ -186,7 +203,7 @@ object Catalog {
             stream = StreamProfile(layerExpertsMiB = 916, experts = 512, expertsUsed = 10, computeMiBPer512 = 540,
                 tuning = mapOf("prefill_prefetch_min_coverage" to 0.9, "speculative_pool" to true,
                     "lookahead_layers" to 2, "lookahead2_count" to 5, "read_priority" to true, "prefetch_inflight" to 2,
-                    "expert_pack_split" to 2, "lookahead_router_q8" to true)),
+                    "expert_pack_split" to 2, "lookahead_router_q8" to true), speedCacheMiB = 1792),
             parts = listOf(
                 ArtifactPart("UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00001-of-00003.gguf", 10_946_624L),
                 ArtifactPart("UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00002-of-00003.gguf", 49_979_779_296L),

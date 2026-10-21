@@ -615,3 +615,95 @@ The interaction is not explained, so the patch is withdrawn.
 - energy.
 
 The phone's AP reached 58 °C and the battery 47 °C during this session on USB power. The slow runs with the withdrawn patch (2.25–2.42 tokens/s, one of them without cooling) are excluded from the table.
+
+## D033: Saved chat sessions, opt-in per chat — 2026-10-21
+
+**Why.** D027 keeps a chat's state in memory between turns, but only while the model stays loaded and no other chat answers. Coming back to a chat later meant evaluating the whole conversation again. On Flash-Next that costs about 11 s per 52 prompt tokens on the Galaxy (D032).
+
+**Request.** `session: {path, restore = true, save = true}`. The engine keeps two files:
+- `path`: llama.cpp's sequence-state file. It holds the tokens, the KV cache cells and the recurrent state.
+- `path.json`: a record with `format` (`equity-session`), `version`, `engine`, `model_sha256`, `architecture`, `tokens` and `bytes`. `engine` is the llama.cpp revision, a 12-hex hash of each applied patch (from `dependencies.json`, at configure time) and the state-file version.
+
+**Restore.** It runs before the reuse decision, only when the context does not already hold a usable prefix. The result reports one `session.status`:
+- `in_memory`: the context holds a usable prefix, so the file is not read;
+- `restored`: the file was read (it also reports `restored_tokens`, `bytes` and `restore_ms`);
+- `none`: no file;
+- `not_requested`: reuse does not apply (images, steering, MTP, `prompt_cache: false`), or the request said not to restore.
+
+A file is read only when:
+- its record matches this engine and this model's SHA-256;
+- its tokens are a strict prefix of the new prompt;
+- the tokens loaded back equal those in the header.
+
+Otherwise:
+- a session of another model is kept for that model (`other_model`);
+- an unreadable, incompatible or non-extending session (an edited or regenerated turn) is deleted (`unreadable`, `incompatible`, `mismatch`), and so is one that fails to load (`failed`). The prompt is then rebuilt as without a session.
+
+**Save.** After a turn whose state D027 keeps, and only for a model with a known SHA-256. The state is written to `path.partial` and the record to `path.json.partial`, then both are renamed. A crash therefore leaves the previous session (an earlier prefix of the same chat) or none. The result reports `saved_tokens`, `saved_bytes` and `save_ms`, or `save_error`.
+
+**Saved only when the next turn will use it.** Before writing, the engine renders the conversation with this answer and a following user message, and checks that the template reproduces the context's tokens. If it does not, the result says `save_skipped: not_extendable`. That happens when the template renders earlier answers differently (the 35B and the small Qwen3 models, D027) or when the answer re-tokenizes differently. Without this check, those chats would write a file every turn only to delete it on the next. `force: true` writes anyway; the checks use it on the random-weight fixtures.
+
+**App.**
+- The Chat settings dialog (the tune button, beside directional steering) has a "Remember this chat" switch per chat, off by default. It shows the saved size and token count and has a "Delete saved state" button.
+- The file is `chats/<id>/session.state`. It is deleted:
+  - with the chat;
+  - when the switch is turned off;
+  - from the dialog;
+  - when the model is deleted (`deleteSessionsOf` matches the record's SHA-256).
+- Thinking turns send no session: their history drops the reasoning, so the next prompt never extends the state.
+- A resumed answer's stats say "resumed N saved tokens".
+
+**Size.** On Flash-Next a session holds the 36 DeltaNet layers' recurrent state, which has a fixed size, plus the attention and indexer cells (30 KiB per token, an estimate from the cache shapes). The host check's 75-token session measured 120.3 MB. A fixture's is 0.27 MB.
+
+**Correctness** (`eqt-check`, case `session_save_restore`):
+1. The first turn is saved with model hash `a`.
+2. With hash `b`, the session is kept and not read.
+3. After a reload with `a`, the restored second turn must equal the in-memory reuse bitwise, with the same reused count. If the template allows no reuse, the session must be deleted and the rebuild must equal the plain rebuild.
+4. The check also requires the save decision to match the in-memory reuse.
+
+Results:
+- Real Flash-Next on the host: the state was judged extendable and saved, then `restored` (75 tokens), bitwise equal.
+- Host fixtures, with the attention keys and values in memory and on storage: the not-extendable, forced-save, other-model and mismatch paths pass.
+- The Linux container passes the same lifecycle checks with real `mmap`, `fallocate` and hole punching.
+
+**Not measured:** save and restore times on the Galaxy (UFS 4.0), and long sessions there.
+
+## D034: Attention keys and values on storage for sparse attention — 2026-10-21
+
+**Why.** On Flash-Next the context costs 30 KiB per token:
+- the 12 QSA layers' keys and values, 24 KiB (2 KV heads × 256 × 2 × F16 × 12);
+- the block indexer's pooled keys, 6 KiB.
+
+At 128K tokens that is 3.75 GiB, on a phone where the expert cache and 3.4 GiB of shared weights already compete for memory. QSA reads, per layer and decoded token, only the 2,048 cells its indexer selects (512 blocks of 4) plus the tail. The CPU flash-attention kernel skips masked cells without touching their keys or values (`ggml_compute_forward_flash_attn_ext_f16_one_chunk`, the decode path).
+
+**Design** (patch 0006, `native/kv_file.cpp`, load option `kv_file_dir`):
+- Patch 0006 adds `llama_set_kv_buft_override`, with which the host chooses the buffer type of each KV cache layer by cache tag. Equity hooks only the attention cache (tag `""`). The indexer (`idx_`) is scored over every cell for every token, so it stays in memory.
+- The buffer type maps a file shared, from `kv_file_dir`:
+  - The file is created with `mkostemp` and unlinked immediately (Windows: `FILE_FLAG_DELETE_ON_CLOSE`). Its storage is released when the context is freed or the process ends, also after a crash. No file outlives the model load.
+  - The whole size is reserved at load (`posix_fallocate`), so a full device fails the load, not a write during generation.
+  - Clearing the cache releases and re-reserves the file's blocks (punch hole), so the zeros cost no writes.
+  - `MADV_RANDOM`: reads fetch the selected pages, not their neighbours.
+- The result:
+  1. the indexer and the recurrent state stay in RAM;
+  2. the remaining keys and values live in flash;
+  3. the indexer chooses the blocks;
+  4. only the missing blocks are read.
+
+  The block cache is the kernel's page cache. A 4-cell block of one layer's keys is 4 KiB, one page, and so is its block of values. Blocks reused across tokens stay cached. Under memory pressure the kernel evicts them, instead of the app being killed. The kernel writes new tokens' cells back to storage (24 KiB per token).
+- The data are the bytes llama.cpp would hold in RAM, read by the same kernels, so outputs are bitwise equal by construction. That is tested, not assumed.
+
+**Admission and sizing.**
+- The engine counts the attention keys and values as at most 128 MiB of memory (the page allowance). It reports `kv_on_storage: {directory, reserved_bytes}` in the configuration.
+- The app enables it for catalog models with `kvStorageMiBPer1k` (Flash-Next: 24 MiB on storage and 6 MiB in memory per 1K tokens). Auto and Max then size the window from the 6 MiB of memory per 1K tokens. The window is also bounded by free storage minus 2 GiB. A 128K window, for example, needs 768 MiB of indexer memory plus the allowance, and reserves 3 GiB of storage while loaded.
+
+**Correctness:**
+- Host, 24 greedy tokens with logits: bitwise equal with the cache in memory and on storage, on 4 models (tiny qwen4exp with QSA, tiny qwen35moe, Qwen3.5-0.8B, Qwen3-0.6B). No file was left after exit.
+- Real Flash-Next on the host, 4,096-token window, 16 greedy tokens: logits and tokens bitwise equal. The file reserved 96 MiB, exactly 4,096 × 24 KiB, so only the attention keys and values went to storage. Decode measured 1.75 and 1.68 tokens/s, one host run each: not a phone measurement.
+- `verify_streaming` adds `kv_on_storage_prefetch` and a second lifecycle check (cancellation, reload, sessions) with `kv_file_dir`. Every case passes on the three fixtures, on the host and in the Linux container.
+
+**Not yet measured, and how it could cost speed:**
+- Decode at short context on the Galaxy. Every page should stay cached, but the kernel's write-back of new cells shares storage with expert reads.
+- Long-context decode. Pages that expert reads evict must be read back. The worst case is 2,048 cells × 2 KiB × 12 layers = 48 MiB per token, against about 900 MB of experts if every one misses.
+- Prefill. The tiled prompt kernel reads every tile that holds a selected cell for any query of the tile.
+
+These measurements belong to a later session. A long prompt is expensive to measure on the phone: Flash-Next reads about 46 GB of experts per 512-token batch.

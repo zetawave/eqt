@@ -9,11 +9,15 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,8 +30,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
@@ -35,17 +41,23 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.SdStorage
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -57,12 +69,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -74,6 +88,7 @@ import kotlinx.coroutines.withContext
 import org.equity.app.Artifact
 import org.equity.app.Catalog
 import org.equity.app.CatalogModel
+import org.equity.app.ChatStore
 import org.equity.app.Downloads
 import org.equity.app.EngineController
 import org.equity.app.EngineState
@@ -91,17 +106,14 @@ fun ModelsScreen(engine: EngineState, onOpenChat: () -> Unit) {
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            Column(Modifier.statusBarsPadding().padding(top = 20.dp)) {
+            Column(Modifier.statusBarsPadding().padding(top = 20.dp, start = 4.dp, bottom = 2.dp)) {
                 Text("Models", style = MaterialTheme.typography.headlineMedium)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Download once, then run fully offline. Files stay in Equity's private storage and are checked against a pinned fingerprint.",
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("Download once, then run offline. Files are checked against pinned fingerprints.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item { DeviceCard() }
@@ -113,20 +125,17 @@ fun ModelsScreen(engine: EngineState, onOpenChat: () -> Unit) {
         }
         item {
             val enabled = engine.phase == Phase.Empty || engine.phase == Phase.Ready
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shape = RoundedCornerShape(24.dp),
-            ) {
-                Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(16.dp))
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Open a local GGUF", style = MaterialTheme.typography.titleSmall)
-                        Text("Use a Qwen3 or Qwen3.5/3.6 file already on this phone. Large MoE files stream their experts automatically.",
+                        Text("Qwen3, Qwen3.5/3.6 or Qwen3.8 files on this phone",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Spacer(Modifier.width(12.dp))
                     OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = enabled) { Text("Open") }
                 }
             }
@@ -148,9 +157,12 @@ private fun rememberAvailableMemory(): Long {
     return available
 }
 
-/** Free memory against what [model] needs at full speed, with the way to free more when it falls short. */
+/**
+ * Free memory against what [model] needs at full speed, with the way to free more when it falls short. With
+ * [shortfallOnly] nothing is shown while there is enough.
+ */
 @Composable
-private fun MemoryNeed(model: CatalogModel) {
+private fun MemoryNeed(model: CatalogModel, shortfallOnly: Boolean = false) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val available = rememberAvailableMemory()
@@ -159,7 +171,8 @@ private fun MemoryNeed(model: CatalogModel) {
     var explain by remember { mutableStateOf(false) }
     if (available <= 0) return
     val enough = available >= needed
-    Spacer(Modifier.height(10.dp))
+    if (enough && shortfallOnly) return
+    Spacer(Modifier.height(8.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             if (enough) "${formatBytes(available)} free · full speed needs ${formatBytes(needed)}"
@@ -215,24 +228,25 @@ private fun DeviceCard() {
         }
     }
     val (available, total, storage) = snapshot
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Metric(Icons.Outlined.Memory, "Free memory", if (total > 0) "${formatBytes(available)} of ${formatBytes(total)}" else "…", Modifier.weight(1f))
-        Metric(Icons.Outlined.SdStorage, "Free storage", if (storage > 0) formatBytes(storage) else "…", Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun Metric(icon: ImageVector, label: String, value: String, modifier: Modifier) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(20.dp), modifier = modifier) {
-        Column(Modifier.padding(16.dp)) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.height(10.dp))
-            Text(value, style = MaterialTheme.typography.titleSmall)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(20.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Metric(Icons.Outlined.Memory, if (total > 0) "${formatBytes(available)} of ${formatBytes(total)} free" else "…",
+                "Memory", Modifier.weight(1f))
+            Metric(Icons.Outlined.SdStorage, if (storage > 0) "${formatBytes(storage)} free" else "…", "Storage", Modifier.weight(1f))
         }
     }
 }
 
+@Composable
+private fun Metric(icon: ImageVector, value: String, label: String, modifier: Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(value, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -> Unit) {
     val context = LocalContext.current
@@ -247,6 +261,8 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
     val loading = engine.modelId == model.id && engine.phase == Phase.Loading
     val engineIdle = engine.phase == Phase.Empty || engine.phase == Phase.Ready
     var confirmDelete by remember { mutableStateOf(false) }
+    var details by rememberSaveable(model.id) { mutableStateOf(false) }
+    var options by remember { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Downloads.start(context, model.artifact) }
     val startDownload = {
         val needsPermission = Build.VERSION.SDK_INT >= 33 &&
@@ -258,105 +274,127 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
     Card(
         colors = CardDefaults.cardColors(containerColor = colors.surfaceContainer),
         border = if (loaded) BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)) else null,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(20.dp),
     ) {
-        Column(Modifier.padding(20.dp)) {
+        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(44.dp).background(BrandGradient, CircleShape), contentAlignment = Alignment.Center) {
-                    Text(model.badge, color = colors.surface, fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp, fontFamily = Inter)
+                Box(Modifier.size(36.dp).background(BrandGradient, CircleShape), contentAlignment = Alignment.Center) {
+                    Text(model.badge, color = colors.surface, fontWeight = FontWeight.Bold, fontSize = 10.sp, fontFamily = Inter)
                 }
-                Spacer(Modifier.width(14.dp))
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(model.name, style = MaterialTheme.typography.titleMedium)
-                    Text(model.tagline, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    Text(model.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(formatBytes(model.sizeBytes), if (model.streamed) "streamed" else "in memory",
+                            "images".takeIf { model.projector != null }).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1,
+                    )
                 }
                 if (loaded) Pill("Active", colors.primaryContainer, colors.onPrimaryContainer)
-                else if (installed) Icon(Icons.Outlined.CheckCircle, contentDescription = "Downloaded", tint = colors.primary)
+                else if (installed) Icon(Icons.Outlined.CheckCircle, contentDescription = "Downloaded", tint = colors.primary,
+                    modifier = Modifier.size(20.dp))
+                if (model.projector != null || installed || partial > 0) IconButton(onClick = { options = true }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "Options for ${model.name}", tint = colors.onSurfaceVariant)
+                } else Spacer(Modifier.width(12.dp))
             }
-            Spacer(Modifier.height(14.dp))
-            Text(model.description, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Pill(formatBytes(model.sizeBytes), colors.surfaceContainerHighest, colors.onSurface)
-                Pill(if (model.streamed) "Expert streaming" else "In memory", colors.surfaceContainerHighest, colors.onSurface)
-                if (model.projector != null) Pill("Images", colors.surfaceContainerHighest, colors.onSurface)
-                Pill(model.license, colors.surfaceContainerHighest, colors.onSurfaceVariant)
-            }
-            Spacer(Modifier.height(18.dp))
-            when {
-                loading -> {
-                    val percent = engine.loadPercent
-                    if (percent != null) ThinProgress(percent / 100f) else ThinProgress(null)
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(engine.status, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { EngineController.stop() }) { Text("Cancel") }
-                    }
-                }
-                transferring -> {
-                    DownloadProgress(model.artifact, work)
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { Downloads.pause(context, model.artifact) }) {
-                            Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Pause")
+            Column(Modifier.padding(end = 8.dp, top = 8.dp)) {
+                when {
+                    loading -> {
+                        val percent = engine.loadPercent
+                        if (percent != null) ThinProgress(percent / 100f) else ThinProgress(null)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(engine.status, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { EngineController.stop() }) { Text("Cancel") }
                         }
-                        TextButton(onClick = { confirmDelete = true }) { Text("Cancel download") }
                     }
-                }
-                installed && loaded -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onOpenChat) { Text("Open chat") }
-                    OutlinedButton(onClick = { EngineController.unload() }, enabled = engine.phase == Phase.Ready) { Text("Unload") }
-                }
-                installed -> Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    transferring -> {
+                        DownloadProgress(model.artifact, work)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { Downloads.pause(context, model.artifact) }) {
+                                Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Pause")
+                            }
+                            TextButton(onClick = { confirmDelete = true }) { Text("Cancel download") }
+                        }
+                    }
+                    installed && loaded -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onOpenChat) { Text("Open chat") }
+                        OutlinedButton(onClick = { EngineController.unload() }, enabled = engine.phase == Phase.Ready) { Text("Unload") }
+                    }
+                    installed -> {
                         Button(onClick = { EngineController.load(context, model) }, enabled = engineIdle) {
                             Text(if (engine.phase == Phase.Ready) "Switch to this model" else "Load")
                         }
-                        Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { confirmDelete = true }) {
-                            Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Delete")
+                        if (model.streamed) MemoryNeed(model, shortfallOnly = true)
+                    }
+                    else -> {
+                        if (state == WorkInfo.State.FAILED) {
+                            Text(work?.outputData?.getString(Downloads.KEY_ERROR) ?: "Download failed",
+                                style = MaterialTheme.typography.bodySmall, color = colors.error)
+                            Spacer(Modifier.height(6.dp))
                         }
-                    }
-                    if (model.streamed) MemoryNeed(model)
-                }
-                else -> Column {
-                    if (state == WorkInfo.State.FAILED) {
-                        Text(work?.outputData?.getString(Downloads.KEY_ERROR) ?: "Download failed",
-                            style = MaterialTheme.typography.bodySmall, color = colors.error)
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    if (partial > 0) {
-                        ThinProgress(partial.toFloat() / model.sizeBytes)
-                        Spacer(Modifier.height(6.dp))
-                        Text("Paused at ${formatBytes(partial)} of ${formatBytes(model.sizeBytes)}",
-                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (partial > 0) {
+                            ThinProgress(partial.toFloat() / model.sizeBytes)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Paused at ${formatBytes(partial)} of ${formatBytes(model.sizeBytes)}",
+                                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            Spacer(Modifier.height(6.dp))
+                        }
                         Button(onClick = startDownload) {
                             Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(if (partial > 0) "Resume" else "Download · ${formatBytes(model.sizeBytes)}")
                         }
-                        if (partial > 0) {
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { confirmDelete = true }) { Text("Discard") }
-                        }
                     }
-                    if (model.streamed && partial == 0L) {
-                        Spacer(Modifier.height(8.dp))
+                }
+            }
+            // Details that are not needed to load or download: collapsed until asked for.
+            Row(
+                Modifier.fillMaxWidth().clickable { details = !details }.padding(top = 4.dp, bottom = 4.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(model.tagline, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Icon(if (details) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                    contentDescription = if (details) "Hide details" else "Show details", tint = colors.onSurfaceVariant)
+            }
+            AnimatedVisibility(details) {
+                Column(Modifier.padding(end = 8.dp, bottom = 8.dp)) {
+                    Text(model.description, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Pill(if (model.streamed) "Expert streaming" else "In memory", colors.surfaceContainerHighest, colors.onSurface)
+                        if (model.projector != null) Pill("Images", colors.surfaceContainerHighest, colors.onSurface)
+                        Pill(model.license, colors.surfaceContainerHighest, colors.onSurfaceVariant)
+                    }
+                    if (model.streamed && installed) MemoryNeed(model)
+                    if (model.streamed && !installed && partial == 0L) {
+                        Spacer(Modifier.height(6.dp))
                         Text("Downloads over Wi-Fi only and continues in the background.",
                             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     }
                 }
             }
-            model.projector?.let { ProjectorSection(model, it, engine) }
-            if (installed) SteeringSection(model.sha256, engine, loaded)
+        }
+    }
+
+    if (options) ModelOptionsSheet(
+        title = model.name,
+        subtitle = "${model.license} · ${formatBytes(model.sizeBytes)}",
+        onDismiss = { options = false },
+    ) {
+        model.projector?.let { ProjectorSection(model, it, engine) }
+        if (installed) SteeringSection(model.sha256, engine, loaded)
+        if ((installed || partial > 0) && !transferring) {
+            Spacer(Modifier.height(18.dp))
+            HorizontalDivider(color = colors.outlineVariant)
+            Spacer(Modifier.height(6.dp))
+            TextButton(onClick = { options = false; confirmDelete = true }, enabled = !loading) {
+                Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.error)
+                Spacer(Modifier.width(6.dp))
+                Text(if (installed) "Delete model" else "Discard download", color = colors.error)
+            }
         }
     }
 
@@ -369,6 +407,7 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                 TextButton(onClick = {
                     confirmDelete = false
                     if (engine.modelId == model.id) EngineController.unload()
+                    if (installed) ChatStore.deleteSessionsOf(model.sha256)
                     Downloads.delete(context, model.artifact) { refresh++ }
                 }) { Text("Delete", color = colors.error) }
             },
@@ -378,25 +417,42 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
     }
 }
 
+/** A model's settings that are not needed to load it (image support, steering, deletion), in a sheet of their own. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModelOptionsSheet(title: String, subtitle: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            content()
+        }
+    }
+}
+
 /** A GGUF opened from the phone's files: shown while loaded, for its steering vector. */
 @Composable
 private fun LocalModelCard(engine: EngineState) {
     val colors = MaterialTheme.colorScheme
+    var options by remember { mutableStateOf(false) }
     Card(
         colors = CardDefaults.cardColors(containerColor = colors.surfaceContainer),
         border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(20.dp),
     ) {
-        Column(Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(engine.modelName ?: "Local model", style = MaterialTheme.typography.titleMedium)
-                    Text("Opened from this phone's files", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                }
-                Pill("Active", colors.primaryContainer, colors.onPrimaryContainer)
+        Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(engine.modelName ?: "Local model", style = MaterialTheme.typography.titleSmall)
+                Text("Opened from this phone's files", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             }
-            SteeringSection(engine.modelSha256, engine, loaded = true)
+            Pill("Active", colors.primaryContainer, colors.onPrimaryContainer)
+            IconButton(onClick = { options = true }) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "Options for the local model", tint = colors.onSurfaceVariant)
+            }
         }
+    }
+    if (options) ModelOptionsSheet(engine.modelName ?: "Local model", "Opened from this phone's files", { options = false }) {
+        SteeringSection(engine.modelSha256, engine, loaded = true)
     }
 }
 

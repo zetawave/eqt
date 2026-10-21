@@ -128,6 +128,7 @@ import org.equity.app.SettingsStore
 import org.equity.app.hasVisibleContent
 import java.util.Locale
 import java.io.File
+import kotlin.math.roundToInt
 
 private val Suggestions = listOf(
     "Spiegami in due frasi la differenza tra RAM e memoria di archiviazione.",
@@ -225,6 +226,10 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
         }
     }
     val answeringElsewhere = engine.generation != null && engine.generation.chatId != chats.currentId
+    // Context this chat fills: what its last finished answer left in use, plus the tokens arriving for a new answer
+    // (whose new prompt text is counted once it finishes).
+    val contextUsed = (messages.lastOrNull { !it.fromUser && it.contextTokens != null }?.contextTokens ?: 0) +
+        (engine.generation?.takeIf { it.chatId == chats.currentId }?.tokens ?: 0)
     Column(Modifier.fillMaxSize().imePadding()) {
         ChatHeader(engine, chat?.title, onOpenChats, onNewChat = { ChatStore.newChat() }, canStartNew = chat != null)
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -261,17 +266,18 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
             onCamera = takePhoto,
             onFile = { documents.launch(arrayOf("*/*")) },
             onConfigure = { configuring = true },
-            steeringEnabled = chats.steering.enabled,
+            configured = chats.session || (chats.steering.enabled && engine.steeringProfile != null),
             thinking = settings.thinking && engine.thinkingSupported,
             thinkingSupported = engine.thinkingSupported,
             onToggleThinking = { SettingsStore.update(context) { it.copy(thinking = !it.thinking) } },
             onView = { viewing = it },
             onSend = { send(input) },
             onStop = { EngineController.stop() },
+            contextUsed = contextUsed,
         )
     }
     viewing?.let { ImageViewer(it) { viewing = null } }
-    if (configuring && engine.steeringProfile != null) ChatConfigurationDialog(engine, chats.steering) { configuring = false }
+    if (configuring) ChatConfigurationDialog(engine, chats, settings.thinking && engine.thinkingSupported) { configuring = false }
 }
 
 @Composable
@@ -523,13 +529,14 @@ private fun Composer(
     onCamera: () -> Unit,
     onFile: () -> Unit,
     onConfigure: () -> Unit,
-    steeringEnabled: Boolean,
+    configured: Boolean,
     thinking: Boolean,
     thinkingSupported: Boolean,
     onToggleThinking: () -> Unit,
     onView: (File) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    contextUsed: Int,
 ) {
     val colors = MaterialTheme.colorScheme
     val ready = engine.phase == Phase.Ready
@@ -611,10 +618,10 @@ private fun Composer(
                             )
                         }
                     }
-                    // Steering is the only chat setting: offered only while the loaded model has an imported vector.
-                    if (engine.steeringProfile != null) IconButton(onClick = onConfigure) {
-                        Icon(Icons.Outlined.Tune, contentDescription = "Chat configuration",
-                            tint = if (steeringEnabled) colors.primary else colors.onSurfaceVariant)
+                    // Chat settings: the saved state, and steering while the loaded model has an imported vector.
+                    IconButton(onClick = onConfigure) {
+                        Icon(Icons.Outlined.Tune, contentDescription = "Chat settings",
+                            tint = if (configured) colors.primary else colors.onSurfaceVariant)
                     }
                     // Applies to the next message; disabled when the loaded model's template has no thinking mode.
                     FilterChip(
@@ -627,6 +634,7 @@ private fun Composer(
                         modifier = Modifier.padding(start = 2.dp),
                     )
                     Spacer(Modifier.weight(1f))
+                    engine.contextSize?.takeIf { ready || generating }?.let { size -> ContextGauge(contextUsed, size) }
                     if (generating) {
                         FilledIconButton(
                             onClick = onStop,
@@ -646,6 +654,35 @@ private fun Composer(
             Spacer(Modifier.width(4.dp))
             Text("Runs on this device. Nothing is sent online.", style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+/** How much of the loaded context window this chat uses; a tap shows the numbers. Redrawn only as tokens arrive. */
+@Composable
+private fun ContextGauge(used: Int, size: Int) {
+    val colors = MaterialTheme.colorScheme
+    val share = (used.toFloat() / size).coerceIn(0f, 1f)
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }, modifier = Modifier.size(40.dp)) {
+            CircularProgressIndicator(
+                progress = { share },
+                modifier = Modifier.size(20.dp),
+                color = if (share >= 0.9f) colors.error else colors.primary,
+                trackColor = colors.surfaceContainerHighest,
+                strokeWidth = 2.5.dp,
+                gapSize = 0.dp,
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = colors.surfaceContainerHighest) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text("Context", style = MaterialTheme.typography.labelLarge)
+                Text("%,d of %,d tokens · %d%%".format(java.util.Locale.US, used, size, (share * 100).roundToInt()),
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                Text(if (share >= 0.9f) "Nearly full: a new chat starts fresh." else "Grows with the conversation.",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            }
         }
     }
 }

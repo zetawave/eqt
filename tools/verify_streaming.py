@@ -72,6 +72,9 @@ CASES = [
     dict(name="decode_reclaims_compute", batch=128,
          load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, read_priority=True,
                    prefetch_inflight=2, decode_reclaims_compute=True)),
+    # Attention keys and values in a file on storage ("{kvdir}": a directory on the target), mapped back in.
+    dict(name="kv_on_storage_prefetch", batch=128,
+         load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, kv_file_dir="{kvdir}")),
     # Expert pack (native/expert_pack.h): "{pack}" is replaced by the fixture's pack path.
     dict(name="pack_evicting", batch=128, load=dict(expert_cache_mib=1, io_threads=4, expert_pack="{pack}")),
     dict(name="pack_split3_pool_priority_two_layers", batch=128,
@@ -150,7 +153,9 @@ def main():
             pack, pack_verify = build_pack(runner, model, workdir)
             references, outcomes = {}, []
             for case in cases:
-                case = json.loads(json.dumps(case).replace('"{pack}"', json.dumps(str(pack))))
+                kvdir = str(workdir) if runner.local else REMOTE
+                case = json.loads(json.dumps(case).replace('"{pack}"', json.dumps(str(pack)))
+                                  .replace('"{kvdir}"', json.dumps(kvdir)))
                 if case["batch"] not in references:
                     request = json.loads(json.dumps(base))
                     request["load"].update(batch=case["batch"], mmap=True)
@@ -173,6 +178,9 @@ def main():
             lifecycle_request = json.loads(json.dumps(base))
             lifecycle_request["load"].update(expert_streaming=True, expert_cache_mib=1, io_threads=2, prefetch=True)
             lifecycle = runner.run("eqt-check", model, lifecycle_request, workdir)[1]
+            # The same state checks (sessions included) with the attention keys and values mapped from storage.
+            lifecycle_request["load"]["kv_file_dir"] = str(workdir) if runner.local else REMOTE
+            lifecycle_kv = runner.run("eqt-check", model, lifecycle_request, workdir)[1]
             rejected = json.loads(json.dumps(base))
             rejected["load"].update(expert_cache_mib=1)
             run, _ = runner.run("eqt-bench", model, rejected, workdir, check=False)
@@ -188,7 +196,8 @@ def main():
                     raise AssertionError("A pack of another model was not rejected")
             report["fixtures"].append(dict(model=fixture, model_sha256=hashes[local.name],
                                            binary_sha256=hashes[runner.tool("eqt-bench").name],
-                                           outcomes=outcomes, lifecycle=lifecycle, pack=str(pack),
+                                           outcomes=outcomes, lifecycle=lifecycle, lifecycle_kv_on_storage=lifecycle_kv,
+                                           pack=str(pack),
                                            pack_verify=pack_verify, rejects_foreign_pack=bool(foreign),
                                            rejects_cache_options_without_streaming=True))
         if not args.skip_mtp:
