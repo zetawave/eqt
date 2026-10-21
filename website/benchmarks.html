@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Equity — benchmarks</title>
+  <meta name="description" content="Equity's measurements on a stock Galaxy S24+: decode speed, prompt processing, quality and energy for models larger than the phone's memory, each tied to a record.">
+  <meta property="og:title" content="Equity — benchmarks">
+  <meta property="og:description" content="Decode speed, prompt processing, quality and energy, measured on the phone and dated.">
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/fonts/fonts.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="scroll-progress" aria-hidden="true"><span id="scroll-progress-bar"></span></div>
+
+<header class="nav" id="nav">
+  <div class="container nav-inner">
+    <a href="index.html" class="brand">
+      <img src="assets/logo.svg" alt="" width="26" height="26">
+      <span>Equity</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#flash-next">Flash Next</a>
+      <a href="#climb">35B climb</a>
+      <a href="#models">Models</a>
+      <a href="#numbers">Numbers</a>
+      <a href="#milestones">Milestones</a>
+    </nav>
+    <a class="nav-cta" href="index.html">Overview</a>
+    <a class="github-link" href="https://github.com/zetawave/eqt" target="_blank" rel="noopener noreferrer" aria-label="Equity on GitHub">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M12 .8a11.2 11.2 0 0 0-3.54 21.83c.56.1.76-.24.76-.54v-2.1c-3.1.67-3.76-1.32-3.76-1.32-.5-1.29-1.24-1.63-1.24-1.63-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 .1.74 2.01 3.21 1.52.1-.72.39-1.21.71-1.49-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.08 1.15a10.7 10.7 0 0 1 5.6 0c2.14-1.45 3.08-1.15 3.08-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.61 5.23-5.1 5.51.4.35.76 1.03.76 2.08v3.08c0 .3.2.65.77.54A11.2 11.2 0 0 0 12 .8Z"/>
+      </svg>
+    </a>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============================== HEADER ============================== -->
+  <section class="page-hero" id="top">
+    <div class="container">
+      <p class="eyebrow reveal">benchmarks · updated October 21, 2026</p>
+      <h1 class="reveal">Measured on <em>the phone</em>.</h1>
+      <p class="lede reveal">Every figure on this page comes from a stock Samsung Galaxy S24+ (Exynos 2400, 10.9 GiB visible
+        RAM) unless it says otherwise, and ties to a record in the repository's <span class="mono">results/</span> folder.
+        Nothing is extrapolated from other hardware. Owner-reported app observations and host checks are labeled as such.</p>
+      <p class="lede reveal">Short runs are cooled to the same skin temperature between arms. Identical runs still differ by up
+        to about 10%, because Android lowers the big cores' clocks within seconds of sustained load; sustained speed is
+        measured separately.</p>
+      <div class="legend reveal" aria-label="Kinds of results">
+        <span class="chip">device benchmark</span>
+        <span class="chip">owner observation</span>
+        <span class="chip">host check</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== FLASH NEXT ============================== -->
+  <section class="section" id="flash-next">
+    <div class="container">
+      <p class="eyebrow reveal">qwen3.8 flash next · 125B · 78.9 GB</p>
+      <h2 class="reveal">Seven times the phone's memory, <em>nearly twice as fast</em>.</h2>
+      <p class="lede reveal">Engine decode on the Galaxy, 64 greedy tokens, the same tokens in every arm. Each step is exact:
+        reads are scheduled differently, the computation is unchanged.</p>
+
+      <div class="chart reveal" role="img" aria-label="Flash Next decode speed in tokens per second: 1.53, 1.92, 2.40, 2.99, against a 5 tokens per second target line">
+        <div class="chart-target" style="--x:83.33"><span class="mono-dim">5 tok/s target</span></div>
+        <div class="chart-row" style="--w:25.5%">
+          <span class="chart-label">first streamed runs · 1 GiB cache</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">1.53</span>
+        </div>
+        <div class="chart-row" style="--w:32.0%">
+          <span class="chart-label">+ speculative pool · two-layer lookahead</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">1.92</span>
+        </div>
+        <div class="chart-row" style="--w:40.0%">
+          <span class="chart-label">+ demanded reads first</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">2.40</span>
+        </div>
+        <div class="chart-row is-final" style="--w:49.8%">
+          <span class="chart-label">+ expert pack · quantized lookahead router</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">2.99</span>
+        </div>
+      </div>
+      <p class="footnote mono-dim reveal">first runs 1.47–1.58 · demand-first 2.39–2.41 · last step: mean of four runs
+        (2.89–3.06), October 20, 2026 · the evening of October 21 measured 2.6–3.0 with the phone warmer · sustained speed,
+        energy and the quality of this 2-bit build are not measured yet</p>
+
+      <div class="stats-grid model-stats">
+        <div class="stat stat-accent reveal">
+          <div class="stat-val"><span class="count" data-count="2.99" data-decimals="2">2.99</span><span class="stat-unit">tok/s</span></div>
+          <div class="stat-label">engine decode, 64 tokens</div>
+          <div class="stat-sub">mean of four runs · 1.75 GiB expert cache · device benchmark</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val">8.7<span class="stat-unit">s</span></div>
+          <div class="stat-label">first token, resumed chat</div>
+          <div class="stat-sub">27.8 s rebuilt · a saved session restored in 72 ms · same tokens</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val">±0</div>
+          <div class="stat-label">cost of keys and values on storage</div>
+          <div class="stat-sub">4K window: 2.87 / 2.83 tok/s on storage, 2.61 / 2.69 in memory</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val">190<span class="stat-unit">s</span></div>
+          <div class="stat-label">46 GB of experts packed in place</div>
+          <div class="stat-sub">reversible, byte for byte · no second copy of the model needed</div>
+        </div>
+      </div>
+
+      <p class="lede reveal">Where a token's time goes, from the store's counters and a per-operation profile: storage is busy
+        about 80% of decoding and reads about 560 MB per token, of which a quarter is speculation the token never uses;
+        compute is shared between the 3.4 GiB of shared weights and the experts. The shared weights read at 24–27 GB/s while
+        decoding, against 33–38 GB/s in short kernel runs: at Android's first thermal status the big cores drop to
+        2.3–2.5 GHz within seconds.</p>
+      <p class="footnote mono-dim reveal">first owner-reported app result, October 19, 2026, before this tuning: 1.8 tok/s over
+        252 tokens, first token after 6.1 s · <a href="data/flash-next-owner-observation.json">observation record (JSON)</a></p>
+    </div>
+  </section>
+
+  <!-- ============================== CLIMB ============================== -->
+  <section class="section" id="climb">
+    <div class="container">
+      <p class="eyebrow reveal">the climb · qwen3.6 35B</p>
+      <h2 class="reveal">From <em>2.52</em> to <em>8.22 tokens/s</em> — one measured step at a time.</h2>
+      <p class="lede reveal">Qwen3.6-35B-A3B streamed on the phone, 64 greedy tokens, 128 from the six-thread step on,
+        alternating A/B arms. Every step is bitwise exact unless noted; identical token sequences across all arms.</p>
+
+      <div class="chart reveal" role="img" aria-label="Decode speed progression in tokens per second: 2.52, 2.68, 3.06, 3.48, 3.86, 4.49, 5.54, 6.85, 7.43, 7.85, 8.22, against a 5 tokens per second target line">
+        <div class="chart-target" style="--x:55.56"><span class="mono-dim">5 tok/s target</span></div>
+        <div class="chart-row" style="--w:28.0%">
+          <span class="chart-label">1 GiB cache · buffered · 4 I/O threads</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">2.52</span>
+        </div>
+        <div class="chart-row" style="--w:29.8%">
+          <span class="chart-label">direct I/O · 16 I/O threads</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">2.68</span>
+        </div>
+        <div class="chart-row" style="--w:34.0%">
+          <span class="chart-label">+ router lookahead</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">3.06</span>
+        </div>
+        <div class="chart-row" style="--w:38.7%">
+          <span class="chart-label">+ 2 GiB expert cache</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">3.48</span>
+        </div>
+        <div class="chart-row" style="--w:42.9%">
+          <span class="chart-label">+ zero-copy, page-congruent reads</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">3.86</span>
+        </div>
+        <div class="chart-row" style="--w:49.9%">
+          <span class="chart-label">+ 2-bit experts · UD-IQ2_M*&nbsp;(11.9 GB)</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">4.49</span>
+        </div>
+        <div class="chart-row" style="--w:61.6%">
+          <span class="chart-label">+ slot-addressed expert cache · UD-IQ2_M*</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">5.54</span>
+        </div>
+        <div class="chart-row" style="--w:76.1%">
+          <span class="chart-label">+ all six big cores</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">6.85</span>
+        </div>
+        <div class="chart-row" style="--w:82.6%">
+          <span class="chart-label">+ misses overlapped with resident experts</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">7.43</span>
+        </div>
+        <div class="chart-row" style="--w:87.2%">
+          <span class="chart-label">+ lookahead on its own thread</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">7.85</span>
+        </div>
+        <div class="chart-row is-final" style="--w:91.3%">
+          <span class="chart-label">+ mapped embeddings · reserved demand I/O</span>
+          <span class="chart-track"><span class="chart-bar"></span></span>
+          <span class="chart-val">8.22</span>
+        </div>
+      </div>
+      <p class="footnote mono-dim reveal">mean of 1–4 runs; runs disturbed by background activity are recorded and excluded ·
+        * different quantization, quality evaluated separately (26/27) · in the app, short answers on a cool phone: 7.4 tok/s
+        (2.7-bit) and 5.1 tok/s (4-bit), owner observations · sustained over 10 minutes on battery, with an older build:
+        ≈3.5 tok/s, where heat — not I/O — sets the pace; not yet re-measured</p>
+    </div>
+  </section>
+
+  <!-- ============================== MODELS ============================== -->
+  <section class="section" id="models">
+    <div class="container">
+      <p class="eyebrow reveal">by model</p>
+      <h2 class="reveal">What each build <em>does today</em>.</h2>
+
+      <div class="cards-grid">
+        <article class="card reveal">
+          <h3>Qwen3.6 · 35B · 2.7-bit</h3>
+          <p><strong>UD-IQ2_M · 11.9 GB</strong><br>
+            8.22 tok/s engine decode in short runs; 7.4 tok/s in the app (owner observation, short answer, cool phone).
+            Quality-v1: 26/27. An older build settled at about 3.5 tok/s over 10 minutes on battery.</p>
+        </article>
+        <article class="card reveal">
+          <h3>Qwen3.6 · 35B · 4-bit reference</h3>
+          <p><strong>UD-Q4_K_M · 22.7 GB</strong><br>
+            5.1 tok/s in the app (owner observation, short answer, cool phone). Quality-v1: 26/27, with 2.61 tok/s
+            median across that evaluation. Sustained speed on the current build is pending.</p>
+        </article>
+        <article class="card reveal">
+          <h3>Qwen3.8 · Flash Next · 125B</h3>
+          <p><strong>UD-Q2_K_XL · 78.9 GB · experimental</strong><br>
+            2.99 tok/s engine decode (mean of four 64-token runs) with its experts in a pack. Saved sessions and keys and
+            values on storage pass the exactness checks on the phone. Sustained speed, energy and quality are pending.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== NUMBERS ============================== -->
+  <section class="section" id="numbers">
+    <div class="container">
+      <p class="eyebrow reveal">numbers that hold · qwen3.6 35B</p>
+      <h2 class="reveal">What the work is <em>worth</em>, so far.</h2>
+      <p class="lede reveal">Each figure below is attributable to a specific change, measured on the phone, and recorded.</p>
+
+      <div class="stats-grid">
+        <div class="stat stat-accent reveal">
+          <div class="stat-val"><span class="count" data-count="8.22" data-decimals="2">8.22</span><span class="stat-unit">tok/s</span></div>
+          <div class="stat-label">engine decode, short runs</div>
+          <div class="stat-sub">from 2.52 at the first streamed run · 2.7-bit build, 2 GiB cache</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="19">19</span></div>
+          <div class="stat-label">page faults per token</div>
+          <div class="stat-sub">down from ~21,000 — slot-addressed expert cache</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="81.8" data-decimals="1" data-suffix="%">81.8%</span></div>
+          <div class="stat-label">router lookahead accuracy</div>
+          <div class="stat-sub">−40% decode I/O wait in its first version</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="3.8" data-decimals="1" data-suffix="×">3.8×</span></div>
+          <div class="stat-label">prefill matrix products, IQ3_XXS</div>
+          <div class="stat-sub">i8mm USMMLA microkernel · 2.9× on IQ2_XXS</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="3.2" data-decimals="1" data-suffix="×">3.2×</span></div>
+          <div class="stat-label">long-prompt prefill</div>
+          <div class="stat-sub">3,803 tokens: 521.6 s → 164.4 s, bit-identical logits</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="262144">262,144</span></div>
+          <div class="stat-label">tokens of context</div>
+          <div class="stat-sub">needle at 7,857 tokens answered correctly</div>
+        </div>
+        <div class="stat stat-accent reveal">
+          <div class="stat-val"><span class="count" data-count="26">26</span><span class="stat-unit">/27</span></div>
+          <div class="stat-label">quality-v1, both builds</div>
+          <div class="stat-sub">the 2.7-bit build is ~33% faster with no measured loss</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="1.07" data-decimals="2">1.07</span><span class="stat-unit">J</span></div>
+          <div class="stat-label">net energy per token</div>
+          <div class="stat-sub">read from the battery counter · ≈3.5 tok/s sustained, older build</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="7.4" data-decimals="1">7.4</span><span class="stat-unit">tok/s</span></div>
+          <div class="stat-label">in the app, 2.7-bit</div>
+          <div class="stat-sub">5.1 tok/s with the 4-bit reference build · short answers, cool phone</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="91" data-suffix="%">91%</span></div>
+          <div class="stat-label">expert cache hit rate</div>
+          <div class="stat-sub">per-layer quotas · 2 GiB budget · 2.7-bit build</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="1.2" data-decimals="1" data-suffix="×">1.2×</span></div>
+          <div class="stat-label">cost of a 2-token batch</div>
+          <div class="stat-sub">was ~1.9× · exact 2×2 tiles turned MTP from a loss into a gain</div>
+        </div>
+        <div class="stat reveal">
+          <div class="stat-val"><span class="count" data-count="332" data-prefix="−">−332</span><span class="stat-unit">MiB</span></div>
+          <div class="stat-label">resident memory</div>
+          <div class="stat-sub">token embedding mapped from the file · −515 MiB on the 4-bit build</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== MILESTONES ============================== -->
+  <section class="section" id="milestones">
+    <div class="container">
+      <p class="eyebrow reveal">milestones</p>
+      <h2 class="reveal">What Equity can do <em>now</em>, step by step.</h2>
+
+      <ol class="timeline">
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">October 21, 2026 · resume and long context</span><span class="tl-tag">capability</span></div>
+            <h3>Chats that resume at once; keys and values on storage</h3>
+            <p>A chat can save the model's state on the phone: on Flash Next a resumed 140-token chat showed its first
+              token after 8.7 s instead of 27.8 s, with the same tokens. Sparse-attention keys and values can live in a file
+              on storage, at no measurable cost on a 4K window. The recurrent state is now read in place, which saves about
+              10 ms per token in the profile.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">October 20, 2026 · the expert pack</span><span class="tl-tag">speed</span></div>
+            <h3>Flash Next at 2.99 tok/s, up from 1.5</h3>
+            <p>A speculative pool, a two-layer lookahead, demanded reads first, then an expert pack: 46 GB of experts moved
+              in place on the phone, reversibly, so each expert is one read. With a quantized lookahead router the engine
+              decodes at 2.99 tok/s on average, with the same tokens in every arm.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">October 19, 2026 · the 120B-class model</span><span class="tl-tag">capability</span></div>
+            <h3>125B parameters, 78.9 GB, running in the app</h3>
+            <p>Qwen3.8-Flash-Next adds 512-expert routing, a file-mapped n-gram table and support for its
+              hyper-connection residual. The owner's first app screenshot reports 1.8 tok/s over 252 tokens,
+              with the first token after 6.1 s. Host exactness checks pass.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">Equity's first beyond-RAM run</span><span class="tl-tag">exactness</span></div>
+            <h3>A model twice the device's memory, running on it</h3>
+            <p>The first target checkpoint — twice the phone's visible RAM — streams on a stock Android device at ~3.7–3.9 GiB RSS, the shared weights read once at
+              load in 4.3 s, the experts as demanded. On every verification fixture, streamed output is
+              <strong>bitwise identical</strong> to resident inference.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">the 5 tok/s barrier</span><span class="tl-tag">speed</span></div>
+            <h3>5.54 tok/s — from 2.52, with identical tokens</h3>
+            <p>The slot-addressed expert cache — reusable pages hooked into GGML's expert matrix product — took decode from
+              5.05 to 5.54 tok/s mean, and the whole climb from 2.52. In short runs on a cool phone the experimental target
+              is met; over minutes, power and heat set the speed, and that is measured too.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">past 5 tok/s in the app</span><span class="tl-tag">speed</span></div>
+            <h3>7.4 tok/s in the app; the 4-bit reference above 5</h3>
+            <p>A per-operation profile showed a token spending more time waiting than computing. Six threads, misses
+              overlapped with the experts already in memory, the lookahead on its own thread and a lighter interface took the
+              engine from 5.45 to 8.22 tok/s and the app to 7.4 (2.7-bit) and 5.1 (4-bit) in short answers on a cool phone —
+              tokens unchanged.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">long context, unlocked</span><span class="tl-tag">capability</span></div>
+            <h3>262k context, needle at 7,857 tokens found</h3>
+            <p>Context and generation caps removed, with the KV cache counted in memory admission. A 7,857-token
+              needle-in-a-haystack prompt is answered correctly; a 3,803-token prompt prefills 3.2× faster
+              (521.6 s → 164.4 s) with bit-identical logits.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">speculation, made profitable</span><span class="tl-tag">kernels</span></div>
+            <h3>MTP went from a loss to a tie or a gain</h3>
+            <p>Exact 2×2 dotprod tiles for Q5_K / IQ2_XXS / IQ3_XXS — bit-identical to single-column kernels — cut a
+              2-token batch from ~1.9× to 1.2–1.4× a single token. Expert pairing in <span class="mono">MUL_MAT_ID</span>
+              makes tokens that choose the same expert share one decode of its weights.</p>
+          </div>
+        </li>
+        <li class="tl-item reveal">
+          <div class="tl-dot" aria-hidden="true"></div>
+          <div class="tl-card card">
+            <div class="tl-head"><span class="tl-when mono-dim">the first yardstick</span><span class="tl-tag">quality</span></div>
+            <h3>26/27 on both builds — quantization on trial</h3>
+            <p>A 27-item, automatically checked set (Italian, instructions, reasoning, code, knowledge, long context):
+              UD-IQ2_M and UD-Q4_K_M both score 26/27 — they miss the same discount-and-markup item — and the 2.7-bit build
+              is ~33% faster. A first signal: a larger set is required before it can replace the reference.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============================== NEXT ============================== -->
+  <section class="section section-tight" id="next">
+    <div class="container">
+      <p class="eyebrow reveal">where this goes</p>
+      <h2 class="reveal">The queue is ordered by <em>measured bottleneck</em>.</h2>
+      <div class="next-row">
+        <div class="next-item reveal"><span class="next-num mono-dim">01</span><p><strong>Energy per token</strong> — heat lowers the big cores' clocks within seconds; less energy per token keeps them higher</p></div>
+        <div class="next-item reveal"><span class="next-num mono-dim">02</span><p><strong>Flash Next, sustained</strong> — long runs, energy, and a quality evaluation of its 2-bit build</p></div>
+        <div class="next-item reveal"><span class="next-num mono-dim">03</span><p><strong>Long context on storage</strong> — decoding with thousands of tokens of keys and values in a file</p></div>
+        <div class="next-item reveal"><span class="next-num mono-dim">04</span><p><strong>Expert kernels</strong> — the 2-bit expert formats are compute-bound, well below the K-quants' bandwidth</p></div>
+        <div class="next-item reveal"><span class="next-num mono-dim">05</span><p><strong>A larger quality set</strong> — before a 2-bit build can replace a reference</p></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container footer-grid">
+    <div class="footer-col footer-brand">
+      <div class="brand">
+        <img src="assets/logo.svg" alt="" width="26" height="26">
+        <span>Equity</span>
+      </div>
+      <p>Language models that do not fit in a device's memory — on the device, offline, at usable speed.</p>
+      <p>Developed by <strong>Zetawave</strong>.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Honesty notes</h4>
+      <p>Research preview. Device benchmarks, owner-reported app observations and host checks are labeled separately;
+        records live in the repository. The 5 tokens/s <em>sustained</em> goal for models beyond RAM is an experimental
+        target, never a promise. Quality, context and capabilities are not traded for speed.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Records</h4>
+      <p>Measurements: <span class="mono">results/</span>. Decisions with their numbers, including negative results:
+        <a href="https://github.com/zetawave/eqt/blob/main/docs/decisions.md" target="_blank" rel="noopener noreferrer">docs/decisions.md</a>.
+        Protocol: <a href="https://github.com/zetawave/eqt/blob/main/docs/benchmarking.md" target="_blank" rel="noopener noreferrer">docs/benchmarking.md</a>.</p>
+    </div>
+    <div class="footer-col">
+      <h4>License</h4>
+      <p><strong>AGPLv3</strong> for open use; commercial licensing available.</p>
+      <p><a href="mailto:z3tawave@gmail.com">z3tawave@gmail.com</a></p>
+      <p><a href="https://github.com/zetawave/eqt" target="_blank" rel="noopener noreferrer">github.com/zetawave/eqt</a></p>
+    </div>
+  </div>
+  <div class="container footer-bottom mono-dim">
+    <span>© 2026 Zetawave · Equity (eqt)</span>
+    <span>bit-exact · off-grid · measured</span>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+</body>
+</html>

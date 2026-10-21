@@ -25,12 +25,10 @@
     <nav class="nav-links" aria-label="Sections">
       <a href="#idea">Idea</a>
       <a href="#how">How it works</a>
-      <a href="#climb">The climb</a>
+      <a href="#app">The app</a>
       <a href="#models">Models</a>
-      <a href="#numbers">Numbers</a>
-      <a href="#milestones">Milestones</a>
     </nav>
-    <span class="nav-chip">research preview</span>
+    <a class="nav-cta" href="benchmarks.html">Benchmarks</a>
     <a class="github-link" href="https://github.com/zetawave/eqt" target="_blank" rel="noopener noreferrer" aria-label="Equity on GitHub">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" d="M12 .8a11.2 11.2 0 0 0-3.54 21.83c.56.1.76-.24.76-.54v-2.1c-3.1.67-3.76-1.32-3.76-1.32-.5-1.29-1.24-1.63-1.24-1.63-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 .1.74 2.01 3.21 1.52.1-.72.39-1.21.71-1.49-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.08 1.15a10.7 10.7 0 0 1 5.6 0c2.14-1.45 3.08-1.15 3.08-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.61 5.23-5.1 5.51.4.35.76 1.03.76 2.08v3.08c0 .3.2.65.77.54A11.2 11.2 0 0 0 12 .8Z"/>
@@ -57,19 +55,19 @@
         <strong>bitwise identical</strong> to running the same model file in memory: streaming adds no approximation. No
         cloud, no account.</p>
       <div class="hero-ctas reveal">
-        <a class="btn btn-primary" href="#climb">See the climb</a>
-        <a class="btn btn-ghost" href="#how">How it works</a>
+        <a class="btn btn-primary" href="#how">How it works</a>
+        <a class="btn btn-ghost" href="benchmarks.html">See the benchmarks</a>
       </div>
       <div class="hero-chips reveal" aria-label="Key facts">
-        <span class="chip">35B · 7.4 tok/s in the app</span>
-        <span class="chip">125B · 1.8 tok/s observed</span>
-        <span class="chip">262k context</span>
+        <span class="chip">models beyond RAM</span>
+        <span class="chip">bitwise-exact streaming</span>
         <span class="chip">0 bytes sent</span>
         <span class="chip">no root</span>
+        <span class="chip">open source</span>
       </div>
     </div>
     <div class="hero-foot container">
-      <span class="mono-dim">weights streamed from flash · benchmarks and owner observations labeled separately</span>
+      <span class="mono-dim">weights streamed from flash · every measurement on the benchmarks page</span>
       <a class="scroll-hint" href="#idea" aria-label="Scroll to the idea">
         <span>scroll</span>
         <span class="scroll-hint-line" aria-hidden="true"></span>
@@ -83,8 +81,8 @@
       <p class="eyebrow reveal">the idea</p>
       <h2 class="reveal">Mixture-of-experts models are <em>mostly dormant weights</em>.</h2>
       <p class="lede reveal">In a MoE transformer, each token activates only a handful of experts per layer. The rest of the
-        model just sits there. A large MoE model might therefore never need most of its weights at any given instant —
-        and flash storage can keep up, if you read exactly the right bytes at exactly the right time.</p>
+        model just sits there. A large MoE model therefore never needs most of its weights at any given instant — and
+        flash storage can keep up, if you read exactly the right bytes at exactly the right time.</p>
       <p class="lede reveal">Equity keeps the shared attention and shared-expert weights resident, and streams the routed
         experts from the phone's storage on demand. Streaming never approximates: what runs is the published quantized
         build (GGUF), with the same results as if it were held in memory. Choosing a smaller quantization is a separate,
@@ -93,29 +91,29 @@
         PowerInfer-2 and antirez's ds4 all read weights from flash on demand. Equity's part is an exact implementation of
         it for one model family on a stock phone, measured step by step.</p>
 
-      <div class="fit-visual reveal" aria-label="Model size versus device memory">
+      <div class="fit-visual reveal" aria-label="Model file sizes versus the phone's memory">
         <div class="fit-row">
-          <span class="fit-label">model file</span>
-          <div class="fit-track"><div class="fit-bar fit-model" style="--w:100%"><span>22.7&nbsp;GB&nbsp;· UD-Q4_K_M</span></div></div>
+          <span class="fit-label">125B model</span>
+          <div class="fit-track"><div class="fit-bar fit-model" style="--w:100%"><span>78.9&nbsp;GB&nbsp;· Qwen3.8 Flash Next</span></div></div>
         </div>
         <div class="fit-row">
-          <span class="fit-label">visible RAM</span>
-          <div class="fit-track"><div class="fit-bar fit-ram" style="--w:48%"><span>10.9&nbsp;GiB</span></div></div>
+          <span class="fit-label">35B model</span>
+          <div class="fit-track"><div class="fit-bar fit-rss" style="--w:28.8%"><span>22.7&nbsp;GB&nbsp;· Qwen3.6</span></div></div>
         </div>
         <div class="fit-row">
-          <span class="fit-label">peak RSS</span>
-          <div class="fit-track"><div class="fit-bar fit-rss" style="--w:20.3%"><span>≈4.6&nbsp;GiB</span></div></div>
+          <span class="fit-label">phone RAM</span>
+          <div class="fit-track"><div class="fit-bar fit-ram" style="--w:14.8%"><span>10.9&nbsp;GiB</span></div></div>
         </div>
-        <p class="fit-note mono-dim">the model is 2.1× the phone's memory; with a 2 GiB expert cache the app peaks at about 4.6 GiB</p>
+        <p class="fit-note mono-dim">memory Android makes visible on the first reference phone, a Galaxy S24+ · both models run on it</p>
       </div>
 
       <div class="pillars">
         <article class="card reveal">
           <div class="card-glyph">≡</div>
           <h3>Exact by construction</h3>
-          <p>Streamed inference is <strong>bitwise identical</strong> to resident inference on verification fixtures — host,
-            Linux container with real <span class="mono">O_DIRECT</span>, and the phone. Optimizations are either bitwise
-            exact or differ only in float rounding (≤&nbsp;3.4·10⁻⁷ relative), with output tokens compared on device.</p>
+          <p>Streamed inference is <strong>bitwise identical</strong> to resident inference, checked on the host, in a Linux
+            container with real <span class="mono">O_DIRECT</span>, and on the phone. Every optimization is either bitwise
+            exact or differs only in float rounding, with output tokens compared on the device.</p>
         </article>
         <article class="card reveal">
           <div class="card-glyph">◍</div>
@@ -127,9 +125,9 @@
         <article class="card reveal">
           <div class="card-glyph">⌁</div>
           <h3>Measured, not promised</h3>
-          <p>Benchmarks tie to records in <span class="mono">results/</span>; app observations are labeled separately. A/B runs cooled to skin temperature,
-            energy read from the battery counter, an automatically checked quality set. Negative results are kept and
-            written down, not deleted.</p>
+          <p>Every figure ties to a record in the repository; app observations are labeled separately from benchmarks.
+            A/B runs cooled between arms, energy read from the battery counter, an automatically checked quality set.
+            Negative results are written down, not deleted.</p>
         </article>
       </div>
     </div>
@@ -140,373 +138,140 @@
     <div class="container">
       <p class="eyebrow reveal">how it works</p>
       <h2 class="reveal">Shared weights stay resident. <em>Experts stream.</em></h2>
-      <p class="lede reveal">On the 35B model, one token touches forty layers in a fixed cycle. Equity turns that pattern into a pipeline:
-        predict, read, compute — overlapped, zero-copy, and exact.</p>
+      <p class="lede reveal">A token passes through every layer in a fixed order, and each layer asks for a few experts. Equity
+        turns that pattern into a pipeline: predict, read, compute — overlapped, zero-copy, and exact.</p>
 
       <figure class="pipeline-wrap reveal">
-        <canvas id="pipeline-canvas" aria-label="Pipeline: storage streams experts through direct I/O into a slot cache, feeding six compute cores; the router prefetches the next layer ahead."></canvas>
+        <canvas id="pipeline-canvas" aria-label="Pipeline: storage streams experts through direct I/O into a slot cache, feeding the compute cores; the router lookahead reads the next layers ahead."></canvas>
         <figcaption class="mono-dim">the decode path — one token's experts travel left to right; the dashed line is the router lookahead</figcaption>
       </figure>
 
       <div class="cards-grid">
         <article class="card reveal">
           <h3><span class="card-num">01</span>Resident core, streamed experts</h3>
-          <p>About 1.4–1.9&nbsp;GiB of attention and shared weights live in RAM; the token embedding table is mapped from
-            the file, since each token reads one row of it. The routed experts — 9–19&nbsp;GB — are read on demand into a
-            bounded set of reusable, page-aligned slots, found through a hook added to GGML's
-            <span class="mono">MUL_MAT_ID</span>.</p>
+          <p>Attention, shared experts and the other shared weights stay in RAM. The routed experts — most of the file —
+            are read on demand into a bounded cache of reusable, page-aligned slots, which GGML's expert product reads in
+            place through a hook added by Equity.</p>
         </article>
         <article class="card reveal">
-          <h3><span class="card-num">02</span>Zero-copy direct I/O</h3>
-          <p>Expert banks sit at file offsets congruent to their memory addresses, so direct reads land in place — no
-            bounce buffer, no page faults on reload. <span class="mono">memmove</span> fell from 7.9% to 1.7% of samples;
-            page faults from ~21,000 to <strong>19 per token</strong>.</p>
+          <h3><span class="card-num">02</span>Zero-copy reads</h3>
+          <p>Direct I/O bypasses the page cache and lands each expert straight in its slot: no bounce buffer, no page
+            faults on reload. An optional expert pack, built in place on the phone and fully reversible, stores each expert
+            in one piece, so a single read fetches it whole.</p>
         </article>
         <article class="card reveal">
           <h3><span class="card-num">03</span>Router lookahead</h3>
-          <p>As in earlier offloading work, layer <span class="mono">l+1</span>'s router applied to layer
-            <span class="mono">l</span>'s state predicts the next experts — <strong>81.8% accurate</strong> on this model,
-            computed on its own thread — so the next layer is being read while the current one computes.</p>
+          <p>On its own thread, a predictor applies the next layers' routers to the current state, so the experts a token
+            will need are already being read while the current layer computes. Predictions only decide what to read early:
+            routing itself stays exact.</p>
         </article>
         <article class="card reveal">
           <h3><span class="card-num">04</span>Misses that do not stop the token</h3>
-          <p>Per-layer cache quotas reach about <strong>89–91% hits</strong> with a 2&nbsp;GiB budget. When an expert is still
-            missing, the ones already in memory are computed first and each thread waits only for the part it reads:
-            host time lost between layers fell from <strong>47 to 4&nbsp;ms per token</strong>.</p>
+          <p>Experts already in memory are computed first, and each thread waits only for the part of a missing expert it
+            reads. Demanded reads go ahead of speculative ones, and speculative reads never evict cached experts.</p>
         </article>
         <article class="card reveal">
           <h3><span class="card-num">05</span>Kernels for this CPU</h3>
-          <p>Exact 2×2 dotprod tiles for Q5_K / IQ2_XXS / IQ3_XXS, bit-identical to single-column; an i8mm (USMMLA)
-            microkernel for tiled prefill, up to <strong>3.8× faster</strong> on IQ3_XXS; a NEON GEMM where SVE builds fell
-            back to scalar attention; expert pairing, so tokens choosing the same expert decode it once.</p>
+          <p>Exact multi-column dot-product tiles for speculative verification, an i8mm microkernel for prompt processing,
+            and runtime selection of the right instruction-set variant. Each kernel is checked against the reference before
+            it is used.</p>
         </article>
         <article class="card reveal">
           <h3><span class="card-num">06</span>Context bounded by the model</h3>
-          <p>The engine's own 8,192-token cap is gone; admission counts the KV cache from GGUF metadata (~22&nbsp;KiB per
-            token). Context now runs to the model's full <strong>262,144 tokens</strong> — memory admission, not an
-            arbitrary constant.</p>
+          <p>The window is limited by the model's trained length and the memory available, not by a constant. For
+            sparse-attention models the attention keys and values can live in a file on storage, with only the blocks
+            attention selects kept in memory.</p>
         </article>
       </div>
     </div>
   </section>
 
-  <!-- ============================== CLIMB ============================== -->
-  <section class="section" id="climb">
+  <!-- ============================== APP ============================== -->
+  <section class="section" id="app">
     <div class="container">
-      <p class="eyebrow reveal">the climb</p>
-      <h2 class="reveal">From <em>2.52</em> to <em>8.22 tokens/s</em> — one measured step at a time.</h2>
-      <p class="lede reveal">Qwen3.6-35B-A3B streamed on the first reference device — a stock Android phone — 64 greedy tokens,
-        128 from the six-thread step on, alternating A/B arms. Every step is bitwise exact unless noted; identical token
-        sequences across all arms.</p>
+      <p class="eyebrow reveal">the app</p>
+      <h2 class="reveal">A private assistant that <em>lives on the phone</em>.</h2>
+      <p class="lede reveal">The Equity app puts the engine behind a chat. Everything it does happens on the device; the
+        only network traffic is a model download you start yourself.</p>
 
-      <div class="chart reveal" role="img" aria-label="Decode speed progression in tokens per second: 2.52, 2.68, 3.06, 3.48, 3.86, 4.49, 5.54, 6.85, 7.43, 7.85, 8.22, against a 5 tokens per second target line">
-        <div class="chart-target" style="--x:55.56"><span class="mono-dim">5 tok/s target</span></div>
-        <div class="chart-row" style="--w:28.0%">
-          <span class="chart-label">1 GiB cache · buffered · 4 I/O threads</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">2.52</span>
-        </div>
-        <div class="chart-row" style="--w:29.8%">
-          <span class="chart-label">direct I/O · 16 I/O threads</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">2.68</span>
-        </div>
-        <div class="chart-row" style="--w:34.0%">
-          <span class="chart-label">+ router lookahead</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">3.06</span>
-        </div>
-        <div class="chart-row" style="--w:38.7%">
-          <span class="chart-label">+ 2 GiB expert cache</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">3.48</span>
-        </div>
-        <div class="chart-row" style="--w:42.9%">
-          <span class="chart-label">+ zero-copy, page-congruent reads</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">3.86</span>
-        </div>
-        <div class="chart-row" style="--w:49.9%">
-          <span class="chart-label">+ 2-bit experts · UD-IQ2_M*&nbsp;(11.9 GB)</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">4.49</span>
-        </div>
-        <div class="chart-row" style="--w:61.6%">
-          <span class="chart-label">+ slot-addressed expert cache · UD-IQ2_M*</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">5.54</span>
-        </div>
-        <div class="chart-row" style="--w:76.1%">
-          <span class="chart-label">+ all six big cores</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">6.85</span>
-        </div>
-        <div class="chart-row" style="--w:82.6%">
-          <span class="chart-label">+ misses overlapped with resident experts</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">7.43</span>
-        </div>
-        <div class="chart-row" style="--w:87.2%">
-          <span class="chart-label">+ lookahead on its own thread</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">7.85</span>
-        </div>
-        <div class="chart-row is-final" style="--w:91.3%">
-          <span class="chart-label">+ mapped embeddings · reserved demand I/O</span>
-          <span class="chart-track"><span class="chart-bar"></span></span>
-          <span class="chart-val">8.22</span>
-        </div>
+      <div class="cards-grid">
+        <article class="card reveal">
+          <h3>Chats that stay on the phone</h3>
+          <p>Conversations are saved in the app's private storage, with photos, camera captures, text files and PDFs as
+            attachments. Delete one chat or all of them at any time.</p>
+        </article>
+        <article class="card reveal">
+          <h3>Answers in the background</h3>
+          <p>Answers keep being written while you use other apps, with a notification when they are done. Markdown and
+            LaTeX are rendered, and models with a thinking mode show their reasoning apart from the answer.</p>
+        </article>
+        <article class="card reveal">
+          <h3>Pick up where you left off</h3>
+          <p>A chat can keep the model's state on the phone. Coming back to it continues at once, without reading the whole
+            conversation again. It is opt-in per chat and deleted with the chat.</p>
+        </article>
+        <article class="card reveal">
+          <h3>The context at a glance</h3>
+          <p>A small gauge beside Send shows how much of the loaded window a chat uses. The window sizes itself from free
+            memory, up to the model's full length.</p>
+        </article>
+        <article class="card reveal">
+          <h3>Downloads you control</h3>
+          <p>Models download in the app, resumable and checksum-verified, or come from a file you pick. Deleting a model
+            deletes everything that belongs to it.</p>
+        </article>
+        <article class="card reveal">
+          <h3>For the curious</h3>
+          <p>An optional GPU mode reads long prompts and images on the phone's GPU. Directional steering, an experimental
+            per-chat control, applies a model-specific vector to every answer.</p>
+        </article>
       </div>
-      <p class="footnote mono-dim reveal">mean of 1–4 runs; runs disturbed by background activity are recorded and excluded ·
-        * different quantization, quality evaluated separately (26/27) · in the app, short answers on a cool phone: 7.4 tok/s
-        (2.7-bit) and 5.1 tok/s (4-bit) · sustained over 10 minutes on battery, with an older build: ≈3.5 tok/s, where heat
-        — not I/O — sets the pace; not yet re-measured</p>
     </div>
   </section>
 
   <!-- ============================== MODELS ============================== -->
   <section class="section" id="models">
     <div class="container">
-      <p class="eyebrow reveal">models · updated October 19, 2026</p>
-      <h2 class="reveal">Now a <em>125B model</em>, on the same stock phone.</h2>
-      <p class="lede reveal">Qwen3.8-Flash-Next joins the two Qwen3.6 builds. Its 78.9 GB file is about 6.7× the
-        phone's Android-visible RAM. The first owner-reported app result is 1.8 tokens/s, with the first token
-        after 6.1 seconds — a single observation on the Galaxy S24+ with Exynos 2400.</p>
+      <p class="eyebrow reveal">models</p>
+      <h2 class="reveal">One model family, <em>from small to huge</em>.</h2>
+      <p class="lede reveal">Equity specializes in Qwen's hybrid-attention mixture-of-experts models: Qwen3.6 and its successor,
+        Qwen3.8. Each build is a published GGUF file, pinned by checksum.</p>
 
       <div class="cards-grid">
         <article class="card reveal">
-          <h3>Qwen3.6 · 35B</h3>
-          <p><strong>UD-IQ2_M · 11.9 GB</strong><br>
-            7.4 tok/s in the app, owner-reported short answer on a cool phone. The engine reaches 8.22 tok/s
-            in short measured runs. Quality-v1: 26/27; the older battery run settled at about 3.5 tok/s.</p>
+          <h3>Qwen3 · 0.6B</h3>
+          <p><strong>Q8_0 · 0.64 GB</strong><br>
+            Small and fully in memory: quick answers and a first test of the app.</p>
         </article>
         <article class="card reveal">
-          <h3>Qwen3.6 · 35B reference</h3>
-          <p><strong>UD-Q4_K_M · 22.7 GB</strong><br>
-            5.1 tok/s in the app, owner-reported short answer on a cool phone. Quality-v1: 26/27,
-            with 2.61 tok/s median across that separate evaluation. Sustained speed on the current build is pending.</p>
+          <h3>Qwen3.6 · 35B-A3B</h3>
+          <p><strong>UD-IQ2_M · 11.9 GB&nbsp;&nbsp;·&nbsp;&nbsp;UD-Q4_K_M · 22.7 GB</strong><br>
+            Up to twice the phone's memory. 3B parameters active per token; image input with its vision projector.</p>
         </article>
         <article class="card reveal">
-          <h3>Qwen3.8 Flash Next · 125B</h3>
+          <h3>Qwen3.8 · Flash Next</h3>
           <p><strong>UD-Q2_K_XL · 78.9 GB · experimental</strong><br>
-            The new 120B-class model: 125B parameters plus a 51B n-gram table. 1.8 tok/s in the owner's
-            252-token app result. Repeated benchmarks, sustained speed, energy and quantization quality are pending.</p>
+            125B parameters plus a 51B n-gram table, 512 experts with 10 per token — about seven times the phone's
+            memory.</p>
         </article>
       </div>
-
-      <div class="stats-grid model-stats">
-        <div class="stat stat-accent reveal">
-          <div class="stat-val">1.8<span class="stat-unit">tok/s</span></div>
-          <div class="stat-label">Flash Next, in the app</div>
-          <div class="stat-sub">owner-reported screenshot · 252 generated tokens</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val">6.1<span class="stat-unit">s</span></div>
-          <div class="stat-label">time to first token</div>
-          <div class="stat-sub">same observation · prompt length and cache state not recorded</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val">78.9<span class="stat-unit">GB</span></div>
-          <div class="stat-label">model file on storage</div>
-          <div class="stat-sub">about 80 GB free storage needed · resumable, checksum-verified import</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val">10<span class="stat-unit">/512</span></div>
-          <div class="stat-label">experts selected per layer</div>
-          <div class="stat-sub">bounded expert cache · n-gram rows read from a file mapping</div>
-        </div>
-      </div>
-      <p class="footnote mono-dim reveal">Flash Next observation: October 19, 2026 · one app result, not a controlled or
-        sustained benchmark · cache budget, batch, thermal state, peak RSS and energy were not captured ·
-        <a href="data/flash-next-owner-observation.json">observation record (JSON)</a></p>
-      <p class="lede reveal">Flash Next runs on the CPU. Shared resident weights account for about 3.37 GiB before
-        the expert cache, recurrent/KV state, compute buffers and mapped-file page cache. Total peak RAM on this
-        model has not been measured on the phone. The app adapts prompt batches to the available memory; the
-        n-gram file mapping is separate from the bounded expert cache.</p>
-      <p class="lede reveal">Host verification passed all 41 streamed-versus-resident fixture cases, and two cache
-        configurations on the real model produced bitwise-equal logits and identical tokens. These are host
-        correctness checks; they do not establish phone performance or the quality of this quantization.</p>
     </div>
   </section>
 
-  <!-- ============================== NUMBERS ============================== -->
-  <section class="section" id="numbers">
+  <!-- ============================== BENCHMARKS CTA ============================== -->
+  <section class="section section-tight" id="benchmarks">
     <div class="container">
-      <p class="eyebrow reveal">numbers that hold · Qwen3.6 35B</p>
-      <h2 class="reveal">What the work is <em>worth</em>, so far.</h2>
-      <p class="lede reveal">Each figure below is attributable to a specific change, measured on the phone, and recorded.
-        Nothing here is extrapolated from other hardware.</p>
-
-      <div class="stats-grid">
-        <div class="stat stat-accent reveal">
-          <div class="stat-val"><span class="count" data-count="8.22" data-decimals="2">8.22</span><span class="stat-unit">tok/s</span></div>
-          <div class="stat-label">engine decode, short runs</div>
-          <div class="stat-sub">from 2.52 at the first streamed run · 2.7-bit build, 2 GiB cache</div>
+      <div class="cta-band reveal">
+        <div>
+          <p class="eyebrow">benchmarks</p>
+          <h2>How fast, how good, <em>how hot</em>.</h2>
+          <p class="lede">Decode speed, prompt processing, quality and energy, measured on the phone, dated, and tied to their
+            records. Negative results included.</p>
         </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="19">19</span></div>
-          <div class="stat-label">page faults per token</div>
-          <div class="stat-sub">down from ~21,000 — slot-addressed expert cache</div>
+        <div class="hero-ctas">
+          <a class="btn btn-primary" href="benchmarks.html">Open the benchmarks</a>
+          <a class="btn btn-ghost" href="https://github.com/zetawave/eqt" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
         </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="81.8" data-decimals="1" data-suffix="%">81.8%</span></div>
-          <div class="stat-label">router lookahead accuracy</div>
-          <div class="stat-sub">−40% decode I/O wait in its first version</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="3.8" data-decimals="1" data-suffix="×">3.8×</span></div>
-          <div class="stat-label">prefill matrix products, IQ3_XXS</div>
-          <div class="stat-sub">i8mm USMMLA microkernel · 2.9× on IQ2_XXS</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="3.2" data-decimals="1" data-suffix="×">3.2×</span></div>
-          <div class="stat-label">long-prompt prefill</div>
-          <div class="stat-sub">3,803 tokens: 521.6 s → 164.4 s, bit-identical logits</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="262144">262,144</span></div>
-          <div class="stat-label">tokens of context</div>
-          <div class="stat-sub">needle at 7,857 tokens answered correctly</div>
-        </div>
-        <div class="stat stat-accent reveal">
-          <div class="stat-val"><span class="count" data-count="26">26</span><span class="stat-unit">/27</span></div>
-          <div class="stat-label">quality-v1, both builds</div>
-          <div class="stat-sub">the 2.7-bit build is ~33% faster with no measured loss</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="1.07" data-decimals="2">1.07</span><span class="stat-unit">J</span></div>
-          <div class="stat-label">net energy per token</div>
-          <div class="stat-sub">read from the battery counter · ≈3.5 tok/s sustained, older build</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="7.4" data-decimals="1">7.4</span><span class="stat-unit">tok/s</span></div>
-          <div class="stat-label">in the app, 2.7-bit</div>
-          <div class="stat-sub">5.1 tok/s with the 4-bit reference build · short answers, cool phone</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="91" data-suffix="%">91%</span></div>
-          <div class="stat-label">expert cache hit rate</div>
-          <div class="stat-sub">per-layer quotas · 2 GiB budget · 2.7-bit build</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="1.2" data-decimals="1" data-suffix="×">1.2×</span></div>
-          <div class="stat-label">cost of a 2-token batch</div>
-          <div class="stat-sub">was ~1.9× · exact 2×2 tiles turned MTP from a loss into a gain</div>
-        </div>
-        <div class="stat reveal">
-          <div class="stat-val"><span class="count" data-count="332" data-prefix="−">−332</span><span class="stat-unit">MiB</span></div>
-          <div class="stat-label">resident memory</div>
-          <div class="stat-sub">token embedding mapped from the file · −515 MiB on the 4-bit build</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============================== MILESTONES ============================== -->
-  <section class="section" id="milestones">
-    <div class="container">
-      <p class="eyebrow reveal">milestones</p>
-      <h2 class="reveal">What Equity can do <em>now</em>, step by step.</h2>
-
-      <ol class="timeline">
-        <li class="tl-item reveal">
-          <div class="tl-dot" aria-hidden="true"></div>
-          <div class="tl-card card">
-            <div class="tl-head"><span class="tl-when mono-dim">October 19, 2026 · the 120B-class model</span><span class="tl-tag">capability</span></div>
-            <h3>125B parameters, 78.9 GB, running in the app</h3>
-            <p>Qwen3.8-Flash-Next adds 512-expert routing, a file-mapped n-gram table and support for its
-              hyper-connection residual. The owner's first app screenshot reports 1.8 tok/s over 252 tokens,
-              with the first token after 6.1 s. Host exactness checks pass; sustained phone measurements
-              and a separate quality evaluation remain ahead.</p>
-          </div>
-        </li>
-        <li class="tl-item reveal">
-          <div class="tl-dot" aria-hidden="true"></div>
-          <div class="tl-card card">
-            <div class="tl-head"><span class="tl-when mono-dim">Equity's first beyond-RAM run</span><span class="tl-tag">exactness</span></div>
-            <h3>A model twice the device's memory, running on it</h3>
-            <p>The first target checkpoint — twice the phone's visible RAM — streams on a stock Android device at ~3.7–3.9 GiB RSS, the shared weights read once at
-              load in 4.3 s, the experts as demanded. On every verification fixture, streamed output is
-              <strong>bitwise identical</strong> to resident inference.</p>
-          </div>
-        </li>
-        <li class="tl-item reveal">
-          <div class="tl-dot" aria-hidden="true"></div>
-          <div class="tl-card card">
-            <div class="tl-head"><span class="tl-when mono-dim">the 5 tok/s barrier</span><span class="tl-tag">speed</span></div>
-            <h3>5.54 tok/s — from 2.52, with identical tokens</h3>
-            <p>The slot-addressed expert cache — reusable pages hooked into GGML's expert matrix product — took decode from
-              5.05 to 5.54 tok/s mean, and the whole climb from 2.52. In short runs on a cool phone the experimental target
-              is met; over minutes, power and heat set the speed, and that is measured too.</p>
-          </div>
-        </li>
-        <li class="tl-item reveal">
-          <div class="tl-dot" aria-hidden="true"></div>
-          <div class="tl-card card">
-            <div class="tl-head"><span class="tl-when mono-dim">past 5 tok/s in the app</span><span class="tl-tag">speed</span></div>
-            <h3>7.4 tok/s in the app; the 4-bit reference above 5</h3>
-            <p>A per-operation profile showed a token spending more time waiting than computing. Six threads, misses
-              overlapped with the experts already in memory, the lookahead on its own thread and a lighter interface took the
-              engine from 5.45 to 8.22 tok/s and the app to 7.4 (2.7-bit) and 5.1 (4-bit) in short answers on a cool phone —
-              tokens unchanged. Sustained speed with this build is still to be measured.</p>
-          </div>
-        </li>
-        <li class="tl-item reveal">
-          <div class="tl-dot" aria-hidden="true"></div>
-          <div class="tl-card card">
-            <div class="tl-head"><span class="tl-when mono-dim">long context, unlocked</span><span class="tl-tag">capability</span></div>
-            <h3>262k context, needle at 7,857 tokens found</h3>
-            <p>Context and generation caps removed, with the KV cache counted in memory admission. A 7,857-token
-              needle-in-a-haystack prompt is answered correctly; a 3,803-token prompt prefills 3.2× faster
-              (521.6 s → 164.4 s) with bit-identical logits.</p>
-          </div>
-        </li>
-        <li class="tl-item reveal">
-          <div class="tl-dot" aria-hidden="true"></div>
-          <div class="tl-card card">
-            <div class="tl-head"><span class="tl-when mono-dim">speculation, made profitable</span><span class="tl-tag">kernels</span></div>
-            <h3>MTP went from a loss to a tie or a gain</h3>
-            <p>Exact 2×2 dotprod tiles for Q5_K / IQ2_XXS / IQ3_XXS — bit-identical to single-column kernels — cut a
-              2-token batch from ~1.9× to 1.2–1.4× a single token. Expert pairing in <span class="mono">MUL_MAT_ID</span>
-              makes tokens that choose the same expert share one decode of its weights.</p>
-          </div>
-        </li>
-        <li class="tl-item reveal">
-          <div class="tl-dot" aria-hidden="true"></div>
-          <div class="tl-card card">
-            <div class="tl-head"><span class="tl-when mono-dim">the first yardstick</span><span class="tl-tag">quality</span></div>
-            <h3>26/27 on both builds — quantization on trial</h3>
-            <p>A 27-item, automatically checked set (Italian, instructions, reasoning, code, knowledge, long context):
-              UD-IQ2_M and UD-Q4_K_M both score 26/27 — they miss the same discount-and-markup item — and the 2.7-bit build
-              is ~33% faster. A first signal, kept honest by its own footnote: a larger set is required before it can
-              replace the reference.</p>
-          </div>
-        </li>
-        <li class="tl-item reveal">
-          <div class="tl-dot" aria-hidden="true"></div>
-          <div class="tl-card card">
-            <div class="tl-head"><span class="tl-when mono-dim">the instrument panel</span><span class="tl-tag">method</span></div>
-            <h3>Measurement tooling that makes the gains believable</h3>
-            <p>Bit-for-bit checks of streamed against resident inference; an automatically checked quality set; energy per
-              token from the battery counter; A/B runs cooled to skin temperature between arms. Negative results — WFE
-              waits, layer-skip speculation, wider prefetch — are documented, not discarded.</p>
-          </div>
-        </li>
-      </ol>
-    </div>
-  </section>
-
-  <!-- ============================== NEXT ============================== -->
-  <section class="section section-tight" id="next">
-    <div class="container">
-      <p class="eyebrow reveal">where this goes</p>
-      <h2 class="reveal">This is a <em>work in progress</em> — the queue is ordered by measured bottleneck.</h2>
-      <div class="next-row">
-        <div class="next-item reveal"><span class="next-num mono-dim">01</span><p><strong>Flash Next on the phone</strong> — repeated decode, peak RAM, storage throughput, quality and sustained energy measurements</p></div>
-        <div class="next-item reveal"><span class="next-num mono-dim">02</span><p><strong>Missed-expert latency</strong> — reads still take 1.3–1.8 ms and wait ~0.45 ms to start</p></div>
-        <div class="next-item reveal"><span class="next-num mono-dim">03</span><p><strong>Expert kernels</strong> — IQ2_XXS / IQ3_XXS run at 14 GB/s against 38 for K-quants</p></div>
-        <div class="next-item reveal"><span class="next-num mono-dim">04</span><p><strong>Cache policy</strong> — eviction informed by router scores (the Belady gap is ~15 points)</p></div>
-        <div class="next-item reveal"><span class="next-num mono-dim">05</span><p><strong>A larger quality set</strong> — before the 2.7-bit build can replace the reference</p></div>
       </div>
     </div>
   </section>
@@ -521,12 +286,13 @@
         <span>Equity</span>
       </div>
       <p>Language models that do not fit in a device's memory — on the device, offline, at usable speed.</p>
+      <p>Developed by <strong>Zetawave</strong>.</p>
     </div>
     <div class="footer-col">
       <h4>Honesty notes</h4>
       <p>Research preview. Device benchmarks, owner-reported app observations and host checks are labeled separately;
-        records live in <span class="mono">results/</span>. The 5 tokens/s <em>sustained</em> goal is an experimental target,
-        never a promise. Quality, context and capabilities are not traded for speed.</p>
+        records live in the repository. The 5 tokens/s <em>sustained</em> goal for models beyond RAM is an experimental
+        target, never a promise. Quality, context and capabilities are not traded for speed.</p>
     </div>
     <div class="footer-col">
       <h4>Standing on</h4>
@@ -538,10 +304,11 @@
       <h4>License</h4>
       <p><strong>AGPLv3</strong> for open use; commercial licensing available.</p>
       <p><a href="mailto:z3tawave@gmail.com">z3tawave@gmail.com</a></p>
+      <p><a href="https://github.com/zetawave/eqt" target="_blank" rel="noopener noreferrer">github.com/zetawave/eqt</a></p>
     </div>
   </div>
   <div class="container footer-bottom mono-dim">
-    <span>© 2026 Equity · eqt</span>
+    <span>© 2026 Zetawave · Equity (eqt)</span>
     <span>bit-exact · off-grid · measured</span>
   </div>
 </footer>

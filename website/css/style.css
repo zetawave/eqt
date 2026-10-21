@@ -177,6 +177,20 @@ section[id] { scroll-margin-top: 74px; }
   padding: 6px 12px;
   white-space: nowrap;
 }
+.nav-cta {
+  flex: 0 0 auto;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--grad-soft);
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  white-space: nowrap;
+  transition: border-color 0.2s, background 0.2s;
+}
+.nav-cta:hover { text-decoration: none; border-color: var(--teal); }
+.nav-cta:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
 .github-link {
   width: 38px;
   height: 38px;
@@ -728,6 +742,28 @@ section[id] { scroll-margin-top: 74px; }
 .next-item strong { color: var(--text); }
 .next-num { font-size: 0.72rem; letter-spacing: 0.16em; }
 
+/* ------------------------------ benchmarks band ------------------------------ */
+.cta-band {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 32px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 6px);
+  padding: clamp(28px, 5vw, 52px);
+  background: var(--grad-soft);
+}
+.cta-band h2 { margin: 6px 0 14px; }
+.cta-band .lede { margin: 0; }
+.cta-band .hero-ctas { margin: 0; }
+
+/* ------------------------------ page header (benchmarks) ------------------------------ */
+.page-hero { position: relative; padding: 150px 0 10px; }
+.page-hero h1 { font-size: clamp(2.3rem, 6vw, 4rem); letter-spacing: -0.02em; margin: 6px 0 24px; }
+.page-hero h1 em { font-style: normal; color: var(--teal); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+
 /* ------------------------------ footer ------------------------------ */
 .footer {
   border-top: 1px solid var(--line);
@@ -770,7 +806,9 @@ section[id] { scroll-margin-top: 74px; }
 @media (max-width: 760px) {
   body { font-size: 15.5px; }
   .nav-links { display: none; }
-  .github-link { margin-left: auto; }
+  .nav-cta { margin-left: auto; }
+  .nav-inner { gap: 14px; }
+  .page-hero { padding-top: 120px; }
   .hero { padding-top: 110px; }
   .hero-sub { font-size: 1.05rem; }
   .hero-foot { flex-direction: column; align-items: flex-start; }

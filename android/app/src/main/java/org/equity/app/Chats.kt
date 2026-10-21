@@ -191,6 +191,18 @@ object ChatStore {
         }
     }
 
+    /** Every chat, with its attachments and saved states. An answer still being written is stopped by the caller. */
+    fun deleteAll() {
+        flow.update {
+            it.copy(summaries = emptyList(), currentId = null, loaded = emptyMap(), draftSteering = SteeringOptions(),
+                draftSession = false)
+        }
+        io.execute {
+            root.listFiles().orEmpty().filter { it.isDirectory && !it.name.startsWith(".") }.forEach { it.deleteRecursively() }
+            writeIndex(emptyList())
+        }
+    }
+
     /** Appends a user message and its pending answer, creating the chat when [chatId] is null. */
     fun startTurn(chatId: String?, text: String, attachments: List<Attachment>, now: Long = System.currentTimeMillis()): Pair<Chat, Long> {
         val existing = chatId?.let { flow.value.loaded[it] ?: read(it) }

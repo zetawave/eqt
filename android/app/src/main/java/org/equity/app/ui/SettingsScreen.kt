@@ -1,5 +1,9 @@
 package org.equity.app.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -12,13 +16,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +49,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.core.net.toUri
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,7 +62,10 @@ import org.equity.app.ANSWER_UNLIMITED
 import org.equity.app.BuildConfigInfo
 import org.equity.app.CONTEXT_AUTO
 import org.equity.app.CONTEXT_MAX
+import org.equity.app.ChatStore
+import org.equity.app.EngineController
 import org.equity.app.EngineState
+import org.equity.app.R
 import org.equity.app.SettingsStore
 import org.json.JSONObject
 import java.util.Locale
@@ -59,13 +75,17 @@ private const val MIN_ANSWER_TOKENS = 256
 // The slider's end; beyond it, "No limit" lets the answer run as long as the model and the context window allow.
 private const val MAX_ANSWER_TOKENS = 32_768
 private const val MAX_TEMPERATURE = 1.2f
+private const val WEBSITE_URL = "https://zetawave.github.io/eqt/"
+private const val REPOSITORY_URL = "https://github.com/zetawave/eqt"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(engine: EngineState) {
     val context = LocalContext.current
     val settings by SettingsStore.state.collectAsStateWithLifecycle()
+    val chats by ChatStore.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    var confirmDeleteAll by remember { mutableStateOf(false) }
     var licenses by remember { mutableStateOf<List<String>?>(null) }
     var licenseText by remember { mutableStateOf<Pair<String, String>?>(null) }
     var exported by remember { mutableStateOf<String?>(null) }
@@ -195,6 +215,15 @@ fun SettingsScreen(engine: EngineState) {
                     "and there are no accounts, ads or analytics. The network is used only for model downloads you start.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            OutlinedButton(
+                onClick = { confirmDeleteAll = true },
+                enabled = chats.summaries.isNotEmpty(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) {
+                Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(if (chats.summaries.isEmpty()) "No chats to delete" else "Delete all chats")
+            }
         }
 
         Section("About") {
@@ -204,6 +233,19 @@ fun SettingsScreen(engine: EngineState) {
                 Text("Version ${BuildConfigInfo.VERSION}", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Text("Developed by Zetawave.", style = MaterialTheme.typography.bodyMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { openLink(context, WEBSITE_URL) }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Outlined.Language, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Website")
+                }
+                OutlinedButton(onClick = { openLink(context, REPOSITORY_URL) }, modifier = Modifier.weight(1f)) {
+                    Icon(painterResource(R.drawable.ic_github), contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("GitHub")
+                }
+            }
             Text("Built on llama.cpp and GGML. Model weights belong to their publishers under their own licenses.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = {
@@ -212,6 +254,33 @@ fun SettingsScreen(engine: EngineState) {
         }
     }
 
+    if (confirmDeleteAll) {
+        val count = chats.summaries.size
+        AlertDialog(
+            onDismissRequest = { confirmDeleteAll = false },
+            title = { Text("Delete all chats?") },
+            text = {
+                Text(
+                    (if (count == 1) "The chat, with its attachments and saved state, is"
+                    else "All $count chats, with their attachments and saved states, are") +
+                        " removed from this phone. This cannot be undone." +
+                        if (engine.generation != null) " The answer being written is stopped." else "",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (engine.generation != null) EngineController.stop()
+                        ChatStore.deleteAll()
+                        confirmDeleteAll = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete all") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeleteAll = false }) { Text("Cancel") } },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        )
+    }
     licenses?.let { files ->
         AlertDialog(
             onDismissRequest = { licenses = null },
@@ -240,6 +309,15 @@ fun SettingsScreen(engine: EngineState) {
             confirmButton = { TextButton(onClick = { licenseText = null }) { Text("Close") } },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         )
+    }
+}
+
+/** Opens a web page in the browser; the app itself never loads it. */
+private fun openLink(context: Context, url: String) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, "No app on this phone can open $url", Toast.LENGTH_LONG).show()
     }
 }
 
