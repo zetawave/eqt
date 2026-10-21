@@ -530,3 +530,88 @@ Not verified:
 - Chats show the configuration button only while the loaded model has a verified package. Incompatible settings are disabled when another model is loaded, and answer details record the effective configuration.
 - Configuration values, maximum answer length and creativity can be set with sliders or typed fields.
 
+
+## D032: Flash-Next experts in an expert pack, moved in place; a faster lookahead — 2026-10-20
+
+**Where decoding waited** (D030, 2.4 tokens/s): storage was busy 80% of decode time at only about 1.6 GB/s. Each expert arrived as three small reads (479, 479 and 926 KB, one per GGUF tensor) at low queue depth. `eqt-io-bench` on the same file gave 2.17 GB/s for one 1.88 MB read at queue depth 4, against about 1.6 GB/s for that mix.
+
+**Expert pack** (`native/expert_pack.h`, tool `eqt-pack`):
+- A file beside the GGUF holds the routed experts expert-major. Within a layer, an expert's banks follow each other (gate, up, down), each padded to 4 KiB, so one page-aligned read fetches a whole expert.
+- The pack records the GGUF offsets, types and shapes it was built from. The store refuses a pack built from any other file.
+- With `expert_pack`, a slot mirrors the packed expert byte for byte, so direct reads land in place with no partial-page copies.
+  - Speculative reads take whole experts.
+  - `expert_pack_split` reads a demanded expert as 2 or 3 concurrent parts (whole banks, split by size).
+- The GGUF stays the source of every other tensor.
+
+**Moving the experts in place** (`eqt-pack move`). The phone had 28 GB free, and a copy needs 46 GB. For each layer, `move`:
+1. writes the layer into the pack;
+2. re-reads it from storage (direct I/O) and compares both the packed bytes and the source bytes against what it read from the GGUF;
+3. records the layer atomically in `PACK.move`;
+4. only then deallocates the whole blocks of its ranges in the GGUF (hole punch). The partial blocks at a range's ends keep their bytes.
+
+Peak extra space is about one layer. An interrupted move resumes.
+- `eqt-pack unpack` writes the experts back, last layer first, truncating the pack behind it. It is also resumable, and leaves the GGUF byte-identical to the file before the move.
+- `eqt-pack sha256` hashes the logical model (the GGUF with its experts read from the pack), for comparison with the pinned SHA-256.
+- The engine refuses a GGUF with holes in its routed ranges unless a pack is given (SEEK_HOLE), so a moved model never computes with zeroed experts.
+- The app passes `<model>.eqtpack` automatically when it exists beside the model, and deleting the model deletes it too.
+
+On the Galaxy the move took 199 s for 46.08 GB of experts (48 layers). Free space went from 28.3 to 27.7 GB. The GGUF now occupies 32 GB, the pack 46.2 GB.
+
+**Lookahead kernel.** The Q8_0 GEMV of the predictor processes four rows per pass, with the FP16 scales converted as one vector; it used to work row by row with a scalar conversion per block. Predictor time per layer on the Galaxy:
+- 5.8–5.9 ms → 4.1 ms with the F32 router;
+- 3.05 ms with `lookahead_router_q8`, which D030 rejected because the old kernel gained nothing from it. The decode thread's wait for the predictor fell from 11–14 to 2–3 ms per token.
+
+**Galaxy, 64 greedy tokens, one repetition per arm, the same 64 tokens in every arm** (1,792 MiB cache, pool, two-layer lookahead, read priority). Records: `results/2026-10-20/galaxy/flash-next-d032-pack.json`.
+
+| Arm | Tokens/s | p50 ms | Compute wait ms/token | Decode reads |
+|---|---|---|---|---|
+| D030 options, before the move | 2.45 | 385 | 117 | 32.8 GB |
+| pack, 3 in flight | 2.59 | 369 | 104 | 37.0 GB |
+| pack, 2 in flight, split 2 | 2.65 | 360 | 99 | 35.3 GB |
+| pack, 1 in flight, split 2 | 2.70 | 357 | 108 | 31.6 GB |
+| **pack, 2 in flight, split 2, Q8_0 router** | **2.89 / 3.06 / 2.94 / 3.05** | 323–334 | 87–92 | 35.2 GB |
+
+The best configuration measured 2.99 tokens/s on average over four runs, against 2.45 before (+22%). The 52-token prompt took 10.4–11.7 s, against 13.9 s.
+
+**Why the pack gave less than estimated.** Storage still delivered about 1.6 GB/s while busy: the queue stays shallow, at 1–3 speculative reads plus the demanded ones. Higher depth raises throughput but delays demanded reads in the device. Misses stayed at 13.7% of demanded experts in every arm.
+
+**Rejected** (each within noise or worse):
+- awake demand threads (2.81: they compete with the predictor on the little cores);
+- 8 demand threads (2.97);
+- split 3 (3.00);
+- 1 in flight (2.99);
+- the predictor split over 3 threads on the little cores (`lookahead_threads`: 3.01 against 3.05);
+- the same with polling (`lookahead_spin`: 2.27, CPU contention).
+
+Both options are implemented, default off, and produce identical predictions for any thread count.
+
+**Late lookahead, measured and not pursued** (host, real model, `results/2026-10-20/host/flash-next-late-lookahead.json`). Scoring layer l+1 from layer l's output streams, just before l+1's attention, raises mean precision only from 77% to 81% (rank 10: 0.43 → 0.45). Layer l+1's attention moves routing more than layer l's MoE does. `lookahead_late: 1` records the precision only.
+
+**A GET_ROWS patch withdrawn.** Splitting a single-row F32 `GET_ROWS` (the 3 MB DeltaNet state gather) across threads was bitwise equal on the host. On the Galaxy, with identical tokens, it measured:
+- with one predictor thread, 2.25 tokens/s with the patch against 3.05 without;
+- with three, 2.96 against 3.01.
+
+The interaction is not explained, so the patch is withdrawn.
+
+**Also in this change, not yet measured on the phone:**
+- `profile_ops`: decode wall time by operation through the CPU backend's node hook.
+- `decode_reclaims_compute`. After a prompt, the compute buffer's pages are returned (`MADV_DONTNEED`, the buffer holds no state between evaluations). After the first decode step, the pages decoding touched are counted (`mincore`). The rest, minus a 32 MiB margin, becomes expert cache until decoding ends; then the cache trims to the prompt quota and releases the freed slots before the next prompt. Patch 0005 adds the scheduler's buffer accessors.
+
+**Correctness:**
+- Host: the 17 earlier streaming cases plus the pack and parallel-lookahead cases are bitwise equal to the resident path on the three fixtures.
+- Galaxy (f2fs, direct I/O), on fixture copies (`tools/verify_pack_move.py`):
+  - move, interrupted move, resume, unpack and interrupted unpack;
+  - SHA-256 through the pack equal to the original;
+  - refusal without the pack;
+  - 18 bitwise streaming cases.
+- Linux container (real O_DIRECT, `madvise`, `mincore`): all 29 cases on each of the three fixtures are bitwise equal, including the pack and `decode_reclaims_compute` cases, and so are the 5 MTP cases; move and unpack pass as on the Galaxy. Decoding touched about 1 MB of a fixture's 128 MB compute buffer and lent 94 MB to the cache.
+- Records: `results/2026-10-20/galaxy/pack-move-galaxy.json`, `streaming-correctness-pack-galaxy.json`, `results/2026-10-20/host/streaming-correctness-pack-parallel.json`, `results/2026-10-20/linux/`.
+
+**Not verified:**
+- the in-app load with the pack;
+- `eqt-pack sha256` on the phone's 79 GB model;
+- `decode_reclaims_compute` on the phone;
+- sustained and thermal behavior;
+- energy.
+
+The phone's AP reached 58 °C and the battery 47 °C during this session on USB power. The slow runs with the withdrawn patch (2.25–2.42 tokens/s, one of them without cooling) are excluded from the table.

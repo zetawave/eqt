@@ -1,0 +1,68 @@
+{
+  "target": "linux",
+  "fixtures": [
+    {
+      "model": "models/eqt-tiny-qwen35moe.gguf",
+      "sha256": "95931cd046c2d65f1b0d99495759ae69361d9414702bb8b907cc6d975b3384e6",
+      "allocated_kib_before": 130192,
+      "allocated_kib_moved": 115440,
+      "outcomes": [
+        {
+          "load": {
+            "expert_cache_mib": 1,
+            "io_threads": 4
+          },
+          "bitwise_logits_and_tokens": true
+        },
+        {
+          "load": {
+            "expert_cache_mib": 1,
+            "io_threads": 4,
+            "prefetch": true,
+            "speculative_pool": true,
+            "lookahead_layers": 2,
+            "read_priority": true,
+            "prefetch_inflight": 1,
+            "expert_pack_split": 2,
+            "coalesce_kib": 8192,
+            "prefill_prefetch_mib": 8,
+            "direct_io": true
+          },
+          "bitwise_logits_and_tokens": true
+        }
+      ]
+    },
+    {
+      "model": "models/eqt-tiny-qwen4exp.gguf",
+      "sha256": "1fc9202f084ea152266578a287e819966f9554276d0c7ea811567dd933751f8e",
+      "allocated_kib_before": 118984,
+      "allocated_kib_moved": 116748,
+      "outcomes": [
+        {
+          "load": {
+            "expert_cache_mib": 1,
+            "io_threads": 4
+          },
+          "bitwise_logits_and_tokens": true
+        },
+        {
+          "load": {
+            "expert_cache_mib": 1,
+            "io_threads": 4,
+            "prefetch": true,
+            "speculative_pool": true,
+            "lookahead_layers": 2,
+            "read_priority": true,
+            "prefetch_inflight": 1,
+            "expert_pack_split": 2,
+            "coalesce_kib": 8192,
+            "prefill_prefetch_mib": 8,
+            "direct_io": true
+          },
+          "bitwise_logits_and_tokens": true
+        }
+      ]
+    }
+  ],
+  "scope": "Random-weight fixtures; exactness and recoverability of move/unpack only."
+}

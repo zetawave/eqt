@@ -63,6 +63,17 @@ struct ExpertOptions {
     // Hyper-connection lookahead: apply the mixer's low-rank gate (two Q8_0 GEMVs per layer) or average the normed
     // streams without it, which costs only the router product.
     bool lookahead_gate = true;
+    // Late lookahead (hyper-connection models): at layer l's output, before layer l+1's attention, layer l+1's
+    // routing is scored again from the exact streams. 1 records its precision only (scored on the decode thread,
+    // for measurement); lookahead_late_gate applies the mixer's gate as the early lookahead does.
+    int lookahead_late = 0;
+    bool lookahead_late_gate = true;
+    // Threads that score a lookahead together (1: the predictor alone). The others are helpers pinned to the
+    // lowest-capacity CPUs; each projection is split by rows, in groups of four so every row is computed the same
+    // way whatever the thread count. Helpers spin only while a lookahead runs.
+    int lookahead_threads = 1;
+    // While decoding, the predictor polls for the next lookahead instead of sleeping on a condition variable.
+    bool lookahead_spin = false;
     // Demand misses of adjacent experts merge into one read per bank of at most coalesce_kib (0: one read
     // per expert and bank), bridging gaps of at most coalesce_gap resident experts.
     int coalesce_kib = 0;
@@ -80,6 +91,12 @@ struct ExpertOptions {
     bool slots = false;
     // With slots: decode does not wait for missing experts before MUL_MAT_ID (see overlap_reads_).
     bool overlap_reads = true;
+    // Expert pack (expert_pack.h): routed experts are read from this file, one contiguous page-aligned read per
+    // expert, instead of one read per bank from the GGUF. Requires slots.
+    std::string pack_path;
+    // With a pack, a demanded single expert is read as this many concurrent parts (whole banks, split by size);
+    // speculative reads always read whole experts.
+    int pack_split = 1;
     std::string trace_path;
 };
 
@@ -118,6 +135,11 @@ class ExpertStore {
     void begin_request();
     // Decode-phase evaluations (single tokens, speculative verification, MTP drafting) feed decode_* counters.
     void set_decode_phase(bool decode);
+    // More cache while decoding: compute-buffer memory a prompt needs and decoding leaves untouched (the engine
+    // releases those pages after the prompt and measures what decoding uses). Applies to the current decode; the
+    // next prompt gets the memory back when decoding ends, as set_decode_phase(false) trims to the prompt quota
+    // and returns the freed slots' pages at once.
+    void set_decode_extra(uint64_t bytes);
     void end_request();
     Json configuration() const;
     Json statistics() const;
@@ -156,6 +178,7 @@ class ExpertStore {
         int experts = 0;
         int quota = 0;
         int prompt_quota = 0, decode_quota = 0; // quota during prompts and while decoding
+        double share = 0;                       // this layer's fraction of the budget
         int pooled = 0;                         // entries held in the speculative pool
         int resident = 0;
         uint64_t entry_bytes = 0;
@@ -181,9 +204,15 @@ class ExpertStore {
         std::vector<int> early_prediction; // two layers ahead (lookahead_layers = 2)
         std::vector<uint8_t> early_rank;
         bool early_valid = false;
+        std::vector<int> late_prediction; // from the previous layer's output (lookahead_late)
+        std::vector<uint8_t> late_rank;
+        bool late_valid = false;
+        uint64_t pack_base = 0; // pack offset of expert 0; experts are slot_bytes apart
     };
-    // One contiguous read of experts [first, first + count) of one bank; bit i of `members` marks expert
-    // first + i as loaded by this read (other experts in the range are resident and re-read unchanged).
+    // One contiguous read of experts [first, first + count) of banks [bank, bank + banks); bit i of `members`
+    // marks expert first + i as loaded by this read (other experts in the range are resident and re-read
+    // unchanged). Without a pack a job covers one bank; with one, a job covers whole experts, or for a single
+    // expert a run of adjacent banks.
     struct Job {
         Layer *layer;
         int bank;
@@ -191,6 +220,7 @@ class ExpertStore {
         int count;
         uint64_t members;
         std::chrono::steady_clock::time_point queued;
+        int banks = 1;
     };
     struct Stats {
         uint64_t ensure_calls = 0, demanded = 0, hits = 0, prefetch_hits = 0, inflight_hits = 0, misses = 0;
@@ -205,6 +235,8 @@ class ExpertStore {
         double decode_io_busy_ms = 0; // decoding wall time with at least one expert read in flight
         uint64_t rank_predicted[16] = {}, rank_correct[16] = {};
         uint64_t early_rank_predicted[16] = {}, early_rank_correct[16] = {}, early_prefetch_issued = 0;
+        uint64_t late_rank_predicted[16] = {}, late_rank_correct[16] = {};
+        double late_ms = 0;
         double demand_queue_ms = 0, demand_read_ms = 0;
         uint64_t decode_demand_jobs = 0, promoted_reads = 0, confirmed_reads = 0, cancelled_prefetches = 0;
         double decode_demand_job_ms = 0; // decoding: from demand (or promotion) to the bank's bytes in place
@@ -233,7 +265,10 @@ class ExpertStore {
     bool assign_slot(Layer &layer, int expert);
     void release_slot(Layer &layer, int expert);
     void read_slots(const Job &job) const;
+    uint64_t job_bytes(const Job &job) const;
     void setup_slots();
+    // Validates the pack against the registered banks and places each bank at its packed offset in the slot.
+    void attach_pack();
     bool ensure(int layer_index, const ggml_tensor *ids);
     // Predicts layer_index + 1 (predict) and, with lookahead_layers 2, layer_index + 2 (predict_after) from the
     // same rows; the predictor thread queues the first prediction's reads before computing the second.
@@ -257,6 +292,18 @@ class ExpertStore {
     // that touches cache state first waits for it, so the cache keeps a single writer at any time.
     void predictor();
     void wait_predictor();
+    // Runs fn(context, begin, end) over [0, rows) in chunks of `chunk` rows (a multiple of four) on the predictor
+    // and its helpers; returns when every chunk is done. Called by one thread at a time (the predictor, or the
+    // decode thread while the predictor is idle).
+    void parallel_rows(size_t rows, size_t chunk, void (*fn)(const void *, size_t, size_t), const void *context);
+    template <class F>
+    void parallel_rows(size_t rows, size_t chunk, const F &fn) {
+        parallel_rows(rows, chunk, [](const void *f, size_t b, size_t e) { (*static_cast<const F *>(f))(b, e); }, &fn);
+    }
+    void run_rows();
+    void wake_helpers();
+    void helper();
+    size_t row_chunk(size_t rows) const;
     void issue_prefetch(Layer &layer);
     void start_load(Layer &layer, int expert, Queue queue);
     bool begin_load(Layer &layer, int expert, bool demand);
@@ -285,7 +332,9 @@ private:
 
     ExpertOptions options_;
     const std::atomic_bool &cancelled_;
-    std::unique_ptr<SourceFile> file_;
+    std::unique_ptr<SourceFile> file_; // the expert source: the GGUF, or the pack
+    uint64_t model_size_ = 0;
+    bool packed_ = false;
     std::unique_ptr<ggml_backend_buffer_type> buffer_type_;
     std::unique_ptr<ggml_backend_buffer_type> mapped_type_;
     std::string path_;
@@ -300,6 +349,17 @@ private:
     mutable std::mutex mutex_;
     std::condition_variable queue_ready_, job_done_;
     std::thread predictor_;
+    std::vector<std::thread> helpers_;
+    std::atomic<uint32_t> helper_epoch_{0};  // one increment per posted job, the helpers' wake word
+    std::atomic<uint64_t> helper_done_{0};   // jobs finished, summed over helpers
+    uint64_t helper_posted_ = 0;              // jobs posted (written by the posting thread only)
+    std::atomic<bool> helpers_hot_{false};   // a lookahead runs: helpers spin between its jobs
+    std::atomic<bool> helpers_stop_{false};
+    void (*helper_fn_)(const void *, size_t, size_t) = nullptr;
+    const void *helper_context_ = nullptr;
+    size_t helper_rows_ = 0, helper_chunk_ = 0;
+    std::atomic<size_t> helper_next_{0};
+    std::atomic<bool> predict_flag_{false}; // predict_pending_, readable without the mutex (lookahead_spin)
     std::mutex predict_mutex_;
     std::condition_variable predict_ready_, predict_done_;
     bool predict_pending_ = false, predict_stopping_ = false; // guarded by predict_mutex_
@@ -318,7 +378,8 @@ private:
     std::ofstream trace_;
     Stats stats_;
     uint64_t clock_ = 0, resident_bytes_ = 0, routed_bytes_ = 0, effective_budget_ = 0;
-    uint64_t prompt_budget_ = 0, decode_budget_ = 0;
+    uint64_t prompt_budget_ = 0, decode_budget_ = 0, decode_extra_ = 0;
+    void plan_decode_quotas();
     int active_reads_ = 0;                    // guarded by mutex_
     std::chrono::steady_clock::time_point busy_since_;
     uint32_t epoch_ = 0;

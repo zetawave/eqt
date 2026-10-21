@@ -75,7 +75,7 @@ int main() {
     }
     // Q8_0 rows (FP16 scale + 32 int8) against quantized activations: the result must equal the double-precision
     // sum of the same integer products and scales up to FP32 accumulation error.
-    for (size_t rows : {1u, 3u, 320u}) {
+    for (size_t rows : {1u, 3u, 5u, 320u}) {
         for (size_t n : {32u, 320u, 10240u}) {
             std::vector<float> x(n), scores(rows), x_scales(n / 32);
             std::vector<int8_t> xq(n);
@@ -164,7 +164,19 @@ int main() {
     }
     const double us =
         std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count() / repeats;
-    std::printf("{\"implementation\":\"%s\",\"failures\":%d,\"router_gemv_us\":%.1f,\"checksum\":%.3f}\n",
-                eqt::simd::implementation(), failures, us, scores[0]);
+    // The hyper-connection mixer's two Q8_0 projections (10240 -> 320 -> 10240), as the lookahead runs them.
+    std::vector<uint8_t> mixer(320 * 320 * 34, 0x11);
+    std::vector<int8_t> mixer_q(10240, 3);
+    std::vector<float> mixer_scales(320, 0.01f), mixer_out(10240);
+    const auto mixer_start = std::chrono::steady_clock::now();
+    for (int i = 0; i < repeats; ++i) {
+        eqt::simd::gemv_q8_0(mixer.data(), 320 * 34, mixer_q.data(), mixer_scales.data(), mixer_out.data(), 320, 10240);
+        eqt::simd::gemv_q8_0(mixer.data(), 10 * 34, mixer_q.data(), mixer_scales.data(), mixer_out.data(), 10240, 320);
+    }
+    const double mixer_us =
+        std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - mixer_start).count() / repeats;
+    std::printf("{\"implementation\":\"%s\",\"failures\":%d,\"router_gemv_us\":%.1f,\"mixer_q8_gemv_us\":%.1f,"
+                "\"checksum\":%.3f}\n",
+                eqt::simd::implementation(), failures, us, mixer_us, scores[0] + mixer_out[0]);
     return failures ? 1 : 0;
 }

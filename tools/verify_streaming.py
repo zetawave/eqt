@@ -8,10 +8,12 @@ import argparse
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 
 from benchmark import source_hash
-from runner import ROOT, Runner, sha256
+from device import adb
+from runner import REMOTE, ROOT, Runner, sha256
 
 FIXTURES = ["models/eqt-tiny-qwen35moe.gguf", "models/eqt-tiny-qwen35moe-ff96.gguf", "models/eqt-tiny-qwen4exp.gguf"]
 MTP_FIXTURE = "models/eqt-tiny-qwen35moe-mtp.gguf"
@@ -61,7 +63,42 @@ CASES = [
                    coalesce_kib=512, prefill_prefetch_mib=8)),
     dict(name="nonuniform_layer_weights", batch=128,
          load=dict(expert_cache_mib=2, io_threads=2, expert_layer_weights=[4, 1, 1, 1, 1, 1, 1, 4])),
+    # Lookahead scored by three threads, polling while decoding: predictions drive reads only.
+    dict(name="read_priority_parallel_lookahead", batch=128,
+         load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, lookahead_layers=2,
+                   read_priority=True, prefetch_inflight=2, lookahead_router_q8=True, lookahead_threads=3,
+                   lookahead_spin=True)),
+    # Decoding borrows the prompt's compute-buffer pages as expert cache (Linux and Android; a no-op elsewhere).
+    dict(name="decode_reclaims_compute", batch=128,
+         load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, read_priority=True,
+                   prefetch_inflight=2, decode_reclaims_compute=True)),
+    # Expert pack (native/expert_pack.h): "{pack}" is replaced by the fixture's pack path.
+    dict(name="pack_evicting", batch=128, load=dict(expert_cache_mib=1, io_threads=4, expert_pack="{pack}")),
+    dict(name="pack_split3_pool_priority_two_layers", batch=128,
+         load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, lookahead_layers=2,
+                   lookahead2_count=3, prefetch_extra=2, read_priority=True, prefetch_inflight=1,
+                   expert_pack="{pack}", expert_pack_split=3)),
+    dict(name="pack_split2_chunk16_coalesced_prefill", batch=16,
+         load=dict(expert_cache_mib=2, io_threads=4, prefetch=True, coalesce_kib=8192, coalesce_gap=2,
+                   prefill_prefetch_mib=8, expert_pack="{pack}", expert_pack_split=2)),
 ]
+
+
+def build_pack(runner, model, workdir):
+    """Builds the fixture's expert pack with eqt-pack, verifies it, and returns the path the engine reads."""
+    name = Path(model).name + ".eqtpack"
+    if runner.local:
+        pack = Path(workdir) / name
+        pack.unlink(missing_ok=True)
+        for command in (["build", str(model), str(pack)], ["verify", str(model), str(pack)]):
+            run = subprocess.run([str(runner.tool("eqt-pack")), *command], capture_output=True, text=True)
+            if run.returncode:
+                raise AssertionError(f"eqt-pack {command[0]} failed: {run.stderr}")
+        return pack, json.loads(run.stdout)
+    adb("shell", f"rm -f {REMOTE}/{name} {REMOTE}/{name}.partial", serial=runner.serial)
+    for command in (f"build {model} {name}", f"verify {model} {name}"):
+        run = adb("shell", f"cd {REMOTE} && LD_LIBRARY_PATH={REMOTE} ./eqt-pack {command}", serial=runner.serial)
+    return name, json.loads(run.stdout)
 
 
 def main():
@@ -73,6 +110,7 @@ def main():
     parser.add_argument("--output", default="results/local/streaming-correctness.json")
     parser.add_argument("--fixture", action="append", help="Only these fixtures (default: all)")
     parser.add_argument("--skip-mtp", action="store_true", help="Skip the MTP self-speculation fixture")
+    parser.add_argument("--case", action="append", help="Only cases whose name contains this text (default: all)")
     args = parser.parse_args()
     runner = Runner(args.target, args.serial, args.cpu_variant)
     base = json.loads((ROOT / "configs/smoke-request.json").read_text(encoding="utf-8"))
@@ -90,8 +128,15 @@ def main():
                                      prefill_prefetch_mib=8, expert_slots=True)),
                       dict(name="direct_io_prefill_prefetch", batch=128,
                            load=dict(expert_cache_mib=1, io_threads=4, direct_io=True, coalesce_kib=256,
-                                     prefill_prefetch_mib=8))]
+                                     prefill_prefetch_mib=8)),
+                      dict(name="direct_io_pack_split2_priority", batch=128,
+                           load=dict(expert_cache_mib=1, io_threads=4, direct_io=True, prefetch=True,
+                                     speculative_pool=True, read_priority=True, prefetch_inflight=2,
+                                     coalesce_kib=8192, prefill_prefetch_mib=8, expert_pack="{pack}",
+                                     expert_pack_split=2))]
                      if args.direct_io else [])
+    if args.case:
+        cases = [case for case in cases if any(text in case["name"] for text in args.case)]
     report = dict(target=args.target, source_sha256=source_hash(), cpu_variant=args.cpu_variant,
                   criterion="bitwise first-token logits and identical greedy token IDs versus resident, same chunk",
                   fixtures=[])
@@ -100,10 +145,12 @@ def main():
         for fixture in args.fixture or FIXTURES:
             # EQT_FIXTURE_DIR lets a container read fixtures from a filesystem that supports O_DIRECT.
             local = (Path(os.environ.get("EQT_FIXTURE_DIR", ROOT / "models")) / Path(fixture).name).resolve()
-            hashes = runner.stage(["eqt-bench", "eqt-check"], [local])
+            hashes = runner.stage(["eqt-bench", "eqt-check", "eqt-pack"], [local])
             model = local if runner.local else local.name
+            pack, pack_verify = build_pack(runner, model, workdir)
             references, outcomes = {}, []
             for case in cases:
+                case = json.loads(json.dumps(case).replace('"{pack}"', json.dumps(str(pack))))
                 if case["batch"] not in references:
                     request = json.loads(json.dumps(base))
                     request["load"].update(batch=case["batch"], mmap=True)
@@ -116,7 +163,7 @@ def main():
                 outcome = dict(case=case["name"], load=case["load"], batch=case["batch"],
                                bitwise_logits=reference["first_logits"] == result["first_logits"],
                                max_abs_logit_delta=delta, token_ids_equal=reference["token_ids"] == result["token_ids"],
-                               expert_cache=result["expert_cache"],
+                               expert_cache=result["expert_cache"], compute_lent=result.get("decode_compute_lent"),
                                layer_quotas=result["configuration"]["expert_streaming"]["layer_quotas"])
                 outcome["passed"] = outcome["bitwise_logits"] and outcome["token_ids_equal"]
                 outcomes.append(outcome)
@@ -131,9 +178,18 @@ def main():
             run, _ = runner.run("eqt-bench", model, rejected, workdir, check=False)
             if run.returncode != 1 or "require expert_streaming" not in run.stderr + run.stdout:
                 raise AssertionError("Expert options without streaming were not rejected")
+            # A pack built from another model must be refused, never read.
+            foreign = report["fixtures"][-1]["pack"] if report["fixtures"] else None
+            if foreign:
+                mismatched = json.loads(json.dumps(base))
+                mismatched["load"].update(expert_streaming=True, expert_cache_mib=1, expert_pack=foreign)
+                run, _ = runner.run("eqt-bench", model, mismatched, workdir, check=False)
+                if run.returncode != 1 or "Expert pack" not in run.stderr + run.stdout:
+                    raise AssertionError("A pack of another model was not rejected")
             report["fixtures"].append(dict(model=fixture, model_sha256=hashes[local.name],
                                            binary_sha256=hashes[runner.tool("eqt-bench").name],
-                                           outcomes=outcomes, lifecycle=lifecycle,
+                                           outcomes=outcomes, lifecycle=lifecycle, pack=str(pack),
+                                           pack_verify=pack_verify, rejects_foreign_pack=bool(foreign),
                                            rejects_cache_options_without_streaming=True))
         if not args.skip_mtp:
             # MTP self-speculation must reproduce plain greedy decoding. The random head rejects nearly every

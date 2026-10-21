@@ -469,6 +469,11 @@ object EngineController {
         }
         val options = withVision ?: options(0)
         source.hash?.let { options.put("model_sha256", it) }
+        // An expert pack beside the model (eqt-pack, D032) holds its experts one contiguous read each; after
+        // `eqt-pack move` the model file has no experts of its own and the engine refuses it without the pack.
+        if (source.streamed) {
+            File(source.path.removeSuffix(".gguf") + ".eqtpack").takeIf { it.isFile }?.let { options.put("expert_pack", it.path) }
+        }
         val note = if (source.projectorPath != null && withVision == null) "images off: not enough free memory" else null
         loadNative(source.path, options, source.hash, note, growing)
         loadedSource = source.copy(settings = source.settings.copy(gpu = options.optBoolean("gpu")),

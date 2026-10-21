@@ -1,0 +1,64 @@
+diff --git a/ggml/include/ggml-alloc.h b/ggml/include/ggml-alloc.h
+index 81cce2e..1b6509d 100644
+--- a/ggml/include/ggml-alloc.h
++++ b/ggml/include/ggml-alloc.h
+@@ -72,6 +72,8 @@ GGML_API bool ggml_gallocr_reserve_n(
+ GGML_API bool ggml_gallocr_alloc_graph(ggml_gallocr_t galloc, struct ggml_cgraph * graph);
+ 
+ GGML_API size_t ggml_gallocr_get_buffer_size(ggml_gallocr_t galloc, int buffer_id);
++// The backend buffer holding chunk `chunk` of buffer `buffer_id`, or NULL past the last chunk.
++GGML_API ggml_backend_buffer_t ggml_gallocr_get_buffer_chunk(ggml_gallocr_t galloc, int buffer_id, int chunk);
+ 
+ // Utils
+ // Create a buffer and allocate all the tensors in a ggml_context
+diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
+index 5ef80da..b671e80 100644
+--- a/ggml/include/ggml-backend.h
++++ b/ggml/include/ggml-backend.h
+@@ -334,6 +334,8 @@ extern "C" {
+ 
+     GGML_API ggml_backend_buffer_type_t ggml_backend_sched_get_buffer_type(ggml_backend_sched_t sched, ggml_backend_t backend);
+     GGML_API size_t                     ggml_backend_sched_get_buffer_size(ggml_backend_sched_t sched, ggml_backend_t backend);
++    // The compute buffer chunks of a backend (NULL past the last), e.g. to release their pages between graphs.
++    GGML_API ggml_backend_buffer_t      ggml_backend_sched_get_buffer_chunk(ggml_backend_sched_t sched, ggml_backend_t backend, int chunk);
+ 
+     GGML_API void                 ggml_backend_sched_set_tensor_backend(ggml_backend_sched_t sched, struct ggml_tensor * node, ggml_backend_t backend);
+     GGML_API ggml_backend_t       ggml_backend_sched_get_tensor_backend(ggml_backend_sched_t sched, struct ggml_tensor * node);
+diff --git a/ggml/src/ggml-alloc.c b/ggml/src/ggml-alloc.c
+index b0c067b..0078a88 100644
+--- a/ggml/src/ggml-alloc.c
++++ b/ggml/src/ggml-alloc.c
+@@ -1115,6 +1115,14 @@ size_t ggml_gallocr_get_buffer_size(ggml_gallocr_t galloc, int buffer_id) {
+     return ggml_vbuffer_size(galloc->buffers[buffer_id]);
+ }
+ 
++ggml_backend_buffer_t ggml_gallocr_get_buffer_chunk(ggml_gallocr_t galloc, int buffer_id, int chunk) {
++    GGML_ASSERT(buffer_id >= 0 && buffer_id < galloc->n_buffers);
++    if (galloc->buffers[buffer_id] == NULL || chunk < 0 || chunk >= GGML_VBUFFER_MAX_CHUNKS) {
++        return NULL;
++    }
++    return galloc->buffers[buffer_id]->chunks[chunk];
++}
++
+ // utils
+ 
+ static struct ggml_tensor ** ggml_backend_alloc_ctx_tensors_from_buft_collect(
+diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
+index 5bdade6..b2b9a26 100644
+--- a/ggml/src/ggml-backend.cpp
++++ b/ggml/src/ggml-backend.cpp
+@@ -2241,6 +2241,14 @@ size_t ggml_backend_sched_get_buffer_size(ggml_backend_sched_t sched, ggml_backe
+     return ggml_gallocr_get_buffer_size(sched->galloc, backend_index);
+ }
+ 
++ggml_backend_buffer_t ggml_backend_sched_get_buffer_chunk(ggml_backend_sched_t sched, ggml_backend_t backend, int chunk) {
++    GGML_ASSERT(sched);
++    int backend_index = ggml_backend_sched_backend_id(sched, backend);
++    GGML_ASSERT(backend_index >= 0 && backend_index < sched->n_backends);
++
++    return ggml_gallocr_get_buffer_chunk(sched->galloc, backend_index, chunk);
++}
++
+ void ggml_backend_sched_set_tensor_backend(ggml_backend_sched_t sched, struct ggml_tensor * node, ggml_backend_t backend) {
+     GGML_ASSERT(sched);
+     int backend_index = ggml_backend_sched_backend_id(sched, backend);

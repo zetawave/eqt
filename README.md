@@ -91,5 +91,3 @@ This project is dual-licensed:
 
 1. **Open Source (AGPLv3):** Free for personal use, education, and open-source projects. Under the **GNU AGPLv3**, any modified version or service integrating this software must also release its source code publicly under the same AGPLv3 license.
 2. **Commercial License:** If you wish to use this software in proprietary/closed-source products, SaaS platforms without releasing your source code, or require custom enterprise terms, you must purchase a commercial license.
-
-For commercial licensing requests, contact: **z3tawave@gmail.com**

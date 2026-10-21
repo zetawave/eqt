@@ -1,7 +1,7 @@
 # Progress — 2026-10-06
 
 
-## Resume here (state on 2026-10-08)
+## Resume here (state on 2026-10-08; Flash-Next on 2026-10-20)
 
 **Goal:** the fastest exact engine for Qwen3.5/3.6 MoE models larger than the phone's RAM, on a stock Galaxy S24+ (Exynos 2400). Quality, context length and speed advance together; nothing is traded for tokens/s.
 
@@ -25,9 +25,12 @@
 
 - 1.47–1.58 tokens/s at the start;
 - 1.92 with a speculative pool, a two-layer lookahead and a 1,792 MiB cache (D029);
-- 2.39–2.41 with demand-first read scheduling, against 2.12 for D029's configuration in the same session (D030).
+- 2.39–2.41 with demand-first read scheduling, against 2.12 for D029's configuration in the same session (D030);
+- 2.89–3.06 (2.99 mean over four runs) with the experts in an expert pack, 2 whole-expert reads in flight, demanded experts in two parts and the Q8_0 lookahead router with a four-row kernel, against 2.45 for D030's options in the same session (D032).
 
 The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 tokens/s (224 tokens). Chat turns reuse the previous turn's state where the template allows it (D027).
+
+**Flash-Next on the phone is moved (2026-10-20, D032).** `eqt-pack move` moved its experts into `files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack`; the GGUF beside it has holes in its routed ranges and loads only with the pack. The installed debug app (built 20:31) passes the pack automatically, with D030's tuning. The catalog in the working tree has D032's tuning, not yet installed. `eqt-pack unpack MODEL PACK` restores the original GGUF byte for byte. `eqt-pack sha256` against the pinned hash has not been run on the phone yet.
 
 **Next performance goals, in order:**
 
@@ -37,7 +40,13 @@ The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 
    - why storage wait doubles in long runs (82 against about 31 ms per token).
 2. **Prefill:** i8mm microkernel register blocking (the kernels are about 42% of prefill cycles), DeltaNet and attention prefill kernels, 8k–32k context sweeps.
 3. **Cache policy:** eviction informed by router scores (the Belady gap is about 15 points). The speculative pool that never displaces cached experts is in place (D029).
-4. **Flash-Next prediction lead time:** the predictor takes about 6 ms of a ~8 ms layer on a small core, so next-layer reads start late. Faster or parallel prediction comes first, then larger contiguous expert reads (D030).
+4. **Flash-Next, from D032's measurements** (about 330 ms per token: ~90 ms waiting for expert reads, ~240 ms compute and synchronization):
+   - measure `decode_reclaims_compute` (about +0.45 GiB of decode cache from the prompt's compute buffer; implemented, unmeasured);
+   - a clean `profile_ops` profile (the first one ran with a withdrawn patch and hot);
+   - the graph split per layer (about 0.28 ms each);
+   - the IQ2_XS expert kernel (instruction-bound);
+   - the BF16 indexer GEMV (scalar, about 7 ms per token; vectorizing changes summation order, so it needs a numerical comparison);
+   - misses stay at 13.7% of demanded experts: the late lookahead adds only 4 points of precision.
 5. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
 6. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
 

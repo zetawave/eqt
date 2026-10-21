@@ -1,0 +1,100 @@
+{
+ "date": "2026-10-20",
+ "measurement_kind": "local_measurement_host_real_model",
+ "host": "16 GB Windows PC; precision is a property of the model and predictor, not of the device",
+ "model": "models/flash-next/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+ "tokens": 48,
+ "description": "Precision by rank of layer l+1's predicted experts: next (attn_residual of layer l, mixer gate), early2 (two layers ahead, no gate) and late (layer l's output streams, before l+1's attention)",
+ "arms": {
+  "late_gate": {
+   "next_precision_by_rank": [
+    0.9805,
+    0.967,
+    0.9294,
+    0.9031,
+    0.8556,
+    0.7945,
+    0.7103,
+    0.6057,
+    0.5496,
+    0.426,
+    null,
+    null
+   ],
+   "early2_precision_by_rank": [
+    0.9121,
+    0.8626,
+    0.7905,
+    0.7276,
+    0.6915,
+    0.6013,
+    0.5444,
+    0.4722,
+    0.4117,
+    0.3492,
+    null,
+    null
+   ],
+   "late_precision_by_rank": [
+    0.9914,
+    0.9778,
+    0.9615,
+    0.9285,
+    0.8909,
+    0.8452,
+    0.7845,
+    0.6849,
+    0.5831,
+    0.4495,
+    null,
+    null
+   ],
+   "late_predict_ms": 9073.989200000005
+  },
+  "late_plain": {
+   "next_precision_by_rank": [
+    0.9805,
+    0.967,
+    0.9294,
+    0.9031,
+    0.8556,
+    0.7945,
+    0.7103,
+    0.6057,
+    0.5496,
+    0.426,
+    null,
+    null
+   ],
+   "early2_precision_by_rank": [
+    0.9121,
+    0.8626,
+    0.7905,
+    0.7276,
+    0.6915,
+    0.6013,
+    0.5444,
+    0.4722,
+    0.4117,
+    0.3492,
+    null,
+    null
+   ],
+   "late_precision_by_rank": [
+    0.9683,
+    0.9425,
+    0.8977,
+    0.8633,
+    0.8072,
+    0.7352,
+    0.6541,
+    0.588,
+    0.4898,
+    0.4106,
+    null,
+    null
+   ],
+   "late_predict_ms": 3389.5749000000037
+  }
+ }
+}

@@ -127,12 +127,41 @@ bool has_dotprod() {
 #endif
 }
 
-// SDOT adds four int8 products into each 32-bit lane per instruction (at most 4 * 128 * 128 per step).
+__attribute__((target("arch=armv8.2-a+dotprod"))) inline int32x4_t block_dot(const uint8_t *block, int8x16_t x0,
+                                                                              int8x16_t x1) {
+    const int32x4_t acc = vdotq_s32(vdupq_n_s32(0), vld1q_s8(reinterpret_cast<const int8_t *>(block + 2)), x0);
+    return vdotq_s32(acc, vld1q_s8(reinterpret_cast<const int8_t *>(block + 18)), x1);
+}
+
+// SDOT adds four int8 products into each 32-bit lane per instruction (at most 4 * 128 * 128 per step). Four rows
+// share each activation load; their block sums and FP16 scales are combined as one vector per block, so the
+// in-order little cores the predictor usually runs on issue no scalar conversions or reductions per row.
 __attribute__((target("arch=armv8.2-a+dotprod"))) void gemv_q8_0_dotprod(const uint8_t *rows, size_t row_stride,
                                                                           const int8_t *q, const float *scales,
                                                                           float *scores, size_t row_count, size_t n) {
     const size_t blocks = n / q8_block;
-    for (size_t r = 0; r < row_count; ++r) {
+    size_t r = 0;
+    for (; r + 4 <= row_count; r += 4) {
+        const uint8_t *row0 = rows + r * row_stride, *row1 = row0 + row_stride, *row2 = row1 + row_stride,
+                      *row3 = row2 + row_stride;
+        float32x4_t total = vdupq_n_f32(0);
+        for (size_t b = 0; b < blocks; ++b) {
+            const size_t at = b * q8_block_bytes;
+            const int8x16_t x0 = vld1q_s8(q + b * q8_block), x1 = vld1q_s8(q + b * q8_block + 16);
+            // Lane i of the pairwise sums is row i's block total.
+            const int32x4_t sums = vpaddq_s32(vpaddq_s32(block_dot(row0 + at, x0, x1), block_dot(row1 + at, x0, x1)),
+                                              vpaddq_s32(block_dot(row2 + at, x0, x1), block_dot(row3 + at, x0, x1)));
+            uint16_t halves[4];
+            std::memcpy(&halves[0], row0 + at, 2);
+            std::memcpy(&halves[1], row1 + at, 2);
+            std::memcpy(&halves[2], row2 + at, 2);
+            std::memcpy(&halves[3], row3 + at, 2);
+            const float32x4_t d = vcvt_f32_f16(vreinterpret_f16_u16(vld1_u16(halves)));
+            total = vfmaq_f32(total, vcvtq_f32_s32(sums), vmulq_n_f32(d, scales[b]));
+        }
+        vst1q_f32(scores + r, total);
+    }
+    for (; r < row_count; ++r) {
         const uint8_t *row = rows + r * row_stride;
         float sum = 0;
         for (size_t b = 0; b < blocks; ++b) {

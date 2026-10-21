@@ -181,9 +181,12 @@ object Catalog {
             // Lookahead reads in a pool beside the cache, two layers ahead (D029, Galaxy): 1.47 -> 1.68 tokens/s
             // at 1 GiB, 1.92 at 1.75 GiB, identical tokens. The pool holds about 60 MiB within the reserve.
             // Demand reads first and at most 3 speculative reads in flight (D030, Galaxy, 1.75 GiB): 2.12 -> 2.39.
+            // With an expert pack beside the model (D032): 2 whole-expert reads in flight, demanded experts in two
+            // parts, and the lookahead router as Q8_0 with the four-row kernel: 2.45 -> 2.89-3.06, same tokens.
             stream = StreamProfile(layerExpertsMiB = 916, experts = 512, expertsUsed = 10, computeMiBPer512 = 540,
                 tuning = mapOf("prefill_prefetch_min_coverage" to 0.9, "speculative_pool" to true,
-                    "lookahead_layers" to 2, "lookahead2_count" to 5, "read_priority" to true, "prefetch_inflight" to 3)),
+                    "lookahead_layers" to 2, "lookahead2_count" to 5, "read_priority" to true, "prefetch_inflight" to 2,
+                    "expert_pack_split" to 2, "lookahead_router_q8" to true)),
             parts = listOf(
                 ArtifactPart("UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00001-of-00003.gguf", 10_946_624L),
                 ArtifactPart("UD-Q2_K_XL/Qwen3.8-Flash-Next-UD-Q2_K_XL-00002-of-00003.gguf", 49_979_779_296L),

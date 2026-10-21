@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "expert_pack.h"
 #include "expert_store.h"
 #include "gpu_offload.h"
 #include "steering.h"
@@ -6,6 +7,7 @@
 #include "ggml-cpu.h"
 #include "gguf.h"
 #include "jinja/parser.h"
+#include "llama-context.h"
 #include "llama-ext.h"
 #include "jinja/runtime.h"
 #include "json.h"
@@ -28,7 +30,9 @@
 #include <android/log.h>
 #endif
 #ifndef _WIN32
+#include <sys/mman.h>
 #include <sys/resource.h>
+#include <unistd.h>
 #endif
 #ifdef __linux__
 #include <sched.h>
@@ -78,8 +82,8 @@ std::string piece(const llama_vocab *vocab, llama_token token) {
     result.resize(count);
     return result;
 }
-// Routed banks streamed by ExpertStore; everything else is read into ordinary CPU buffers at load.
-constexpr const char *routed_bank_pattern = "^blk\\.[0-9]+\\.ffn_(gate|up|down|gate_up)_exps\\.weight$";
+// Routed banks (routed_bank_pattern) are streamed by ExpertStore; everything else is read into ordinary CPU
+// buffers at load.
 // Lookup tables read a few rows per token and mapped from the file with expert streaming: the token embedding
 // (optional) and the PLE n-gram hash table of qwen4exp (27 GB in Qwen3.8-Flash-Next, larger than RAM).
 constexpr const char *token_embedding = "token_embd.weight";
@@ -434,6 +438,132 @@ ChatInput chat_input(const Json &messages) {
 using MediaContext = std::unique_ptr<mtmd_context, decltype(&mtmd_free)>;
 using MediaChunks = std::unique_ptr<mtmd_input_chunks, decltype(&mtmd_input_chunks_free)>;
 
+// Decode wall time by GGML operation and weight type (request "profile_ops"), measured on compute thread 0
+// through the CPU backend's per-node hook: from one node's start to the next one's, so a node's time includes
+// the barrier that ends it. The gap across a graph split (the expert store's callback, the next launch) is
+// counted on the split's last node. Instrumentation only; the hook never computes a node.
+struct OpProfile {
+    using Setter = void (*)(bool (*)(ggml_tensor *, int, int, void *), void *);
+    Setter setter = nullptr;
+    std::vector<double> ms = std::vector<double>(GGML_OP_COUNT * GGML_TYPE_COUNT);
+    std::vector<uint64_t> count = std::vector<uint64_t>(GGML_OP_COUNT * GGML_TYPE_COUNT);
+    int last = -1;
+    std::chrono::steady_clock::time_point at;
+
+    static bool hook(ggml_tensor *node, int ith, int, void *user) {
+        if (ith == 0) {
+            auto &profile = *static_cast<OpProfile *>(user);
+            const auto now = std::chrono::steady_clock::now();
+            if (profile.last >= 0) {
+                profile.ms[profile.last] += std::chrono::duration<double, std::milli>(now - profile.at).count();
+                ++profile.count[profile.last];
+            }
+            const ggml_type type = node->src[0] ? node->src[0]->type : node->type;
+            profile.last = static_cast<int>(node->op) * GGML_TYPE_COUNT + static_cast<int>(type);
+            profile.at = now;
+        }
+        return false;
+    }
+    bool start() {
+        ggml_backend_reg_t reg = ggml_backend_reg_by_name("CPU");
+        setter = reg ? reinterpret_cast<Setter>(ggml_backend_reg_get_proc_address(reg, "ggml_cpu_set_external_compute")) : nullptr;
+        if (setter) {
+            setter(&OpProfile::hook, this);
+        }
+        return setter != nullptr;
+    }
+    ~OpProfile() {
+        if (setter) {
+            setter(nullptr, nullptr); // also when decoding throws
+        }
+    }
+    Json finish(size_t tokens) {
+        if (setter) {
+            setter(nullptr, nullptr);
+            setter = nullptr;
+        }
+        std::vector<int> order;
+        for (int i = 0; i < static_cast<int>(ms.size()); ++i) {
+            if (count[i]) {
+                order.push_back(i);
+            }
+        }
+        std::sort(order.begin(), order.end(), [&](int a, int b) { return ms[a] > ms[b]; });
+        Json rows = Json::array();
+        const double per = tokens ? 1.0 / static_cast<double>(tokens) : 0.0;
+        for (const int i : order) {
+            rows.push_back({{"op", ggml_op_desc_name(i / GGML_TYPE_COUNT)},
+                            {"type", ggml_type_name(static_cast<ggml_type>(i % GGML_TYPE_COUNT))},
+                            {"ms_per_token", ms[i] * per},
+                            {"nodes_per_token", static_cast<double>(count[i]) * per}});
+        }
+        return rows;
+    }
+    static const char *ggml_op_desc_name(int op) { return ggml_op_name(static_cast<ggml_op>(op)); }
+};
+
+// Host compute buffers of a context (activations of the graph being evaluated). They hold no state between
+// evaluations, so the pages a prompt filled can be returned once it is read and refault as zero only where a
+// decode graph writes (decode_reclaims_compute).
+struct ComputePages {
+    std::vector<std::pair<uint8_t *, size_t>> ranges; // whole pages inside each buffer
+    uint64_t bytes = 0;
+
+    explicit ComputePages(llama_context *context) {
+#ifndef _WIN32
+        const auto page = static_cast<uintptr_t>(sysconf(_SC_PAGESIZE));
+        ggml_backend_sched_t sched = context->get_sched();
+        std::vector<ggml_backend_buffer_t> seen;
+        for (int b = 0; b < ggml_backend_sched_get_n_backends(sched); ++b) {
+            ggml_backend_t backend = ggml_backend_sched_get_backend(sched, b);
+            for (int c = 0;; ++c) {
+                ggml_backend_buffer_t buffer = ggml_backend_sched_get_buffer_chunk(sched, backend, c);
+                if (!buffer) {
+                    break;
+                }
+                if (!ggml_backend_buffer_is_host(buffer) || std::find(seen.begin(), seen.end(), buffer) != seen.end()) {
+                    continue;
+                }
+                seen.push_back(buffer);
+                const auto base = reinterpret_cast<uintptr_t>(ggml_backend_buffer_get_base(buffer));
+                const uintptr_t begin = (base + page - 1) / page * page;
+                const uintptr_t end = (base + ggml_backend_buffer_get_size(buffer)) / page * page;
+                if (begin < end) {
+                    ranges.emplace_back(reinterpret_cast<uint8_t *>(begin), end - begin);
+                    bytes += end - begin;
+                }
+            }
+        }
+#else
+        (void)context;
+#endif
+    }
+    void release() const {
+#ifndef _WIN32
+        for (const auto &[data, size] : ranges) {
+            madvise(data, size, MADV_DONTNEED);
+        }
+#endif
+    }
+    uint64_t resident() const {
+        uint64_t total = 0;
+#ifndef _WIN32
+        const auto page = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+        std::vector<unsigned char> map;
+        for (const auto &[data, size] : ranges) {
+            map.resize(size / page);
+            if (mincore(data, size, map.data()) != 0) {
+                return bytes; // unknown: lend nothing
+            }
+            for (const unsigned char flags : map) {
+                total += (flags & 1) ? page : 0;
+            }
+        }
+#endif
+        return total;
+    }
+};
+
 } // namespace
 
 Json process_memory() {
@@ -504,6 +634,7 @@ struct Engine::State {
     // Uses the store's experts; removed before it.
     std::unique_ptr<GpuOffload> gpu;
     bool gpu_vision_flash_attn = false;
+    bool reclaim_compute = false; // decode_reclaims_compute
     AbortSource abort;
     std::unique_ptr<gguf_context, decltype(&gguf_free)> meta{nullptr, gguf_free};
     std::unique_ptr<ggml_context, decltype(&ggml_free)> shapes{nullptr, ggml_free};
@@ -649,6 +780,11 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     uint64_t resident_bytes = size;
     ExpertOptions expert_options;
     std::unordered_map<std::string, uint64_t> routed_offsets;
+    std::vector<std::pair<uint64_t, uint64_t>> routed_ranges;
+    // eqt-pack move deallocates a GGUF's routed ranges; reading them would compute with zeroed experts.
+    static constexpr const char *moved_experts =
+        "This model's experts were moved into an expert pack (eqt-pack move); load it with expert_pack, or restore "
+        "the file with eqt-pack unpack";
     uint64_t mapped_bytes = 0; // file-backed tensors, never resident as a whole
     std::vector<std::string> mapped_names;
     const bool gpu = options.value("gpu", false);
@@ -698,6 +834,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
             if (std::regex_search(name, routed)) {
                 routed_bytes += gguf_get_tensor_size(state->meta.get(), i);
                 routed_offsets[name] = offset;
+                routed_ranges.emplace_back(offset, gguf_get_tensor_size(state->meta.get(), i));
             } else if ((map_embeddings && std::strcmp(name, token_embedding) == 0) ||
                        std::strcmp(name, ngram_embedding) == 0) {
                 routed_offsets[name] = offset;
@@ -708,6 +845,9 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         if (!routed_bytes) {
             throw std::runtime_error("expert_streaming requires routed expert banks");
         }
+        if (!options.contains("expert_pack") && has_holes(path, routed_ranges)) {
+            throw std::runtime_error(moved_experts);
+        }
         expert_options.budget_bytes =
             static_cast<uint64_t>(integer(options, "expert_cache_mib", 1024, 1, 16384)) << 20;
         expert_options.io_threads = integer(options, "io_threads", 4, 1, 16);
@@ -717,6 +857,10 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         expert_options.prefetch = options.value("prefetch", false);
         expert_options.prefetch_extra = integer(options, "prefetch_extra", 0, 0, 32);
         expert_options.lookahead_gate = options.value("lookahead_gate", true);
+        expert_options.lookahead_late = integer(options, "lookahead_late", 0, 0, 1);
+        expert_options.lookahead_late_gate = options.value("lookahead_late_gate", true);
+        expert_options.lookahead_threads = integer(options, "lookahead_threads", 1, 1, 4);
+        expert_options.lookahead_spin = options.value("lookahead_spin", false);
         expert_options.prefetch_count = integer(options, "prefetch_count", 0, 0, 64);
         expert_options.decode_uses_prompt_allowance = options.value("decode_uses_prompt_allowance", true);
         expert_options.bank_spin_us = integer(options, "bank_spin_us", 20000, 0, 1000000);
@@ -736,6 +880,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         }
         expert_options.slots = options.value("expert_slots", true);
         expert_options.overlap_reads = options.value("overlap_reads", true);
+        expert_options.pack_path = options.value("expert_pack", std::string());
+        expert_options.pack_split = integer(options, "expert_pack_split", 1, 1, 4);
         expert_options.trace_path = options.value("expert_trace", std::string());
         if (options.contains("expert_layer_weights")) {
             expert_options.layer_weights = options.at("expert_layer_weights").get<std::vector<double>>();
@@ -744,7 +890,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                          (static_cast<uint64_t>(expert_options.prefill_prefetch_mib) << 20);
         // The lookahead's Q8_0 router copies stay resident beside the F32 routers the graph uses.
         resident_bytes += expert_options.prefetch && expert_options.lookahead_router_q8 ? router_q8_bytes : 0;
-    } else if (options.contains("expert_cache_mib") || options.value("prefetch", false)) {
+    } else if (options.contains("expert_cache_mib") || options.contains("expert_pack") || options.value("prefetch", false)) {
         throw std::invalid_argument("Expert cache options require expert_streaming=true");
     }
     // The context is bounded by the model's trained context, not by an engine constant; its KV cache counts
@@ -753,6 +899,16 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         header.reset(gguf_init_from_file(path.c_str(), {/*no_alloc =*/true, /*ctx =*/nullptr}));
         if (!header) {
             throw std::runtime_error("Cannot parse GGUF metadata");
+        }
+        const std::regex routed(routed_bank_pattern);
+        for (int64_t i = 0; i < gguf_get_n_tensors(header.get()); ++i) {
+            if (std::regex_search(gguf_get_tensor_name(header.get(), i), routed)) {
+                routed_ranges.emplace_back(gguf_get_data_offset(header.get()) + gguf_get_tensor_offset(header.get(), i),
+                                           gguf_get_tensor_size(header.get(), i));
+            }
+        }
+        if (has_holes(path, routed_ranges)) {
+            throw std::runtime_error(moved_experts);
         }
     }
     const ContextCost context_cost_estimate = context_cost(streaming ? state->meta.get() : header.get());
@@ -972,6 +1128,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         throw std::runtime_error("Batch allocation failed");
     }
     state->context_size = static_cast<int>(llama_n_ctx(state->context.get()));
+    state->reclaim_compute = state->store && options.value("decode_reclaims_compute", false);
     state->batch_size = batch_size;
     const auto *tmpl = llama_model_chat_template(state->model.get(), nullptr);
     if (!tmpl) {
@@ -1497,6 +1654,32 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     if (s.store) {
         s.store->set_decode_phase(true);
     }
+    std::unique_ptr<OpProfile> op_profile;
+    if (request.value("profile_ops", false)) {
+        if (s.gpu) {
+            throw std::invalid_argument("profile_ops uses the CPU backend's node hook, which GPU mode owns");
+        }
+        op_profile = std::make_unique<OpProfile>();
+        if (!op_profile->start()) {
+            throw std::runtime_error("The CPU backend has no node hook for profile_ops");
+        }
+    }
+    // Decoding lends the expert cache the compute-buffer memory the prompt needed and decoding does not: released
+    // now, measured after the first decode step (with a margin for what longer contexts add).
+    std::unique_ptr<ComputePages> compute_pages;
+    Json compute_lent = nullptr;
+    if (s.reclaim_compute && ready) {
+        compute_pages = std::make_unique<ComputePages>(s.context.get());
+        compute_pages->release();
+    }
+    const auto lend_compute = [&] {
+        constexpr uint64_t margin = 32ull << 20;
+        const uint64_t used = compute_pages->resident();
+        const uint64_t lent = compute_pages->bytes > used + margin ? compute_pages->bytes - used - margin : 0;
+        s.store->set_decode_extra(lent);
+        compute_lent = {{"compute_buffer_bytes", compute_pages->bytes}, {"decode_resident_bytes", used}, {"lent_bytes", lent}};
+        compute_pages.reset();
+    };
     const auto decode_cpu_start = process_cpu();
     const auto decode_start = Clock::now();
     auto last_token = decode_start;
@@ -1568,6 +1751,9 @@ Json Engine::generate(const Json &request, const Emit &emit) {
                 reason = "cancelled";
                 break;
             }
+            if (compute_pages) {
+                lend_compute();
+            }
         }
     } else {
         llama_token last = tokens[count - 1];
@@ -1629,6 +1815,8 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     if (s.store) {
         s.store->set_decode_phase(false);
     }
+    const Json op_rows = op_profile ? op_profile->finish(generated.size()) : Json(nullptr);
+    op_profile.reset();
     const double decode_ms = milliseconds(decode_start);
     const bool reasoning_complete = !reasoning_ms.is_null();
     if (thinking && !reasoning_complete) {
@@ -1690,6 +1878,8 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"expert_cache_misses", expert_stats.is_null() ? Json(nullptr) : expert_stats["misses"]},
         {"expert_io_wait_ms", expert_stats.is_null() ? Json(nullptr) : expert_stats["io_wait_ms"]},
         {"expert_cache", expert_stats},
+        {"op_profile", op_rows},
+        {"decode_compute_lent", compute_lent},
         {"gpu_offload", s.gpu ? s.gpu->statistics() : Json(nullptr)},
         {"speculative", speculative ? Json{{"verification_steps", steps},
                                            {"drafted_tokens", drafted},

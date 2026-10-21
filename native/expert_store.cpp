@@ -1,5 +1,7 @@
 #include "expert_store.h"
 
+#include "expert_pack.h"
+
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
 #endif
@@ -279,7 +281,7 @@ const ggml_backend_buffer_type_i mapped_buffer_type_interface = {
     /* .is_host          = */ [](ggml_backend_buffer_type_t) { return true; },
 };
 
-enum class Node { other, topk, residual };
+enum class Node { other, topk, residual, layer_out };
 Node classify(const char *name, int &layer) {
     const char *suffix = nullptr;
     Node kind = Node::other;
@@ -287,6 +289,8 @@ Node classify(const char *name, int &layer) {
         kind = Node::topk, suffix = name + 13;
     } else if (std::strncmp(name, "attn_residual-", 14) == 0) {
         kind = Node::residual, suffix = name + 14;
+    } else if (std::strncmp(name, "l_last-", 7) == 0) {
+        kind = Node::layer_out, suffix = name + 7;
     } else {
         return Node::other;
     }
@@ -574,10 +578,18 @@ class SourceFile {
 
 ExpertStore::ExpertStore(const std::string &path, ExpertOptions options, const std::atomic_bool &cancelled)
     : options_(std::move(options)), cancelled_(cancelled),
-      file_(std::make_unique<SourceFile>(path, options_.direct_io)) {
+      file_(std::make_unique<SourceFile>(options_.pack_path.empty() ? path : options_.pack_path, options_.direct_io)),
+      packed_(!options_.pack_path.empty()) {
     if (options_.io_threads < 1 || options_.io_threads > 16) {
         throw std::invalid_argument("io_threads must be in 1..16");
     }
+    if (packed_ && !options_.slots) {
+        throw std::invalid_argument("expert_pack requires expert_slots");
+    }
+    if (options_.pack_split < 1 || options_.pack_split > 4) {
+        throw std::invalid_argument("expert_pack_split must be in 1..4");
+    }
+    model_size_ = packed_ ? SourceFile(path, false).size() : file_->size();
     auto *cpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
     if (!cpu) {
         throw std::runtime_error("No CPU backend registered");
@@ -607,6 +619,12 @@ ExpertStore::~ExpertStore() {
         }
         predict_ready_.notify_all();
         predictor_.join();
+    }
+    helpers_stop_.store(true);
+    helper_epoch_.fetch_add(1);
+    helper_epoch_.notify_all();
+    for (auto &helper : helpers_) {
+        helper.join();
     }
     awake_stopping_.store(true);
     demand_signal_.fetch_add(1);
@@ -658,7 +676,7 @@ bool ExpertStore::map_tensor(ggml_tensor *tensor) const {
     const size_t size = round_up(offset % map_granularity + ggml_nbytes(tensor), map_granularity);
 #ifdef _WIN32
     const auto &api = placeholder_api();
-    if (!api.map || round_down(offset, map_granularity) + size > file_->size()) {
+    if (!api.map || round_down(offset, map_granularity) + size > model_size_) {
         return false; // a view cannot extend past the end of the file
     }
     auto &mapping = const_cast<void *&>(map_handle_);
@@ -729,7 +747,7 @@ void ExpertStore::add_bank(ggml_tensor *tensor, uint64_t file_offset) {
         tensor->nb[2] * tensor->ne[2] != ggml_nbytes(tensor)) {
         throw std::runtime_error(std::string("Unsupported routed bank layout: ") + name);
     }
-    if (file_offset + ggml_nbytes(tensor) > file_->size()) {
+    if (file_offset + ggml_nbytes(tensor) > model_size_) {
         throw std::runtime_error(std::string("Routed bank exceeds file: ") + name);
     }
     if (static_cast<int>(layers_.size()) <= index) {
@@ -744,6 +762,9 @@ void ExpertStore::add_bank(ggml_tensor *tensor, uint64_t file_offset) {
     }
     if (layer->experts != tensor->ne[2]) {
         throw std::runtime_error(std::string("Inconsistent expert count in ") + name);
+    }
+    if (layer->banks.size() >= 8) {
+        throw std::runtime_error(std::string("Too many routed banks in one layer: ") + name);
     }
     const size_t stride = tensor->nb[2];
     // A slot bank holds the page-rounded file range of one expert, whose start may sit up to a page before it.
@@ -804,9 +825,59 @@ size_t ExpertStore::lookahead_width(const Layer &layer) {
     return static_cast<size_t>(layer.width) * (layer.streams > 0 ? layer.streams : 1);
 }
 
+void ExpertStore::attach_pack() {
+    PackHeader expected;
+    expected.source_size = model_size_;
+    for (size_t i = 0; i < layers_.size(); ++i) {
+        const Layer *layer = layers_[i].get();
+        if (!layer || layer->banks.empty()) {
+            continue;
+        }
+        PackLayer planned;
+        planned.layer = static_cast<int>(i);
+        planned.experts = layer->experts;
+        for (const auto &bank : layer->banks) {
+            PackBank entry;
+            entry.tensor = ggml_get_name(bank.tensor);
+            entry.type = static_cast<int>(bank.tensor->type);
+            for (int d = 0; d < 3; ++d) {
+                entry.ne[d] = bank.tensor->ne[d];
+            }
+            entry.source_offset = bank.file_offset;
+            entry.stride = bank.stride;
+            planned.banks.push_back(std::move(entry));
+        }
+        expected.layers.push_back(std::move(planned));
+    }
+    plan_pack(expected);
+    const PackHeader pack = read_pack_header(options_.pack_path);
+    check_pack_matches(pack, expected);
+    if (file_->size() != pack.file_bytes) {
+        throw std::runtime_error("Expert pack size differs from its header");
+    }
+    // Banks take the pack's order, so a job's run of banks is one contiguous range of the packed expert.
+    for (const auto &entry : pack.layers) {
+        Layer &layer = *layers_[entry.layer];
+        std::vector<Bank> ordered;
+        for (const auto &packed : entry.banks) {
+            const auto it = std::find_if(layer.banks.begin(), layer.banks.end(),
+                                         [&](const Bank &bank) { return packed.tensor == ggml_get_name(bank.tensor); });
+            ordered.push_back(*it);
+            ordered.back().slot_offset = packed.offset;
+        }
+        layer.banks = std::move(ordered);
+        layer.slot_bytes = entry.expert_bytes;
+        layer.entry_bytes = entry.expert_bytes;
+        layer.pack_base = entry.data_offset;
+    }
+}
+
 void ExpertStore::finalize(int experts_used, float norm_epsilon) {
     experts_used_ = experts_used;
     norm_epsilon_ = norm_epsilon;
+    if (packed_) {
+        attach_pack();
+    }
     if (!options_.layer_weights.empty() && options_.layer_weights.size() != layers_.size()) {
         throw std::invalid_argument("expert_layer_weights must contain one value per model layer");
     }
@@ -839,8 +910,9 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
             continue;
         }
         const double weight = options_.layer_weights.empty() ? 1.0 : options_.layer_weights[i];
-        const double share = static_cast<double>(options_.budget_bytes) * weight / weight_total;
-        const double decode_share = static_cast<double>(options_.budget_bytes + decode_extra) * weight / weight_total;
+        layer->share = weight / weight_total;
+        const double share = static_cast<double>(options_.budget_bytes) * layer->share;
+        const double decode_share = static_cast<double>(options_.budget_bytes + decode_extra) * layer->share;
         layer->prompt_quota = std::min(layer->experts, static_cast<int>(share / layer->entry_bytes));
         layer->decode_quota = std::min(layer->experts, static_cast<int>(decode_share / layer->entry_bytes));
         layer->quota = layer->prompt_quota;
@@ -850,6 +922,8 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
         layer->prediction_rank.reserve(layer->prediction.capacity());
         layer->early_prediction.reserve(layer->prediction.capacity());
         layer->early_rank.reserve(layer->prediction.capacity());
+        layer->late_prediction.reserve(layer->prediction.capacity());
+        layer->late_rank.reserve(layer->prediction.capacity());
         effective_budget_ += static_cast<uint64_t>(layer->quota) * layer->entry_bytes;
         decode_budget_ += static_cast<uint64_t>(layer->decode_quota) * layer->entry_bytes;
         max_experts = std::max(max_experts, layer->experts);
@@ -908,6 +982,12 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
     }
     if (options_.prefetch && predictable_layers_ > 0) {
         predictor_ = std::thread([this] { predictor(); });
+        // Helpers run on the little cores, leaving one of them to the I/O threads; elsewhere they are unpinned.
+        const int helpers = little_cpus_.empty() ? options_.lookahead_threads - 1
+                                                 : std::min<int>(options_.lookahead_threads - 1, static_cast<int>(little_cpus_.size()) - 1);
+        for (int i = 0; i < helpers; ++i) {
+            helpers_.emplace_back([this] { helper(); });
+        }
     }
 }
 
@@ -1032,6 +1112,9 @@ uint8_t *ExpertStore::data_of(const Layer &layer, int bank_index, int expert) co
     if (!options_.slots) {
         return bank.data + static_cast<size_t>(expert) * bank.stride;
     }
+    if (packed_) {
+        return layer.entries[expert].slot + bank.slot_offset; // packed banks start on a page
+    }
     // The slot holds the page-rounded file range, so the expert starts at its file offset's page remainder.
     const uint64_t offset = bank.file_offset + static_cast<uint64_t>(expert) * bank.stride;
     return layer.entries[expert].slot + bank.slot_offset + offset % page;
@@ -1084,6 +1167,25 @@ void ExpertStore::set_decode_phase(bool decode) {
         }
         effective_budget_ = decode ? decode_budget_ : prompt_budget_;
     }
+    if (!decode && decode_phase_ && decode_extra_ > 0) {
+        // The memory lent while decoding goes back now, before the next prompt's compute buffer needs it.
+        for (auto &layer : layers_) {
+            if (layer && !layer->banks.empty()) {
+                trim(*layer);
+            }
+        }
+        decode_extra_ = 0;
+        plan_decode_quotas();
+        if (options_.slots) {
+            for (auto &slots : slot_classes_) {
+                for (uint8_t *slot : slots.warm) {
+                    discard_pages(slot, slots.bytes);
+                    slots.cold.push_back(slot);
+                }
+                slots.warm.clear();
+            }
+        }
+    }
     if (decode && !decode_phase_ && options_.slots) {
         for (auto &slots : slot_classes_) {
             for (uint8_t *slot : slots.warm) {
@@ -1101,6 +1203,33 @@ void ExpertStore::set_decode_phase(bool decode) {
     }
 }
 
+void ExpertStore::plan_decode_quotas() {
+    const uint64_t extra = (options_.decode_uses_prompt_allowance ? static_cast<uint64_t>(options_.prefill_prefetch_mib) << 20 : 0) +
+                           decode_extra_;
+    decode_budget_ = 0;
+    for (auto &layer : layers_) {
+        if (layer && !layer->banks.empty()) {
+            const double share = static_cast<double>(options_.budget_bytes + extra) * layer->share;
+            layer->decode_quota = std::min(layer->experts, static_cast<int>(share / layer->entry_bytes));
+            decode_budget_ += static_cast<uint64_t>(layer->decode_quota) * layer->entry_bytes;
+        }
+    }
+}
+
+void ExpertStore::set_decode_extra(uint64_t bytes) {
+    wait_predictor();
+    decode_extra_ = bytes;
+    plan_decode_quotas();
+    if (decode_phase_) {
+        for (auto &layer : layers_) {
+            if (layer && !layer->banks.empty()) {
+                layer->quota = layer->decode_quota;
+            }
+        }
+        effective_budget_ = decode_budget_;
+    }
+}
+
 void ExpertStore::set_awake_allowed(bool allowed) {
     awake_allowed_.store(allowed);
 }
@@ -1111,6 +1240,22 @@ void ExpertStore::read_slots(const Job &job) const {
     const Layer &layer = *job.layer;
     const Bank &bank = layer.banks[job.bank];
     SourceFile::Span spans[64];
+    if (packed_) {
+        // A slot mirrors the packed expert byte for byte, so every read is page-aligned and lands in place.
+        const uint64_t base = layer.pack_base + static_cast<uint64_t>(job.first) * layer.slot_bytes;
+        if (job.count == 1) {
+            const Bank &last = layer.banks[job.bank + job.banks - 1];
+            const size_t begin = bank.slot_offset, end = last.slot_offset + round_up(last.stride, page);
+            const SourceFile::Span span{layer.entries[job.first].slot + begin, end - begin};
+            file_->read_vector(&span, 1, base + begin, base + end);
+            return;
+        }
+        for (int i = 0; i < job.count; ++i) {
+            spans[i] = {layer.entries[job.first + i].slot, layer.slot_bytes};
+        }
+        file_->read_vector(spans, job.count, base, base + static_cast<uint64_t>(job.count) * layer.slot_bytes);
+        return;
+    }
     const uint64_t first_offset = bank.file_offset + static_cast<uint64_t>(job.first) * bank.stride;
     const uint64_t end = first_offset + static_cast<uint64_t>(job.count) * bank.stride;
     if (!file_->direct()) {
@@ -1140,6 +1285,18 @@ void ExpertStore::read_slots(const Job &job) const {
                         layer.entries[job.first + i - 1].slot + bank.slot_offset + previous_size - page, page);
         }
     }
+}
+
+uint64_t ExpertStore::job_bytes(const Job &job) const {
+    const Layer &layer = *job.layer;
+    if (!packed_) {
+        return layer.banks[job.bank].stride * static_cast<uint64_t>(job.count);
+    }
+    if (job.count > 1) {
+        return layer.slot_bytes * static_cast<uint64_t>(job.count);
+    }
+    const Bank &last = layer.banks[job.bank + job.banks - 1];
+    return last.slot_offset + round_up(last.stride, page) - layer.banks[job.bank].slot_offset;
 }
 
 void ExpertStore::begin_request() {
@@ -1195,10 +1352,30 @@ bool ExpertStore::observe(ggml_tensor *tensor, bool ask, void *opaque) {
             }
             return false;
         }
+        if (kind == Node::layer_out) {
+            // A graph split: the output streams are read before the next layer's attention runs.
+            const Layer *next = store.layer_at(layer + 1);
+            return store.options_.lookahead_late > 0 && next && next->router && next->streams > 0 &&
+                   !next->banks.empty() && tensor->type == GGML_TYPE_F32 && ggml_is_contiguous(tensor) &&
+                   ggml_nelements(tensor) % lookahead_width(*next) == 0 &&
+                   ggml_nelements(tensor) / static_cast<int64_t>(lookahead_width(*next)) <= max_lookahead_rows;
+        }
         return kind == Node::topk && store.layer_at(layer) && !store.layer_at(layer)->banks.empty();
     }
     if (store.cancelled_.load()) {
         return false;
+    }
+    if (kind == Node::layer_out) {
+        if (auto *next = store.layer_at(layer + 1); next && next->router && next->streams > 0) {
+            store.wait_predictor(); // the scratch buffers are the predictor's
+            const auto start = Clock::now();
+            const size_t width = lookahead_width(*next);
+            store.score(*next, static_cast<const float *>(tensor->data), ggml_nelements(tensor) / static_cast<int64_t>(width),
+                        width * sizeof(float), store.options_.lookahead_late_gate, next->late_prediction, next->late_rank);
+            next->late_valid = true;
+            store.stats_.late_ms += since(start);
+        }
+        return true;
     }
     if (kind != Node::topk) {
         return true;
@@ -1233,6 +1410,7 @@ bool ExpertStore::observe(ggml_tensor *tensor, bool ask, void *opaque) {
         store.predict_layer_ = layer;
         store.predict_rows_ = rows;
         store.predict_pending_ = true;
+        store.predict_flag_.store(true, std::memory_order_release);
     }
     store.predict_ready_.notify_one();
     return ok;
@@ -1297,6 +1475,14 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
             stats_.early_rank_correct[rank] += layer.seen[layer.early_prediction[i]] == epoch_;
         }
         layer.early_valid = false;
+    }
+    if (layer.late_valid) {
+        for (size_t i = 0; i < layer.late_prediction.size(); ++i) {
+            const int rank = std::min<int>(layer.late_rank[i], 15);
+            ++stats_.late_rank_predicted[rank];
+            stats_.late_rank_correct[rank] += layer.seen[layer.late_prediction[i]] == epoch_;
+        }
+        layer.late_valid = false;
     }
     ++clock_;
     stats_.demanded += demand_.size();
@@ -1413,6 +1599,14 @@ void ExpertStore::predictor() {
     for (;;) {
         int layer = -1;
         int64_t rows = 0;
+        if (options_.lookahead_spin) {
+            // A futex wake takes about 0.1 ms of a ~7 ms decode layer on a little core.
+            while (!predict_flag_.load(std::memory_order_acquire) && awake_decode_.load(std::memory_order_relaxed)) {
+#if defined(__aarch64__)
+                __asm__ __volatile__("yield");
+#endif
+            }
+        }
         {
             std::unique_lock lock(predict_mutex_);
             predict_ready_.wait(lock, [this] { return predict_stopping_ || predict_pending_; });
@@ -1423,6 +1617,10 @@ void ExpertStore::predictor() {
             rows = predict_rows_;
         }
         const size_t width = rows ? predict_input_.size() / static_cast<size_t>(rows) : 0;
+        if (!helpers_.empty()) {
+            helpers_hot_.store(true, std::memory_order_relaxed);
+            wake_helpers(); // they wake during the norms, before the first projection
+        }
         // The next layer's reads are queued before the layer after is scored: they are needed first.
         predict(layer, predict_input_.data(), rows, width * sizeof(float));
         if (prefetch_layer_ >= 0 && !cancelled_.load()) {
@@ -1436,11 +1634,88 @@ void ExpertStore::predictor() {
         }
         prefetch_layer_ = -1;
         early_layer_ = -1;
+        helpers_hot_.store(false, std::memory_order_relaxed);
         {
             std::lock_guard lock(predict_mutex_);
             predict_pending_ = false;
+            predict_flag_.store(false, std::memory_order_release);
         }
         predict_done_.notify_all();
+    }
+}
+
+void ExpertStore::run_rows() {
+    for (;;) {
+        const size_t begin = helper_next_.fetch_add(helper_chunk_, std::memory_order_relaxed);
+        if (begin >= helper_rows_) {
+            return;
+        }
+        helper_fn_(helper_context_, begin, std::min(begin + helper_chunk_, helper_rows_));
+    }
+}
+
+void ExpertStore::parallel_rows(size_t rows, size_t chunk, void (*fn)(const void *, size_t, size_t), const void *context) {
+    if (helpers_.empty() || rows <= chunk) {
+        fn(context, 0, rows);
+        return;
+    }
+    // The job's fields are written only after every helper finished the previous job.
+    while (helper_done_.load(std::memory_order_acquire) < helper_posted_ * helpers_.size()) {
+#if defined(__aarch64__)
+        __asm__ __volatile__("yield");
+#endif
+    }
+    helper_fn_ = fn;
+    helper_context_ = context;
+    helper_rows_ = rows;
+    helper_chunk_ = chunk;
+    helper_next_.store(0, std::memory_order_relaxed);
+    ++helper_posted_;
+    helper_epoch_.fetch_add(1, std::memory_order_release);
+    helper_epoch_.notify_all(); // no system call unless a helper sleeps
+    run_rows();
+    while (helper_done_.load(std::memory_order_acquire) < helper_posted_ * helpers_.size()) {
+#if defined(__aarch64__)
+        __asm__ __volatile__("yield");
+#endif
+    }
+}
+
+// Posts an empty job without waiting for it: sleeping helpers wake and then spin while helpers_hot_ is set.
+void ExpertStore::wake_helpers() {
+    while (helper_done_.load(std::memory_order_acquire) < helper_posted_ * helpers_.size()) {
+#if defined(__aarch64__)
+        __asm__ __volatile__("yield");
+#endif
+    }
+    helper_rows_ = 0;
+    helper_next_.store(0, std::memory_order_relaxed);
+    ++helper_posted_;
+    helper_epoch_.fetch_add(1, std::memory_order_release);
+    helper_epoch_.notify_all();
+}
+
+void ExpertStore::helper() {
+    pin_to(little_cpus_);
+    uint32_t seen = helper_epoch_.load(std::memory_order_acquire);
+    for (;;) {
+        uint32_t now;
+        while ((now = helper_epoch_.load(std::memory_order_acquire)) == seen) {
+            if (helpers_hot_.load(std::memory_order_relaxed)) {
+#if defined(__aarch64__)
+                __asm__ __volatile__("yield");
+#endif
+            } else {
+                helper_epoch_.wait(seen, std::memory_order_acquire);
+            }
+        }
+        if (helpers_stop_.load()) {
+            return;
+        }
+        // The poster waits for every helper to finish a job before posting the next, so no job is skipped.
+        seen = now;
+        run_rows();
+        helper_done_.fetch_add(1, std::memory_order_release);
     }
 }
 
@@ -1495,12 +1770,18 @@ void ExpertStore::score(Layer &target, const float *rows, int64_t count_rows, si
             const float scale = 1.0f / std::sqrt(simd::sum_squares(x, width) / width + norm_epsilon_);
             simd::scale_mul(x, target.norm, scale, scratch_.data(), width);
         }
+        const size_t experts = static_cast<size_t>(target.experts), chunk = row_chunk(experts);
         if (!target.router_q8.empty()) {
             simd::quantize_blocks(scratch_.data(), width, quant_.data(), quant_scales_.data());
-            simd::gemv_q8_0(target.router_q8.data(), ggml_row_size(GGML_TYPE_Q8_0, target.width), quant_.data(),
-                            quant_scales_.data(), scores_.data(), target.experts, width);
+            const size_t stride = ggml_row_size(GGML_TYPE_Q8_0, target.width);
+            parallel_rows(experts, chunk, [&](size_t begin, size_t end) {
+                simd::gemv_q8_0(target.router_q8.data() + begin * stride, stride, quant_.data(), quant_scales_.data(),
+                                scores_.data() + begin, end - begin, width);
+            });
         } else {
-            simd::gemv_rows(target.router, scratch_.data(), scores_.data(), target.experts, width);
+            parallel_rows(experts, chunk, [&](size_t begin, size_t end) {
+                simd::gemv_rows(target.router + begin * width, scratch_.data(), scores_.data() + begin, end - begin, width);
+            });
         }
         for (int e = 0; e < target.experts; ++e) {
             order_[e] = e;
@@ -1555,13 +1836,24 @@ void ExpertStore::mix(const Layer &layer, const float *x, float *out, bool use_g
 
 void ExpertStore::project(const ggml_tensor *weights, const float *x, float *out) {
     const size_t n = static_cast<size_t>(weights->ne[0]), rows = static_cast<size_t>(weights->ne[1]);
+    const size_t chunk = row_chunk(rows);
     if (weights->type == GGML_TYPE_F32) {
-        simd::gemv_rows(static_cast<const float *>(weights->data), x, out, rows, n);
+        const auto *data = static_cast<const float *>(weights->data);
+        parallel_rows(rows, chunk, [&](size_t begin, size_t end) { simd::gemv_rows(data + begin * n, x, out + begin, end - begin, n); });
         return;
     }
     simd::quantize_blocks(x, n, quant_.data(), quant_scales_.data());
-    simd::gemv_q8_0(static_cast<const uint8_t *>(weights->data), weights->nb[1], quant_.data(), quant_scales_.data(),
-                    out, rows, n);
+    const auto *data = static_cast<const uint8_t *>(weights->data);
+    const size_t stride = weights->nb[1];
+    parallel_rows(rows, chunk, [&](size_t begin, size_t end) {
+        simd::gemv_q8_0(data + begin * stride, stride, quant_.data(), quant_scales_.data(), out + begin, end - begin, n);
+    });
+}
+
+size_t ExpertStore::row_chunk(size_t rows) const {
+    // About four chunks per thread, in multiples of the GEMVs' four-row groups.
+    const size_t threads = helpers_.size() + 1;
+    return std::max<size_t>(4, (rows / (threads * 4) + 3) / 4 * 4);
 }
 
 void ExpertStore::borrow(int layer_index, uint64_t bytes) {
@@ -1675,22 +1967,28 @@ bool ExpertStore::cancel_unread(Layer &layer, int expert) {
     if (entry.state != State::loading) {
         return false;
     }
+    int queued_jobs = 0;
     {
         std::lock_guard lock(mutex_);
         // Workers pop a job under this lock before reading it, so a job still queued has not started.
         const auto mine = [&](const Job &job) { return job.layer == &layer && job.count == 1 && job.first == expert; };
-        int queued = 0;
+        int queued_banks = 0;
         for (int q = queue_next; q < queue_count; ++q) {
-            queued += static_cast<int>(std::count_if(queues_[q].begin(), queues_[q].end(), mine));
+            for (const Job &job : queues_[q]) {
+                if (mine(job)) {
+                    queued_banks += job.banks;
+                    ++queued_jobs;
+                }
+            }
         }
-        if (queued != banks || entry.pending.load() != banks) {
+        if (queued_banks != banks || entry.pending.load() != banks) {
             return false;
         }
         for (int q = queue_next; q < queue_count; ++q) {
             queues_[q].erase(std::remove_if(queues_[q].begin(), queues_[q].end(), mine), queues_[q].end());
         }
     }
-    inflight_jobs_.fetch_sub(banks);
+    inflight_jobs_.fetch_sub(queued_jobs);
     entry.pending.store(0);
     for (const auto &bank : layer.banks) {
         stats_.prefetch_read_bytes -= bank.stride; // as begin_load() counted it
@@ -1743,13 +2041,34 @@ bool ExpertStore::begin_load(Layer &layer, int expert, bool demand) {
 
 void ExpertStore::queue_reads(Layer &layer, int first, int count, uint64_t members, Queue queue) {
     const int banks = static_cast<int>(layer.banks.size());
-    stats_.read_jobs += banks;
-    stats_.coalesced_reads += count > 1 ? banks : 0;
-    inflight_jobs_.fetch_add(banks);
+    // Runs of banks per job: one bank each from the GGUF; from a pack, whole experts, or for a demanded single
+    // expert pack_split parts cut where their sizes come closest to equal.
+    int starts[8], widths[8], jobs = 0;
+    if (!packed_) {
+        for (int bank = 0; bank < banks; ++bank) {
+            starts[jobs] = bank, widths[jobs++] = 1;
+        }
+    } else {
+        const int parts = count == 1 && queue == queue_demand ? std::min(options_.pack_split, banks) : 1;
+        const auto end_of = [&](int b) { return layer.banks[b].slot_offset + round_up(layer.banks[b].stride, page); };
+        const auto distance = [](uint64_t a, uint64_t b) { return a > b ? a - b : b - a; };
+        for (int part = 0, bank = 0; part < parts; ++part) {
+            const uint64_t target = layer.slot_bytes * static_cast<uint64_t>(part + 1) / parts;
+            const int start = bank++;
+            while (bank < banks - (parts - 1 - part) &&
+                   (part == parts - 1 || distance(end_of(bank), target) < distance(end_of(bank - 1), target))) {
+                ++bank;
+            }
+            starts[jobs] = start, widths[jobs++] = bank - start;
+        }
+    }
+    stats_.read_jobs += jobs;
+    stats_.coalesced_reads += count > 1 ? jobs : 0;
+    inflight_jobs_.fetch_add(jobs);
     {
         std::lock_guard lock(mutex_);
-        for (int bank = 0; bank < banks; ++bank) {
-            queues_[queue].push_back({&layer, bank, first, count, members, Clock::now()});
+        for (int j = 0; j < jobs; ++j) {
+            queues_[queue].push_back({&layer, starts[j], first, count, members, Clock::now(), widths[j]});
         }
     }
     if (queue == queue_demand) {
@@ -1765,7 +2084,7 @@ void ExpertStore::queue_reads(Layer &layer, int first, int count, uint64_t membe
 // can be evicted under an in-flight read. Prefetch runs (another layer, completing later) never bridge.
 void ExpertStore::load_runs(Layer &layer, std::vector<int> &experts, bool demand, int max_gap) {
     std::sort(experts.begin(), experts.end());
-    size_t widest = 0;
+    size_t widest = packed_ ? layer.slot_bytes : 0; // bytes per expert of the widest read in a run
     for (const auto &bank : layer.banks) {
         widest = std::max(widest, bank.stride);
     }
@@ -1998,9 +2317,9 @@ void ExpertStore::worker(bool demand_only, bool awake) {
                 if (failed) {
                     entry.failed.store(true);
                 }
-                entry.ready.fetch_or(uint32_t{1} << job.bank);
+                entry.ready.fetch_or(((uint32_t{1} << job.banks) - 1) << job.bank);
                 entry.ready.notify_all();
-                entry.pending.fetch_sub(1);
+                entry.pending.fetch_sub(job.banks);
             }
         }
         inflight_jobs_.fetch_sub(1);
@@ -2008,7 +2327,7 @@ void ExpertStore::worker(bool demand_only, bool awake) {
             std::lock_guard lock(mutex_);
             const bool decoding = awake_decode_.load(std::memory_order_relaxed);
             if (decoding) {
-                stats_.decode_io_bytes += bank.stride * static_cast<uint64_t>(job.count);
+                stats_.decode_io_bytes += job_bytes(job);
             }
             if (--active_reads_ == 0 && decoding) {
                 stats_.decode_io_busy_ms += since(busy_since_);
@@ -2073,6 +2392,10 @@ Json ExpertStore::configuration() const {
         {"prefetch", options_.prefetch ? "router_lookahead_1" : "none"},
         {"prefetch_extra", options_.prefetch_extra},
         {"lookahead_gate", options_.lookahead_gate},
+        {"lookahead_late", options_.lookahead_late},
+        {"lookahead_threads", static_cast<int>(helpers_.size()) + (predictor_.joinable() ? 1 : 0)},
+        {"lookahead_spin", options_.lookahead_spin},
+        {"lookahead_late_gate", options_.lookahead_late_gate},
         {"prefetch_count", options_.prefetch_count},
         {"decode_uses_prompt_allowance", options_.decode_uses_prompt_allowance},
         {"decode_budget_bytes", decode_budget_},
@@ -2090,6 +2413,8 @@ Json ExpertStore::configuration() const {
         {"prefill_prefetch_mib", options_.prefill_prefetch_mib},
         {"prefill_prefetch_min_coverage", options_.prefill_prefetch_min_coverage},
         {"slots", options_.slots},
+        {"expert_pack", packed_},
+        {"expert_pack_split", options_.pack_split},
         {"overlap_reads", overlap_reads_},
         {"prefetch_layers", predictable_layers_},
         {"simd", simd::implementation()},
@@ -2130,6 +2455,9 @@ Json ExpertStore::statistics() const {
             {"early_prefetch_issued", stats_.early_prefetch_issued},
             {"early_predicted_by_rank", std::vector<uint64_t>(std::begin(stats_.early_rank_predicted), std::end(stats_.early_rank_predicted))},
             {"early_predicted_correct_by_rank", std::vector<uint64_t>(std::begin(stats_.early_rank_correct), std::end(stats_.early_rank_correct))},
+            {"late_predicted_by_rank", std::vector<uint64_t>(std::begin(stats_.late_rank_predicted), std::end(stats_.late_rank_predicted))},
+            {"late_predicted_correct_by_rank", std::vector<uint64_t>(std::begin(stats_.late_rank_correct), std::end(stats_.late_rank_correct))},
+            {"late_predict_ms", stats_.late_ms},
             {"decode_io_bytes", stats_.decode_io_bytes},
             {"decode_io_busy_ms", stats_.decode_io_busy_ms},
             {"decode_budget_bytes", decode_budget_},

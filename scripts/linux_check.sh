@@ -6,7 +6,7 @@ set -eu
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends g++ cmake ninja-build > /dev/null
 cmake -S /src -B /src/build/linux -G Ninja -DCMAKE_BUILD_TYPE=Release > /dev/null
-cmake --build /src/build/linux --target eqt-bench eqt-check eqt-simd-test
+cmake --build /src/build/linux --target eqt-bench eqt-check eqt-pack eqt-simd-test
 /src/build/linux/bin/eqt-simd-test
 mkdir -p /tmp/models
 cp /src/models/eqt-tiny-qwen35moe.gguf /src/models/eqt-tiny-qwen35moe-ff96.gguf \
@@ -14,3 +14,5 @@ cp /src/models/eqt-tiny-qwen35moe.gguf /src/models/eqt-tiny-qwen35moe-ff96.gguf 
 cd /src
 EQT_FIXTURE_DIR=/tmp/models python3 tools/verify_streaming.py --target linux --direct-io \
     --output results/local/streaming-correctness-linux.json
+# Expert pack move/unpack: hole punching and SEEK_HOLE on a local file system.
+EQT_FIXTURE_DIR=/tmp/models python3 tools/verify_pack_move.py --target linux     --output results/local/pack-move-linux.json
