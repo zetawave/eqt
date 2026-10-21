@@ -5,6 +5,7 @@
 #include "ggml-impl.h"
 
 #include <cstring>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 
@@ -178,6 +179,7 @@ struct KvFileAccess {
             mapping = map_file(owner.directory_, (size + page - 1) / page * page, error);
             if (!mapping) {
                 GGML_LOG_ERROR("eqt: context keys and values on storage: %s\n", error.c_str());
+                owner.error_ = std::move(error);
                 return nullptr;
             }
             owner.reserved_ += mapping->size;
@@ -204,6 +206,12 @@ const ggml_backend_buffer_type_i buffer_type_interface = {
 KvFile::KvFile(std::string directory) : directory_(std::move(directory)) {
     if (directory_.empty()) {
         throw std::invalid_argument("kv_file_dir must name a directory");
+    }
+    std::error_code error;
+    const auto path = std::filesystem::path(reinterpret_cast<const char8_t *>(directory_.c_str()));
+    std::filesystem::create_directories(path, error);
+    if (!std::filesystem::is_directory(path, error)) {
+        throw std::invalid_argument("kv_file_dir cannot be created: " + directory_);
     }
     auto *cpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
     if (!cpu) {

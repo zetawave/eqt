@@ -30,7 +30,7 @@
 
 The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 tokens/s (224 tokens). Chat turns reuse the previous turn's state where the template allows it (D027). A chat can keep that state on storage between sessions (D033, opt-in). Flash-Next keeps its attention keys and values in a file on storage, so long windows need only the indexer in memory (D034). Neither has been measured on the phone yet.
 
-**Flash-Next on the phone is moved (2026-10-20, D032).** `eqt-pack move` moved its experts into `files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack`; the GGUF beside it has holes in its routed ranges and loads only with the pack. The installed debug app (built 20:31) passes the pack automatically, with D030's tuning. The catalog in the working tree has D032's tuning, not yet installed. `eqt-pack unpack MODEL PACK` restores the original GGUF byte for byte. `eqt-pack sha256` against the pinned hash has not been run on the phone yet.
+**Flash-Next on the phone is moved (2026-10-20, D032).** `eqt-pack move` moved its experts into `files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack`; the GGUF beside it has holes in its routed ranges and loads only with the pack. The installed debug app (2026-10-21, 17:54) passes the pack automatically, with D032's tuning, saved sessions and keys and values on storage. `eqt-pack unpack MODEL PACK` restores the original GGUF byte for byte. `eqt-pack sha256` against the pinned hash has not been run on the phone yet.
 
 **Next performance goals, in order:**
 
@@ -41,8 +41,8 @@ The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 
 2. **Prefill:** i8mm microkernel register blocking (the kernels are about 42% of prefill cycles), DeltaNet and attention prefill kernels, 8k–32k context sweeps.
 3. **Cache policy:** eviction informed by router scores (the Belady gap is about 15 points). The speculative pool that never displaces cached experts is in place (D029).
 4. **Flash-Next, from D032's measurements** (about 330 ms per token: ~90 ms waiting for expert reads, ~240 ms compute and synchronization):
-   - measure `decode_reclaims_compute` (about +0.45 GiB of decode cache from the prompt's compute buffer; implemented, unmeasured);
-   - a clean `profile_ops` profile (the first one ran with a withdrawn patch and hot);
+   - the profile of 2026-10-21 (D032): IQ2_XS experts 132 ms per token, Q5_K 58, Q8_0 31, the Q4_K output head 17, ARGSORT 12 over 47 nodes (far more than sorting 512 scores should cost);
+   - `decode_reclaims_compute` was measured and gained nothing;
    - the graph split per layer (about 0.28 ms each);
    - the IQ2_XS expert kernel (instruction-bound);
    - the BF16 indexer GEMV (scalar, about 7 ms per token; vectorizing changes summation order, so it needs a numerical comparison);
@@ -71,14 +71,14 @@ Engine: `output_reserve`, the `context` termination and `context_up_to_trained`,
 
 Engine: sessions and keys and values on storage are bitwise equal to the in-memory paths on the host fixtures, on Qwen3.5-0.8B and Qwen3-0.6B (keys and values) and on the real Flash-Next (a 75-token session restored), and in the Linux container (30/30 cases per fixture, lifecycle 9/9 with both).
 
-**Tonight's Galaxy session:** `python .cache/phone_tonight.py` (about 35 minutes, app closed):
-1. install the new APK;
-2. `exact`: fixture exactness on the phone's f2fs (keys and values on storage, sessions in the lifecycle checks, pack with direct I/O);
-3. `unpack`, then the best options without the pack (the attribution D032 lacks);
-4. `move`, then the pack alone, with `decode_reclaims_compute` and with keys and values on storage (short context: it should cost nothing);
-5. a cool `profile_ops` run.
+**Galaxy session, 2026-10-21 evening** (`.cache/phone_tonight.py`; `results/2026-10-21/galaxy/flash-next-tonight.json`; the latest APK is installed):
+- **Fixtures on f2fs:** all cases pass, and the lifecycle is 9/9 with keys and values in memory and on storage. This run found the relative session path bug (D033).
+- **Pack attribution** (D032): the pack gives no measurable decode gain this session (2.72 against 2.75 tokens/s mean) and prefill is about 5% faster. `decode_reclaims_compute` gains nothing.
+- **Keys and values on storage at 4K:** 2.87 and 2.83 against 2.61 and 2.69 tokens/s, alternated, same tokens (D034).
+- **Saved session:** saved in 139 ms (122 MB), restored in 72 ms. Turn 2's first token came in 8.7 s, against 27.8 s rebuilt (D033).
+- **Profile:** in D032.
 
-The UI then needs a manual look.
+The phone keeps the experts in the pack. The UI still needs a manual look.
 
 ## Qwen3.8-Flash-Next: 2026-10-19 (branch `experimental/005-Flash-Next-120b`)
 

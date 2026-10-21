@@ -22,10 +22,13 @@ class KvFile {
     const std::string &directory() const { return directory_; }
     // Bytes of all buffers allocated so far (the reserved file sizes).
     unsigned long long reserved_bytes() const { return reserved_; }
+    // Why the last allocation failed; empty when none did.
+    const std::string &error() const { return error_; }
 
   private:
     friend struct KvFileAccess;
     std::string directory_;
+    std::string error_;
     std::unique_ptr<ggml_backend_buffer_type> type_;
     unsigned long long reserved_ = 0;
 };

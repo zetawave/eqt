@@ -1128,9 +1128,10 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     state->context.reset(llama_init_from_model(state->model.get(), params));
     llama_set_kv_buft_override(nullptr, nullptr);
     if (!state->context) {
-        throw std::runtime_error(kv_on_storage ? "Context allocation failed: not enough free storage for the context's "
-                                                 "keys and values, or not enough memory"
-                                               : "Context allocation failed; lower context or memory pressure");
+        if (kv_on_storage && !state->kv_file->error().empty()) {
+            throw std::runtime_error("Context allocation failed: " + state->kv_file->error());
+        }
+        throw std::runtime_error("Context allocation failed; lower context or memory pressure");
     }
     Json pool_info = {{"persistent", false}};
     if (options.value("threadpool", true)) {
@@ -2085,7 +2086,10 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         const auto save_start = Clock::now();
         const std::string partial = session->path + ".partial", meta_partial = session->path + ".json.partial";
         try {
-            std::filesystem::create_directories(std::filesystem::path(session->path).parent_path());
+            // A bare file name has no parent; libc++ fails create_directories("").
+            if (const auto parent = std::filesystem::path(session->path).parent_path(); !parent.empty()) {
+                std::filesystem::create_directories(parent);
+            }
             const size_t bytes = llama_state_seq_save_file(s.context.get(), partial.c_str(), 0, s.resident.data(),
                                                            s.resident.size());
             if (!bytes) {

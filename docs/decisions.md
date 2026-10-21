@@ -616,6 +616,25 @@ The interaction is not explained, so the patch is withdrawn.
 
 The phone's AP reached 58 °C and the battery 47 °C during this session on USB power. The slow runs with the withdrawn patch (2.25–2.42 tokens/s, one of them without cooling) are excluded from the table.
 
+**Attribution, 2026-10-21** (`results/2026-10-21/galaxy/flash-next-tonight.json`). Same harness; the battery was at 28% and 42 °C on USB, and every arm produced the same 64 tokens. The options are pool, two-layer lookahead, 1,792 MiB cache, read priority, 2 in flight and the Q8_0 router.
+
+| Arm | Tokens/s | Prefill, 52 tokens |
+|---|---|---|
+| without the pack (`eqt-pack unpack`, 144 s) | 2.71 / 2.79 | 12.1 / 11.7 s |
+| with the pack, split 2 (`move` again, 190 s) | 2.86 / 2.74 / 2.61 / 2.69 | 11.0–11.5 s |
+| with the pack and `decode_reclaims_compute` | 2.80 / 2.33 | 11.7 / 13.1 s |
+
+- The pack's decode gain is not measurable this session: 2.72 against 2.75 mean. D032's +22% came mostly from the Q8_0 router and the in-flight limit. Prefill is about 5% faster with the pack.
+- `decode_reclaims_compute` shows no gain and stays off.
+- Every arm ran slower than on 2026-10-20 (2.99 for the best one), with the phone warmer and charging.
+
+A cool `profile_ops` run (2.76 tokens/s, 362 ms per token profiled) puts the time in:
+- the IQ2_XS expert products (132 ms, including their wait for reads);
+- Q5_K (58 ms), Q8_0 (31 ms), IQ4_NL experts (23 ms), Q6_K (22 ms);
+- the Q4_K output head, a single node (17 ms);
+- ARGSORT (12 ms over 47 nodes);
+- F32 products (12 ms), GET_ROWS (10 ms) and Gated DeltaNet (9 ms).
+
 ## D033: Saved chat sessions, opt-in per chat — 2026-10-21
 
 **Why.** D027 keeps a chat's state in memory between turns, but only while the model stays loaded and no other chat answers. Coming back to a chat later meant evaluating the whole conversation again. On Flash-Next that costs about 11 s per 52 prompt tokens on the Galaxy (D032).
@@ -665,8 +684,14 @@ Results:
 - Real Flash-Next on the host: the state was judged extendable and saved, then `restored` (75 tokens), bitwise equal.
 - Host fixtures, with the attention keys and values in memory and on storage: the not-extendable, forced-save, other-model and mismatch paths pass.
 - The Linux container passes the same lifecycle checks with real `mmap`, `fallocate` and hole punching.
+- Galaxy (f2fs, fixtures): lifecycle 9/9 on each fixture, with the keys and values in memory and on storage. The first run there found a bug: a session path without a directory (`result.json.session`) wrote nothing, because libc++ fails `create_directories("")`. The app always passes absolute paths.
 
-**Not measured:** save and restore times on the Galaxy (UFS 4.0), and long sessions there.
+**Galaxy, Flash-Next with the pack** (`results/2026-10-21/galaxy/flash-next-tonight.json`):
+- Turn 1 (52 prompt tokens, 64 generated) saved 115 tokens, 121.6 MB, in 139 ms.
+- A new process restored them in 72 ms. Turn 2 then evaluated 25 of its 140 prompt tokens: time to first token 8.7 s.
+- The same turn rebuilt from scratch took 27.8 s, with the same tokens.
+
+Long sessions are not measured.
 
 ## D034: Attention keys and values on storage for sparse attention — 2026-10-21
 
@@ -699,10 +724,11 @@ At 128K tokens that is 3.75 GiB, on a phone where the expert cache and 3.4 GiB o
 **Correctness:**
 - Host, 24 greedy tokens with logits: bitwise equal with the cache in memory and on storage, on 4 models (tiny qwen4exp with QSA, tiny qwen35moe, Qwen3.5-0.8B, Qwen3-0.6B). No file was left after exit.
 - Real Flash-Next on the host, 4,096-token window, 16 greedy tokens: logits and tokens bitwise equal. The file reserved 96 MiB, exactly 4,096 × 24 KiB, so only the attention keys and values went to storage. Decode measured 1.75 and 1.68 tokens/s, one host run each: not a phone measurement.
-- `verify_streaming` adds `kv_on_storage_prefetch` and a second lifecycle check (cancellation, reload, sessions) with `kv_file_dir`. Every case passes on the three fixtures, on the host and in the Linux container.
+- `verify_streaming` adds `kv_on_storage_prefetch` and a second lifecycle check (cancellation, reload, sessions) with `kv_file_dir`. Every case passes on the three fixtures, on the host, in the Linux container and on the Galaxy (f2fs, `/data/local/tmp`).
+
+**Galaxy, short context** (4,096-token window, a 96 MiB file in the app's `files/kv`, arms alternated): 2.87 and 2.83 tokens/s on storage, against 2.61 and 2.69 in memory, with the same tokens. At this length the file costs nothing measurable. The first attempt failed because `files/kv` did not exist yet (the app creates it), and the error blamed storage or memory. The engine now creates `kv_file_dir` and reports the allocation's own error.
 
 **Not yet measured, and how it could cost speed:**
-- Decode at short context on the Galaxy. Every page should stay cached, but the kernel's write-back of new cells shares storage with expert reads.
 - Long-context decode. Pages that expert reads evict must be read back. The worst case is 2,048 cells × 2 KiB × 12 layers = 48 MiB per token, against about 900 MB of experts if every one misses.
 - Prefill. The tiled prompt kernel reads every tile that holds a selected cell for any query of the tile.
 
