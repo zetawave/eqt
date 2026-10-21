@@ -447,8 +447,6 @@ using MediaChunks = std::unique_ptr<mtmd_input_chunks, decltype(&mtmd_input_chun
 // the barrier that ends it. The gap across a graph split (the expert store's callback, the next launch) is
 // counted on the split's last node. Instrumentation only; the hook never computes a node.
 struct OpProfile {
-    using Setter = void (*)(bool (*)(ggml_tensor *, int, int, void *), void *);
-    Setter setter = nullptr;
     std::vector<double> ms = std::vector<double>(size_t{GGML_OP_COUNT} * GGML_TYPE_COUNT);
     std::vector<uint64_t> count = std::vector<uint64_t>(size_t{GGML_OP_COUNT} * GGML_TYPE_COUNT);
     int last = -1;
@@ -468,24 +466,7 @@ struct OpProfile {
         }
         return false;
     }
-    bool start() {
-        ggml_backend_reg_t reg = ggml_backend_reg_by_name("CPU");
-        setter = reg ? reinterpret_cast<Setter>(ggml_backend_reg_get_proc_address(reg, "ggml_cpu_set_external_compute")) : nullptr;
-        if (setter) {
-            setter(&OpProfile::hook, this);
-        }
-        return setter != nullptr;
-    }
-    ~OpProfile() {
-        if (setter) {
-            setter(nullptr, nullptr); // also when decoding throws
-        }
-    }
-    Json finish(size_t tokens) {
-        if (setter) {
-            setter(nullptr, nullptr);
-            setter = nullptr;
-        }
+    Json finish(size_t tokens) const {
         std::vector<int> order;
         for (int i = 0; i < static_cast<int>(ms.size()); ++i) {
             if (count[i]) {
@@ -504,6 +485,48 @@ struct OpProfile {
         return rows;
     }
     static const char *ggml_op_desc_name(int op) { return ggml_op_name(static_cast<ggml_op>(op)); }
+};
+
+// The CPU backend's per-node hook (one slot per process), shared by the op profile and the expert store's
+// in-graph top-k. GPU mode installs its own hook and uses neither.
+struct NodeHooks {
+    using Setter = void (*)(bool (*)(ggml_tensor *, int, int, void *), void *);
+    Setter setter = nullptr;
+    OpProfile *profile = nullptr;
+    ExpertStore *store = nullptr;
+    bool installed = false;
+
+    NodeHooks() = default;
+    NodeHooks(const NodeHooks &) = delete;
+    NodeHooks &operator=(const NodeHooks &) = delete;
+    ~NodeHooks() {
+        profile = nullptr;
+        store = nullptr;
+        update();
+    }
+    static bool dispatch(ggml_tensor *node, int ith, int nth, void *user) {
+        auto &hooks = *static_cast<NodeHooks *>(user);
+        if (hooks.profile) {
+            OpProfile::hook(node, ith, nth, hooks.profile);
+        }
+        return hooks.store && ExpertStore::compute_hook(node, ith, hooks.store);
+    }
+    bool available() {
+        if (!setter) {
+            ggml_backend_reg_t reg = ggml_backend_reg_by_name("CPU");
+            setter = reg ? reinterpret_cast<Setter>(ggml_backend_reg_get_proc_address(reg, "ggml_cpu_set_external_compute"))
+                         : nullptr;
+        }
+        return setter != nullptr;
+    }
+    // Installed while a profile or the store uses it.
+    void update() {
+        const bool wanted = profile || store;
+        if (wanted != installed && available()) {
+            setter(wanted ? &NodeHooks::dispatch : nullptr, wanted ? this : nullptr);
+            installed = wanted;
+        }
+    }
 };
 
 // Host compute buffers of a context (activations of the graph being evaluated). They hold no state between
@@ -674,6 +697,8 @@ struct Engine::State {
     // Outlives the context, whose attention keys and values it maps from storage (kv_file_dir).
     std::unique_ptr<KvFile> kv_file;
     std::unique_ptr<ExpertStore> store;
+    // Points at the store (and a running op profile); removed before it.
+    NodeHooks hooks;
     // Uses the store's experts; removed before it.
     std::unique_ptr<GpuOffload> gpu;
     bool gpu_vision_flash_attn = false;
@@ -896,6 +921,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         expert_options.io_threads = integer(options, "io_threads", 4, 1, 16);
         expert_options.demand_threads = integer(options, "demand_io_threads", 4, 0, 15);
         expert_options.awake_demand_threads = integer(options, "awake_demand_io_threads", 0, 0, 4);
+        expert_options.topk_in_graph = options.value("topk_in_graph", false);
         expert_options.direct_io = options.value("direct_io", false);
         expert_options.prefetch = options.value("prefetch", false);
         expert_options.prefetch_extra = integer(options, "prefetch_extra", 0, 0, 32);
@@ -1117,6 +1143,11 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     if (state->store) {
         params.cb_eval = &ExpertStore::observe;
         params.cb_eval_user_data = state->store.get();
+        if (!state->gpu && expert_options.topk_in_graph && state->hooks.available()) {
+            state->hooks.store = state->store.get();
+            state->hooks.update();
+            state->store->enable_topk_in_graph();
+        }
     }
     if (kv_on_storage) {
         state->kv_file = std::make_unique<KvFile>(options.at("kv_file_dir").get<std::string>());
@@ -1806,11 +1837,21 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         if (s.gpu) {
             throw std::invalid_argument("profile_ops uses the CPU backend's node hook, which GPU mode owns");
         }
-        op_profile = std::make_unique<OpProfile>();
-        if (!op_profile->start()) {
+        if (!s.hooks.available()) {
             throw std::runtime_error("The CPU backend has no node hook for profile_ops");
         }
+        op_profile = std::make_unique<OpProfile>();
+        s.hooks.profile = op_profile.get();
+        s.hooks.update();
     }
+    // Detaches the profile also when decoding throws.
+    struct ProfileDetach {
+        NodeHooks &hooks;
+        ~ProfileDetach() {
+            hooks.profile = nullptr;
+            hooks.update();
+        }
+    } profile_detach{s.hooks};
     // Decoding lends the expert cache the compute-buffer memory the prompt needed and decoding does not: released
     // now, measured after the first decode step (with a margin for what longer contexts add).
     std::unique_ptr<ComputePages> compute_pages;
@@ -1965,6 +2006,8 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     if (reason == "length" && limit < maximum && static_cast<int>(generated.size()) >= limit) {
         reason = "context"; // the window filled before max_tokens
     }
+    s.hooks.profile = nullptr;
+    s.hooks.update();
     const Json op_rows = op_profile ? op_profile->finish(generated.size()) : Json(nullptr);
     op_profile.reset();
     const double decode_ms = milliseconds(decode_start);

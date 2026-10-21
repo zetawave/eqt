@@ -961,6 +961,7 @@ void ExpertStore::finalize(int experts_used, float norm_epsilon) {
     }
     prompt_budget_ = effective_budget_;
     residuals_.assign(layers_.size(), nullptr);
+    graph_topk_.assign(layers_.size(), nullptr);
     demand_.reserve(max_experts);
     missing_.reserve(max_experts);
     whole_layer_.reserve(max_experts);
@@ -1360,7 +1361,15 @@ bool ExpertStore::observe(ggml_tensor *tensor, bool ask, void *opaque) {
                    ggml_nelements(tensor) % lookahead_width(*next) == 0 &&
                    ggml_nelements(tensor) / static_cast<int64_t>(lookahead_width(*next)) <= max_lookahead_rows;
         }
-        return kind == Node::topk && store.layer_at(layer) && !store.layer_at(layer)->banks.empty();
+        if (kind != Node::topk || !store.layer_at(layer) || store.layer_at(layer)->banks.empty()) {
+            return false;
+        }
+        if (store.topk_in_graph_ && tensor->ne[1] == 1 && tensor->view_src && tensor->view_src->op == GGML_OP_ARGSORT &&
+            ggml_nrows(tensor->view_src) == 1 && layer < static_cast<int>(store.graph_topk_.size())) {
+            store.graph_topk_[layer] = tensor; // handled by compute_hook, without a split
+            return false;
+        }
+        return true;
     }
     if (store.cancelled_.load()) {
         return false;
@@ -1380,39 +1389,83 @@ bool ExpertStore::observe(ggml_tensor *tensor, bool ask, void *opaque) {
     if (kind != Node::topk) {
         return true;
     }
+    return store.on_topk(layer, tensor);
+}
+
+bool ExpertStore::compute_hook(ggml_tensor *node, int ith, void *opaque) {
+    // Only thread 0 reads graph_topk_ (written by observe on the same thread); the other threads compute the
+    // argsort's rows from their index, which for one row is none.
+    if (ith != 0 || node->op != GGML_OP_ARGSORT) {
+        return false;
+    }
+    auto &store = *static_cast<ExpertStore *>(opaque);
+    if (!store.topk_in_graph_) {
+        return false;
+    }
+    for (size_t layer = 0; layer < store.graph_topk_.size(); ++layer) {
+        const ggml_tensor *topk = store.graph_topk_[layer];
+        if (!topk || topk->view_src != node) {
+            continue;
+        }
+        store.graph_topk_[layer] = nullptr;
+        // GGML's CPU argsort of one F32 row: indices, then std::sort with the same comparison.
+        const ggml_tensor *scores = node->src[0];
+        GGML_ASSERT(scores->type == GGML_TYPE_F32 && node->type == GGML_TYPE_I32 && ggml_nrows(scores) == 1);
+        const auto order = static_cast<ggml_sort_order>(node->op_params[0]);
+        const auto *data = static_cast<const float *>(scores->data);
+        auto *indices = static_cast<int32_t *>(node->data);
+        for (int64_t j = 0; j < scores->ne[0]; ++j) {
+            indices[j] = static_cast<int32_t>(j);
+        }
+        if (order == GGML_SORT_ORDER_ASC) {
+            std::sort(indices, indices + scores->ne[0], [data](int32_t a, int32_t b) { return data[a] < data[b]; });
+        } else {
+            std::sort(indices, indices + scores->ne[0], [data](int32_t a, int32_t b) { return data[a] > data[b]; });
+        }
+        // A cancelled request stops after this node (the engine's abort callback); a failure stops it too and
+        // leaves the store failed, as a failed read does.
+        if (!store.cancelled_.load() && !store.on_topk(static_cast<int>(layer), topk) && !store.cancelled_.load()) {
+            store.aborted_.store(true);
+        }
+        return true;
+    }
+    return false;
+}
+
+bool ExpertStore::on_topk(int layer, const ggml_tensor *tensor) {
     // A lookahead still running when its layer is reached holds up the decode thread.
     const auto predictor_wait = Clock::now();
-    store.wait_predictor();
-    store.stats_.predict_wait_ms += since(predictor_wait);
-    const ggml_tensor *residual = layer < static_cast<int>(store.residuals_.size()) ? store.residuals_[layer] : nullptr;
-    if (layer < static_cast<int>(store.residuals_.size())) {
-        store.residuals_[layer] = nullptr;
+    wait_predictor();
+    stats_.predict_wait_ms += since(predictor_wait);
+    const ggml_tensor *residual = layer < static_cast<int>(residuals_.size()) ? residuals_[layer] : nullptr;
+    if (layer < static_cast<int>(residuals_.size())) {
+        residuals_[layer] = nullptr;
     }
     // Rows of the next layer's lookahead width: one residual vector per token, or all its streams with a mixer.
-    const Layer *next = store.layer_at(layer + 1);
+    const Layer *next = layer_at(layer + 1);
     const bool usable = residual && next && residual->type == GGML_TYPE_F32 && ggml_is_contiguous(residual);
     const size_t width = usable ? lookahead_width(*next) : 0;
     const int64_t rows = usable ? ggml_nelements(residual) / static_cast<int64_t>(width) : 0;
-    if (!usable || !store.predictor_.joinable()) {
+    if (!usable || !predictor_.joinable()) {
         if (usable) {
-            store.predict(layer, static_cast<const float *>(residual->data), rows, width * sizeof(float));
-            store.predict_after(layer, static_cast<const float *>(residual->data), rows, width * sizeof(float));
+            predict(layer, static_cast<const float *>(residual->data), rows, width * sizeof(float));
+            predict_after(layer, static_cast<const float *>(residual->data), rows, width * sizeof(float));
         }
-        return store.ensure(layer, tensor);
+        return ensure(layer, tensor);
     }
     // The residual stays allocated only until the post-MoE add, which the graph may reach before the
     // predictor runs, so it is copied (8-40 KiB per row) first.
-    store.predict_input_.resize(width * rows);
-    std::memcpy(store.predict_input_.data(), residual->data, width * rows * sizeof(float));
-    const bool ok = store.ensure(layer, tensor);
+    predict_input_.resize(width * rows);
+    std::memcpy(predict_input_.data(), residual->data, width * rows * sizeof(float));
+    const bool ok = ensure(layer, tensor);
     {
-        std::lock_guard lock(store.predict_mutex_);
-        store.predict_layer_ = layer;
-        store.predict_rows_ = rows;
-        store.predict_pending_ = true;
-        store.predict_flag_.store(true, std::memory_order_release);
+        std::lock_guard lock(predict_mutex_);
+        predict_layer_ = layer;
+        predict_rows_ = rows;
+        predict_pending_ = true;
+        predict_flag_.store(true, std::memory_order_release);
     }
-    store.predict_ready_.notify_one();
+    predict_ready_.notify_one();
     return ok;
 }
 

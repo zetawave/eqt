@@ -78,6 +78,11 @@ struct ExpertOptions {
     // per expert and bank), bridging gaps of at most coalesce_gap resident experts.
     int coalesce_kib = 0;
     int coalesce_gap = 1;
+    // A decoded token's top-k is handled inside the graph (the CPU backend's node hook, compute_hook) instead of
+    // at a graph split per layer: compute thread 0 sorts the router's single row itself, exactly as the backend
+    // would, then requests the layer's experts and starts the lookahead before the node ends. A failure stops the
+    // graph at that node's end, before anything reads an expert.
+    bool topk_in_graph = false;
     // Transient allowance above the cache for reading the next layer during batched (prompt) evaluation;
     // 0 disables. Decode and small speculative batches use the router lookahead instead.
     int prefill_prefetch_mib = 0;
@@ -132,6 +137,10 @@ class ExpertStore {
     void finalize(int experts_used, float norm_epsilon);
     // Inference phase: GGML scheduler evaluation callback, invoked on the decode thread only.
     static bool observe(ggml_tensor *tensor, bool ask, void *store);
+    // CPU backend node hook (topk_in_graph): computes a pending top-k's argsort on compute thread 0 and runs the
+    // layer's store work; true when it computed the node. Enabled once the engine has installed it.
+    static bool compute_hook(ggml_tensor *node, int ith, void *store);
+    void enable_topk_in_graph() { topk_in_graph_ = options_.topk_in_graph; }
     void begin_request();
     // Decode-phase evaluations (single tokens, speculative verification, MTP drafting) feed decode_* counters.
     void set_decode_phase(bool decode);
@@ -270,6 +279,8 @@ class ExpertStore {
     // Validates the pack against the registered banks and places each bank at its packed offset in the slot.
     void attach_pack();
     bool ensure(int layer_index, const ggml_tensor *ids);
+    // A layer's routing is known: requests its experts and starts the next lookahead.
+    bool on_topk(int layer, const ggml_tensor *tensor);
     // Predicts layer_index + 1 (predict) and, with lookahead_layers 2, layer_index + 2 (predict_after) from the
     // same rows; the predictor thread queues the first prediction's reads before computing the second.
     void predict(int layer_index, const float *rows, int64_t count, size_t row_bytes);
@@ -393,6 +404,9 @@ private:
     std::vector<int8_t> quant_;
     std::unordered_map<std::string, uint64_t> source_offsets_;
     std::vector<const ggml_tensor *> residuals_; // per-layer lookahead input of the current graph
+    // Single-token top-k tensors of the current graph not handled yet (topk_in_graph), per layer.
+    std::vector<const ggml_tensor *> graph_topk_;
+    bool topk_in_graph_ = false;
     uint8_t *arena_ = nullptr;
     size_t arena_size_ = 0, arena_used_ = 0;
     std::vector<SlotClass> slot_classes_;

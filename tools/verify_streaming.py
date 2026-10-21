@@ -73,6 +73,10 @@ CASES = [
          load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, read_priority=True,
                    prefetch_inflight=2, decode_reclaims_compute=True)),
     # Attention keys and values in a file on storage ("{kvdir}": a directory on the target), mapped back in.
+    # A decoded token's top-k handled inside the graph (no split per layer), with the full lookahead.
+    dict(name="topk_in_graph_pool_priority", batch=128,
+         load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, lookahead_layers=2,
+                   read_priority=True, prefetch_inflight=2, lookahead_router_q8=True, topk_in_graph=True)),
     dict(name="kv_on_storage_prefetch", batch=128,
          load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, kv_file_dir="{kvdir}")),
     # Expert pack (native/expert_pack.h): "{pack}" is replaced by the fixture's pack path.

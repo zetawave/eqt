@@ -771,3 +771,35 @@ The rank predicts the next token's reuse only weakly: 61% for rank 0, 23% for ra
 - **Thread placement.** Compute threads on cpus 4–9 (X4 and A720), with or without every I/O thread on the A520 cores, measured 2.75/2.78 and 2.64/2.89 tokens/s against 2.60/2.88 for the defaults. Prefill was slower: 14–16 s against 12. The experimental option was removed.
 
 The cause of the gap is still open. Identical configurations differ by up to 10% between runs, so effects of a few percent need repeated arms.
+
+## D036: Three decode levers measured: the graph split, filtered speculation, the dense-weight gap — 2026-10-21
+
+Galaxy, Flash-Next with its pack and D032's options, 64 greedy tokens, one repetition per arm with the arms alternated. Every arm produced the same tokens. Records: `results/2026-10-21/galaxy/flash-next-levers.json`.
+
+**Top-k inside the graph (`topk_in_graph`, implemented, default off).** Each decoded layer used to end a graph evaluation at the router's top-k, so the expert store could request the layer's experts and start the lookahead, then relaunch the graph. With the option, the store's node hook computes the router's one-row argsort on compute thread 0, with GGML's comparison and `std::sort`, and runs the store's work inside that node. A failure or a cancel stops the graph when the node ends, before any node reads an expert.
+- The engine shares the CPU backend's single node hook between this and `profile_ops` (`NodeHooks`). GPU mode keeps its own hook and the split.
+- Correctness: bitwise equal to the split and to resident decoding. Covered by the suite case `topk_in_graph_pool_priority` (host 24/24 per fixture, Galaxy 9/9 per fixture with lifecycle) and by the real model on the host (logits and 24 tokens).
+- Profile, host: the per-layer gap fell from 10.3 to 5.4 ms per token.
+- Profile, Galaxy: 12.5 → 10.5 ms per token. What remains is the store's own work: about 4 ms waiting for the predictor and about 6 ms requesting reads.
+- Speed: 2.95 and 2.95 tokens/s against 3.00 and 2.85. About 0.6% of a token is not worth a default.
+
+**Filtered speculation, rejected.**
+
+| Arm | Tokens/s | Reads per token | Of which demanded | Decode misses |
+|---|---|---|---|---|
+| D032 options | 3.00 / 2.85 | 553–558 MB | 123–124 MB | 4,112 / 4,142 |
+| first 8 predicted candidates only (`prefetch_count` 8) | 3.00 / 2.85 | 528–529 MB | 159 MB | 5,325 / 5,308 |
+| 3 candidates two layers ahead (`lookahead2_count` 3) | 3.03 / 2.79 | 530–534 MB | 127 MB | 4,229 / 4,229 |
+
+Both cut reads by about 4% and moved part of them to demand reads, with no change in speed. Storage was busy 76–81% of decoding in every arm.
+
+**The dense-weight gap is mostly the thermal clock cap.** Short `eqt-kernel-bench` runs read Q5_K, Q6_K and Q8_0 at 33–38 GB/s. Decoding reads them at 24–27 GB/s.
+- The CPUs' maximum clocks fell within seconds of sustained load, at thermal status 1:
+  - X4: 3.21 → 2.98 → 2.50 GHz;
+  - A720 at 2.9 GHz: 2.90 → 2.78 → 2.50 GHz;
+  - A720 at 2.6 GHz: 2.59 → 2.30 GHz.
+- A 40-second decode runs at the capped clocks; a few-second bench mostly does not.
+- An earlier sampling attempt (an adb shell loop reading clocks every 0.2 s) itself slowed decoding to 1.84 tokens/s and the bench to 25 GB/s, so its numbers are diagnostics only.
+- The memory controller's clock is not readable without root (null).
+
+Equity does not override thermal limits. The lever left is energy per token: less heat per token keeps higher clocks. The spinning compute threads (barriers, and pending expert banks for up to `bank_spin_us`) are the first suspect; a sleeping alternative was slower in short runs (D016, D029), so it needs sustained measurement.

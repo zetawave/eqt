@@ -42,8 +42,9 @@ The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 
 3. **Cache policy:** studied on Flash-Next's real traces with the router's ranking (D035). The best online policy gains 2 points over LRU against Belady's 20; not pursued. The speculative pool that never displaces cached experts is in place (D029).
 4. **Flash-Next, from D032's measurements** (about 330 ms per token: ~90 ms waiting for expert reads, ~240 ms compute and synchronization):
    - D035: the recurrent-state gather is gone (patch 0007, −10 ms per token in the profile). The 12 ms of ARGSORT are the per-layer graph splits;
-   - the dense products read 24–27 GB/s while decoding against 35–39 isolated: not the predictor's traffic, not thread placement; cause open (about 50 ms per token at stake);
-   - a quarter of the storage traffic is unused speculation (about 140 of 559 MB per token);
+   - the dense products read 24–27 GB/s while decoding against 33–38 in short bench runs: mostly the thermal clock cap (big cores 2.3–2.5 GHz within seconds at thermal status 1, D036). Energy per token is the lever, item 1;
+   - a quarter of the storage traffic is unused speculation, but filtering it (D036) cut reads 4% without speed;
+   - `topk_in_graph` removes the per-layer graph split (exact; −2 ms per token on the Galaxy), default off;
    - `decode_reclaims_compute` was measured and gained nothing;
    - the graph split per layer (about 0.28 ms each);
    - the IQ2_XS expert kernel (instruction-bound);
