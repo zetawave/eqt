@@ -1,0 +1,70 @@
+{
+  "kind": "decode_expert_cache_replay",
+  "calibration": "results/local/flash-next-ranking/calibration/trace.jsonl",
+  "evaluation": "results/local/flash-next-ranking/evaluation/trace.jsonl",
+  "entry_bytes": 1884160,
+  "expert_bytes": 1875200,
+  "results": [
+    {
+      "budget_mib": 1024,
+      "quota_per_layer": 11,
+      "lru": 0.3702666666666667,
+      "lfu": 0.3820205128205128,
+      "belady": 0.5613641025641025,
+      "rank": 0.38085128205128205,
+      "rank_p": 0.37826666666666664,
+      "pinned_25pct": 0.3434871794871795,
+      "pinned_50pct": 0.27352820512820514,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 566820454.3999999
+    },
+    {
+      "budget_mib": 1792,
+      "quota_per_layer": 20,
+      "lru": 0.4839794871794872,
+      "lfu": 0.49353846153846154,
+      "belady": 0.680174358974359,
+      "rank": 0.49751794871794874,
+      "rank_p": 0.48425641025641025,
+      "pinned_25pct": 0.45725128205128207,
+      "pinned_50pct": 0.4138769230769231,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 464467999.5076924
+    },
+    {
+      "budget_mib": 2048,
+      "quota_per_layer": 23,
+      "lru": 0.5126461538461539,
+      "lfu": 0.5232205128205129,
+      "belady": 0.7054051282051282,
+      "rank": 0.5235692307692308,
+      "rank_p": 0.5094461538461539,
+      "pinned_25pct": 0.48953846153846153,
+      "pinned_50pct": 0.4451076923076923,
+      "decode_demanded_per_token": 480.0,
+      "lru_miss_bytes_per_token": 438665247.5076923
+    },
+    {
+      "mean_distinct_experts_per_layer_over_consecutive_decode_tokens": {
+        "tokens_2": 16.43176664605236,
+        "tokens_3": 21.92169049098819,
+        "tokens_4": 26.79596085779721
+      }
+    },
+    {
+      "next_token_selection_by_rank": {
+        "0": 0.606,
+        "5": 0.373,
+        "9": 0.228,
+        "10": 0.199,
+        "12": 0.157,
+        "15": 0.114,
+        "20": 0.077,
+        "30": 0.043,
+        "40": 0.031,
+        "63": 0.018
+      }
+    }
+  ],
+  "scope": "Decode-only expert-cache replay over exact routing traces, per-layer policies."
+}

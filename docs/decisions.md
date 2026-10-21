@@ -733,3 +733,41 @@ At 128K tokens that is 3.75 GiB, on a phone where the expert cache and 3.4 GiB o
 - Prefill. The tiled prompt kernel reads every tile that holds a selected cell for any query of the tile.
 
 These measurements belong to a later session. A long prompt is expensive to measure on the phone: Flash-Next reads about 46 GB of experts per 512-token batch.
+
+## D035: Where Flash-Next decoding goes on the Galaxy; recurrent state read in place — 2026-10-21
+
+Records: `results/2026-10-21/galaxy/flash-next-diagnostics.json`, `results/2026-10-21/host/flash-next-cache-policies.json`.
+
+**Per token, from the 64-token profile and the store's counters** (about 345 ms):
+- about 100 ms waiting for expert reads;
+- about 145 ms in the shared dense weights;
+- about 55 ms computing experts;
+- the rest is mostly per-layer graph splits (12 ms, counted on the router's ARGSORT) and the recurrent-state copies.
+
+Storage is busy about 80% of decoding. It reads about 559 MB per token: 124 MB demanded and 435 MB speculative, of which about 140 MB is never used.
+
+**Patch 0007, kept.** For one token of one sequence, llama.cpp gathered each DeltaNet layer's 3 MiB state out of the cache on a single thread (`GET_ROWS`), then wrote the new state back. The state is now read in place from the cache row it is written back to. A small custom op first copies the source row there when it is another row: a new sequence's zeroed row.
+- The pattern applies to every DeltaNet model (qwen35, qwen35moe, qwen3next, qwen4exp). MTP rollback slots and multi-token batches keep the gather.
+- Each state row has one reader, which runs before the write-back; graph reuse already keys on the head cell.
+- Builds with and without the patch are bitwise equal: first logits and 48 greedy tokens, on the three fixtures and Qwen3.5-0.8B, for a long and a one-token prompt. The full host suite (69 cases, lifecycle with sessions, MTP) passes.
+- Galaxy profile: `GET_ROWS` fell from 10.45 to 0.92 ms per token, and the custom op takes 0.16 ms. `CPY` fell from 5.4 to 4.6 ms. The profiled total fell from 362 to 347 ms per token.
+- Decode speed is within run-to-run noise: 2.60 and 2.90 tokens/s with the patch, against 2.61–2.86 earlier the same evening.
+
+**Cache policy from the router's ranking, rejected** (host, exact traces of the real model, `ranking` = the router's top 64 per token, recorded by the store's trace). At the phone's 1,792 MiB (20 experts per layer), on held-out prompts:
+
+| Policy | Decode hit rate |
+|---|---|
+| LRU (native) | 48.4% |
+| decayed LFU | 49.4% |
+| evict the worst rank at the latest token | 49.8% |
+| a calibrated next-token probability from the latest rank | 48.4% |
+| that probability plus a per-token decayed frequency (best of 4 settings) | 50.7% |
+| Belady bound | 68.0% |
+
+The rank predicts the next token's reuse only weakly: 61% for rank 0, 23% for rank 9, 8% for rank 20. Belady's advantage comes from reuse further ahead, which the past does not reveal. Two points are not worth a policy change.
+
+**Dense weights run below their isolated rate.** In decoding the Q5_K, Q8_0 and Q6_K products read about 24–27 GB/s. `eqt-kernel-bench` reads the same formats at 35–39 GB/s with six threads on the same phone the same evening. Two explanations were ruled out:
+- **The predictor's DRAM traffic.** A diagnostic run without the lookahead lowered the dense products by only 3–5% (Q5_K 56.5 → 55.0 ms), while decoding slowed to 2.31 tokens/s.
+- **Thread placement.** Compute threads on cpus 4–9 (X4 and A720), with or without every I/O thread on the A520 cores, measured 2.75/2.78 and 2.64/2.89 tokens/s against 2.60/2.88 for the defaults. Prefill was slower: 14–16 s against 12. The experimental option was removed.
+
+The cause of the gap is still open. Identical configurations differ by up to 10% between runs, so effects of a few percent need repeated arms.

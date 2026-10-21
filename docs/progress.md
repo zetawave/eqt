@@ -39,9 +39,11 @@ The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 
    - CPU work per token;
    - why storage wait doubles in long runs (82 against about 31 ms per token).
 2. **Prefill:** i8mm microkernel register blocking (the kernels are about 42% of prefill cycles), DeltaNet and attention prefill kernels, 8k–32k context sweeps.
-3. **Cache policy:** eviction informed by router scores (the Belady gap is about 15 points). The speculative pool that never displaces cached experts is in place (D029).
+3. **Cache policy:** studied on Flash-Next's real traces with the router's ranking (D035). The best online policy gains 2 points over LRU against Belady's 20; not pursued. The speculative pool that never displaces cached experts is in place (D029).
 4. **Flash-Next, from D032's measurements** (about 330 ms per token: ~90 ms waiting for expert reads, ~240 ms compute and synchronization):
-   - the profile of 2026-10-21 (D032): IQ2_XS experts 132 ms per token, Q5_K 58, Q8_0 31, the Q4_K output head 17, ARGSORT 12 over 47 nodes (far more than sorting 512 scores should cost);
+   - D035: the recurrent-state gather is gone (patch 0007, −10 ms per token in the profile). The 12 ms of ARGSORT are the per-layer graph splits;
+   - the dense products read 24–27 GB/s while decoding against 35–39 isolated: not the predictor's traffic, not thread placement; cause open (about 50 ms per token at stake);
+   - a quarter of the storage traffic is unused speculation (about 140 of 559 MB per token);
    - `decode_reclaims_compute` was measured and gained nothing;
    - the graph split per layer (about 0.28 ms each);
    - the IQ2_XS expert kernel (instruction-bound);
@@ -78,7 +80,7 @@ Engine: sessions and keys and values on storage are bitwise equal to the in-memo
 - **Saved session:** saved in 139 ms (122 MB), restored in 72 ms. Turn 2's first token came in 8.7 s, against 27.8 s rebuilt (D033).
 - **Profile:** in D032.
 
-The phone keeps the experts in the pack. The UI still needs a manual look.
+The phone keeps the experts in the pack. Later the same evening (D035): patch 0007 measured on the phone, the cache-policy study, and the dense-weight diagnostics. The installed APK (19:57) includes patch 0007. The UI still needs a manual look.
 
 ## Qwen3.8-Flash-Next: 2026-10-19 (branch `experimental/005-Flash-Next-120b`)
 

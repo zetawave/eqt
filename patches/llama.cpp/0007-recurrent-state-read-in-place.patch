@@ -1,0 +1,50 @@
+diff --git a/src/llama-graph.cpp b/src/llama-graph.cpp
+index 1112ad8..b5c5dc3 100644
+--- a/src/llama-graph.cpp
++++ b/src/llama-graph.cpp
+@@ -3584,6 +3584,23 @@ llm_graph_input_dsv4 * llm_graph_context::build_inp_dsv4() const {
+     return (llm_graph_input_dsv4 *) res->add_input(std::move(inp));
+ }
+ 
++// [EQUITY] dst is the view of the cache row a state is read from and written back to; src[1] is the whole state
++// cache and src[2] the source row ids (one). Copies the source row into dst unless it is dst itself.
++static void llm_graph_copy_state_row(ggml_tensor * dst, int ith, int nth, void * /*userdata*/) {
++    const ggml_tensor * states = dst->src[1];
++    const int32_t source = *(const int32_t *) dst->src[2]->data;
++    const char * from = (const char *) states->data + (size_t) source*states->nb[1];
++    char * to = (char *) dst->data;
++    if (from == to) {
++        return;
++    }
++    const size_t size  = ggml_nbytes(dst);
++    const size_t chunk = (size + nth - 1)/nth;
++    const size_t begin = std::min(size, chunk*ith);
++    const size_t end   = std::min(size, begin + chunk);
++    memcpy(to + begin, from + begin, end - begin);
++}
++
+ ggml_tensor * llm_graph_context::build_rs(
+         ggml_tensor * s,
+         ggml_tensor * state_copy,
+@@ -3666,6 +3683,21 @@ ggml_tensor * llm_graph_context::build_rs(
+         const llm_graph_get_rows_fn & get_state_rows) const {
+     const auto * kv_state = inp->mctx;
+ 
++    // [EQUITY] One token of one sequence in one cell, without rollback slots (decoding): the state is read in place
++    // from the cache row its new state is written back to, so no gather copies it. The row first receives its
++    // source state when that is another row (a new sequence's zeroed row). Its only reader runs before that write.
++    if (!get_state_rows && n_seqs == 1 && ubatch.n_seq_tokens == 1 && kv_state->get_n_rs() == 1 &&
++        cparams.n_rs_seq == 0) {
++        const uint32_t head = kv_state->get_head();
++        const llm_graph_get_rows_fn in_place = [head, state_size](ggml_context * ctx, ggml_tensor * states, ggml_tensor * ids) {
++            ggml_tensor * row = ggml_view_2d(ctx, states, state_size, 1, states->nb[1], head*states->nb[1]);
++            ggml_tensor * args[] = { states, ids };
++            return ggml_custom_inplace(ctx, row, args, 2, llm_graph_copy_state_row, GGML_N_TASKS_MAX, nullptr);
++        };
++        return build_rs(s, inp->s_copy_tail, inp->s_copy_main, state_size, n_seqs,
++                        kv_state->get_n_rs(), head, kv_state->get_size(), kv_state->get_rs_z(), in_place);
++    }
++
+     // a custom getter reads the states of the ubatch straight from the cache, so the gather skips the first
+     // state: it still holds the n_rs - n_seqs extra states and copies no state of a single sequence ubatch
+     ggml_tensor * state_copy = get_state_rows ? inp->s_copy_tail : inp->s_copy;

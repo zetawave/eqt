@@ -9,7 +9,10 @@ quotas, as the native store does:
 - lru: the native policy;
 - lfu: evict the least frequently used entry (decayed counts, ties by recency);
 - pinned: the `pin` most frequent experts per layer in the calibration trace never leave; LRU for the rest;
-- belady: evict the entry used farthest in the future (an offline bound, not implementable).
+- belady: evict the entry used farthest in the future (an offline bound, not implementable);
+- rank: evict the entry the router ranked worst at this layer's latest token (traces with `ranking`);
+- rank_p: evict the entry least likely to be selected at this layer's next token, estimated from its latest rank
+  and the tokens since that rank on the calibration trace.
 
 Reports decode hit rates and requested bytes per decode token, not speed: wall time depends on storage and
 overlap and is measured on the device.
@@ -26,24 +29,54 @@ def load(path):
     for line in Path(path).read_text(encoding="utf-8").splitlines():
         record = json.loads(line)
         if "layer" in record:
-            calls.append((record["layer"], record["tokens"], sorted(set(record["experts"]))))
+            ranking = record.get("ranking") if record["tokens"] == 1 else None
+            calls.append((record["layer"], record["tokens"], sorted(set(record["experts"])), ranking))
         elif "request" in record:
             calls.append(None)  # request boundary: the native cache stays warm across requests
     return [c for c in calls if c is not None]
 
 
-def replay(calls, quota, policy, pinned=None, decay=0.98):
+UNRANKED, MAX_AGE = 64, 8
+
+
+def reuse_table(calls):
+    """P(selected at a layer's next decode token | rank at its latest ranked token, tokens since), calibration."""
+    seen, chosen = Counter(), Counter()
+    last = {}  # layer -> {expert: (rank, call index of that layer)}
+    steps = Counter()
+    for layer, tokens, selected, ranking in calls:
+        if tokens != 1 or ranking is None:
+            last.pop(layer, None)
+            continue
+        steps[layer] += 1
+        state = last.setdefault(layer, {})
+        chosen_now = set(selected)
+        for expert, (rank, step) in state.items():
+            key = (rank, min(steps[layer] - step, MAX_AGE))
+            seen[key] += 1
+            chosen[key] += expert in chosen_now
+        for rank, expert in enumerate(ranking):
+            state[expert] = (rank, steps[layer])
+    return {key: chosen[key] / seen[key] for key in seen}
+
+
+def replay(calls, quota, policy, pinned=None, decay=0.98, table=None):
     caches, counts, hits, demanded, clock = {}, {}, 0, 0, 0
     future = {}
+    ranks, steps = {}, Counter()  # latest rank per (layer, expert) with the layer's decode step
     if policy == "belady":
         nxt, last = [None] * len(calls), {}
         for i in range(len(calls) - 1, -1, -1):
-            layer, _, selected = calls[i]
+            layer, _, selected, _ = calls[i]
             nxt[i] = {e: last.get((layer, e), float("inf")) for e in selected}
             for e in selected:
                 last[layer, e] = i
-    for i, (layer, tokens, selected) in enumerate(calls):
+    for i, (layer, tokens, selected, ranking) in enumerate(calls):
         clock += 1
+        if ranking is not None:
+            steps[layer] += 1
+            for rank, e in enumerate(ranking):
+                ranks[layer, e] = (rank, steps[layer])
         cache = caches.setdefault(layer, OrderedDict())
         count = counts.setdefault(layer, {})
         keep = pinned.get(layer, set()) if pinned else set()
@@ -67,10 +100,26 @@ def replay(calls, quota, policy, pinned=None, decay=0.98):
                 victim = next(iter(cache))
             elif policy == "lfu":
                 victim = min(cache, key=lambda k: (count[k][0] * decay ** (clock - count[k][1]), cache[k]))
+            elif policy == "rank":
+                victim = max(cache, key=lambda k: (current_rank(ranks, steps, layer, k), -cache[k]))
+            elif policy == "rank_p":
+                victim = min(cache, key=lambda k: (next_use(table, ranks, steps, layer, k), cache[k]))
             else:
                 victim = max(cache, key=lambda k: future.get((layer, k), float("inf")))
             del cache[victim]
     return hits, demanded
+
+
+def current_rank(ranks, steps, layer, expert):
+    """An expert's rank at the layer's latest decode token; beyond the recorded ranks when it was not among them."""
+    rank, step = ranks.get((layer, expert), (UNRANKED, -1))
+    return rank if step == steps[layer] else UNRANKED
+
+
+def next_use(table, ranks, steps, layer, expert):
+    """Calibrated probability that the layer's next decode token selects the expert, from its latest rank."""
+    rank, step = ranks.get((layer, expert), (UNRANKED, -MAX_AGE))
+    return table.get((rank, min(steps[layer] - step + 1, MAX_AGE)), 0.0)
 
 
 def main():
@@ -84,16 +133,18 @@ def main():
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     calibration, evaluation = load(args.calibrate), load(args.evaluate)
+    ranked = any(c[3] is not None for c in evaluation) and any(c[3] is not None for c in calibration)
+    table = reuse_table(calibration) if ranked else None
     frequency = {}
-    for layer, tokens, selected in calibration:
+    for layer, tokens, selected, _ in calibration:
         if tokens == 1:
             frequency.setdefault(layer, Counter()).update(selected)
     rows = []
     for budget in args.budget_mib:
         quota = budget * 1024 * 1024 // args.layers // args.entry_bytes
         row = dict(budget_mib=budget, quota_per_layer=quota)
-        for policy in ("lru", "lfu", "belady"):
-            hits, demanded = replay(evaluation, quota, policy)
+        for policy in ("lru", "lfu", "belady") + (("rank", "rank_p") if ranked else ()):
+            hits, demanded = replay(evaluation, quota, policy, table=table)
             row[policy] = hits / demanded
         for share in (0.25, 0.5):
             pin = int(quota * share)
@@ -106,7 +157,7 @@ def main():
         print(json.dumps(row))
     # Speculative verification of k drafts reads the union of k + 1 consecutive tokens' experts per layer.
     sequences, current = {}, None
-    for layer, tokens, selected in evaluation:
+    for layer, tokens, selected, _ in evaluation:
         if tokens == 1:
             sequences.setdefault(layer, []).append(set(selected))
     union = {}
@@ -115,6 +166,11 @@ def main():
         union[f"tokens_{width}"] = sum(sizes) / len(sizes)
     rows.append(dict(mean_distinct_experts_per_layer_over_consecutive_decode_tokens=union))
     print(json.dumps(union))
+    if table:
+        # P(selected at the next decode token | rank at this one), the reuse the rank policies exploit.
+        curve = {rank: round(table.get((rank, 1), 0.0), 3) for rank in (0, 5, 9, 10, 12, 15, 20, 30, 40, 63)}
+        rows.append(dict(next_token_selection_by_rank=curve))
+        print(json.dumps(curve))
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(dict(kind="decode_expert_cache_replay", calibration=args.calibrate,
                                                  evaluation=args.evaluate, entry_bytes=args.entry_bytes,

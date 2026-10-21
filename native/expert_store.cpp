@@ -1455,6 +1455,20 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
         }
     }
     if (trace_) {
+        // The selection is the head of the router's full argsort (its view source): the next ranks are recorded
+        // for offline cache-policy studies.
+        const ggml_tensor *order = ids->view_src;
+        if (order && order->type == GGML_TYPE_I32 && order->ne[0] > selected && order->nb[1] == ids->nb[1]) {
+            const int64_t ranks = std::min<int64_t>(order->ne[0], 64);
+            trace_ << "],\"ranking\":[";
+            for (int64_t row = 0; row < rows; ++row) {
+                for (int64_t rank = 0; rank < ranks; ++rank) {
+                    trace_ << (row || rank ? "," : "")
+                           << *reinterpret_cast<const int32_t *>(static_cast<const char *>(ids->data) + row * ids->nb[1] +
+                                                                 rank * order->nb[0]);
+                }
+            }
+        }
         trace_ << "]}\n";
     }
     if (layer.prediction_valid) {

@@ -33,6 +33,11 @@
         "file": "patches/llama.cpp/0006-kv-cache-buffer-type-override.patch",
         "sha256": "b6dedb418566e5740ea3206f82d0a0b10e4993b588825fecade0e8f3a65001cb",
         "purpose": "llama_set_kv_buft_override: the host may choose the buffer type of each KV cache layer (by cache tag and layer); Equity maps the attention keys and values of sparse-attention models from a file on storage (kv_file_dir). Unused unless set"
+      },
+      {
+        "file": "patches/llama.cpp/0007-recurrent-state-read-in-place.patch",
+        "sha256": "fd92d612331b19113be42547791e81e44fd2609aa5083714226fd9c74223baca",
+        "purpose": "A decoding step of one sequence reads its recurrent states (DeltaNet and convolution) in place from the cache row they are written back to, instead of gathering a copy (3 MiB per DeltaNet layer on Qwen3.8); the row first receives a different source row. Bitwise equal; rollback slots and multi-token batches keep the gather"
       }
     ]
   },
