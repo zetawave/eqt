@@ -1,5 +1,7 @@
 package org.equity.app.ui
 
+import org.equity.app.R
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +41,7 @@ import java.util.Locale
  */
 @Composable
 fun ChatConfigurationDialog(engine: EngineState, chats: ChatsState, thinking: Boolean, onDismiss: () -> Unit) {
+    val strings = LocalContext.current.resources
     val options = chats.steering
     var enabled by remember(options) { mutableStateOf(options.enabled) }
     var strength by remember(options) { mutableFloatStateOf(options.strength) }
@@ -52,37 +55,34 @@ fun ChatConfigurationDialog(engine: EngineState, chats: ChatsState, thinking: Bo
     val valid = !available || SteeringOptions.valid(strength)
     val small = MaterialTheme.typography.bodySmall
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Chat settings") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(strings.getString(R.string.chat_settings)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Remember this chat", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(strings.getString(R.string.remember_this_chat), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 Switch(checked = session, onCheckedChange = { session = it }, enabled = !engine.busy)
             }
-            Text("After each answer the model's state of this conversation is saved on this phone. Coming back to the " +
-                "chat, after another chat or a restart, continues at once instead of reading the whole conversation " +
-                "again. It uses storage, grows with the chat and is deleted with it. A state is saved only when the " +
-                "model's next turn can continue from it; some models' chat templates never allow that.",
+            Text(strings.getString(R.string.after_each_answer_the_model_s_state_of_this_conversation_is_saved_on_this_p),
                 style = small, color = muted)
             Text(
                 when {
-                    saved != null -> "Saved: ${formatBytes(saved!!.bytes)} · %,d tokens".format(Locale.US, saved!!.tokens)
-                    session -> "Nothing saved yet."
-                    else -> "Off."
-                } + if (thinking && session) " Not used while Think is on." else "",
+                    saved != null -> strings.getString(R.string.saved_1_s_2_d_tokens, formatBytes(saved!!.bytes), saved!!.tokens)
+                    session -> strings.getString(R.string.nothing_saved_yet)
+                    else -> strings.getString(R.string.off)
+                } + if (thinking && session) strings.getString(R.string.not_used_while_think_is_on) else "",
                 style = small, color = muted,
             )
             if (saved != null) TextButton(onClick = {
                 chatId?.let(ChatStore::deleteSession)
                 refresh++
-            }, enabled = !engine.busy) { Text("Delete saved state") }
+            }, enabled = !engine.busy) { Text(strings.getString(R.string.delete_saved_state)) }
             if (available) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Directional steering", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    Text(strings.getString(R.string.directional_steering), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                     Switch(checked = enabled, onCheckedChange = { enabled = it }, enabled = !engine.busy)
                 }
                 SliderField(
-                    label = "Signed strength",
+                    label = strings.getString(R.string.signed_strength),
                     value = strength,
                     onValueChange = { strength = it },
                     range = SteeringOptions.range,
@@ -90,20 +90,18 @@ fun ChatConfigurationDialog(engine: EngineState, chats: ChatsState, thinking: Bo
                     format = { "%.2f".format(Locale.US, it) },
                     enabled = !engine.busy,
                     accept = { it != 0f },
-                    hint = "Nonzero, from -1 to 2.",
+                    hint = strings.getString(R.string.nonzero_from_1_to_2),
                 )
-                Text("Negative values remove the vector's direction from every layer; -1 removes it entirely. " +
-                    "Positive values add the direction at its layer. Strength is an experimental manual setting. " +
-                    "A steered answer is not saved as the chat's state.", style = small, color = muted)
+                Text(strings.getString(R.string.negative_values_remove_the_vector_s_direction_from_every_layer_1_removes_it), style = small, color = muted)
             }
-            Text(if (engine.busy) "Wait for the current operation to finish before changing these settings."
-                else "Saved for this chat. Changes apply to the next answer.", style = small)
+            Text(if (engine.busy) strings.getString(R.string.wait_for_the_current_operation_to_finish_before_changing_these_settings)
+                else strings.getString(R.string.saved_for_this_chat_changes_apply_to_the_next_answer), style = small)
         }
     }, confirmButton = {
         TextButton(enabled = !engine.busy && valid, onClick = {
             if (session != chats.session) ChatStore.setSession(session)
             if (available) ChatStore.setSteering(SteeringOptions(enabled, strength))
             onDismiss()
-        }) { Text("Save") }
-    }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+        }) { Text(strings.getString(R.string.save)) }
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text(strings.getString(R.string.cancel)) } })
 }

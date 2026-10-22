@@ -1,5 +1,7 @@
 package org.equity.app.ui
 
+import org.equity.app.R
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -37,14 +39,15 @@ import org.equity.app.ChatStore
 import org.equity.app.EngineController
 import org.equity.app.Phase
 
-enum class Tab(val label: String, val icon: ImageVector) {
-    Chat("Chat", Icons.AutoMirrored.Outlined.Chat),
-    Models("Models", Icons.Outlined.Inventory2),
-    Settings("Settings", Icons.Outlined.Tune),
+enum class Tab(val label: Int, val icon: ImageVector) {
+    Chat(R.string.chat, Icons.AutoMirrored.Outlined.Chat),
+    Models(R.string.models, Icons.Outlined.Inventory2),
+    Settings(R.string.settings, Icons.Outlined.Tune),
 }
 
 @Composable
 fun EquityApp() {
+    val strings = LocalContext.current.resources
     val engine by EngineController.state.collectAsStateWithLifecycle()
     val chats by ChatStore.state.collectAsStateWithLifecycle()
     val requested by AppNavigation.openChat.collectAsStateWithLifecycle()
@@ -103,7 +106,7 @@ fun EquityApp() {
                             selected = tab == item,
                             onClick = { tab = item },
                             icon = { Icon(item.icon, contentDescription = null) },
-                            label = { Text(item.label, style = MaterialTheme.typography.labelMedium) },
+                            label = { Text(strings.getString(item.label), style = MaterialTheme.typography.labelMedium) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = colors.onPrimaryContainer,
                                 selectedTextColor = colors.onSurface,

@@ -1,5 +1,6 @@
 package org.equity.app.ui
 
+import org.equity.app.R
 import android.content.ClipData
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -104,6 +105,7 @@ private sealed interface Segment {
 /** Renders a model answer: CommonMark with GFM tables and strikethrough, plus LaTeX formulas. */
 @Composable
 fun MarkdownText(markdown: String, color: Color, modifier: Modifier = Modifier) {
+    val strings = LocalContext.current.resources
     val prepared = remember(markdown) { prepareMarkdown(markdown) }
     val document = remember(prepared) { parser.parse(prepared.markdown) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -113,6 +115,7 @@ fun MarkdownText(markdown: String, color: Color, modifier: Modifier = Modifier) 
 
 @Composable
 private fun Blocks(parent: Node, math: List<MathSpan>, color: Color) {
+    val strings = LocalContext.current.resources
     var node = parent.firstChild
     while (node != null) {
         Block(node, math, color)
@@ -122,6 +125,7 @@ private fun Blocks(parent: Node, math: List<MathSpan>, color: Color) {
 
 @Composable
 private fun Block(node: Node, math: List<MathSpan>, color: Color) {
+    val strings = LocalContext.current.resources
     val typography = MaterialTheme.typography
     when (node) {
         is Paragraph -> Inlines(node, math, typography.bodyLarge, color)
@@ -148,6 +152,7 @@ private fun Block(node: Node, math: List<MathSpan>, color: Color) {
 
 @Composable
 private fun ListBlockView(list: ListBlock, math: List<MathSpan>, color: Color) {
+    val strings = LocalContext.current.resources
     val nested = generateSequence(list.parent) { it.parent }.count { it is ListBlock }
     var number = (list as? OrderedList)?.markerStartNumber ?: 1
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -169,6 +174,7 @@ private fun ListBlockView(list: ListBlock, math: List<MathSpan>, color: Color) {
 /** Inline content of a paragraph, heading or table cell; display formulas inside it become centred blocks. */
 @Composable
 private fun Inlines(parent: Node, math: List<MathSpan>, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -201,6 +207,7 @@ private fun Inlines(parent: Node, math: List<MathSpan>, style: TextStyle, color:
 
 @Composable
 private fun DisplayMath(span: MathSpan, sizePx: Float, color: Color) {
+    val strings = LocalContext.current.resources
     val bitmap = MathRenderer.render(LocalContext.current, span.latex, true, sizePx, color.toArgb())
     if (bitmap == null) {
         CodeBlock(span.latex, "latex")
@@ -272,17 +279,18 @@ private fun segments(parent: Node, codeBackground: Color, linkColor: Color, math
 
 @Composable
 private fun CodeBlock(code: String, language: String) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     Surface(color = colors.surfaceContainerHighest, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
         Column {
             Row(Modifier.fillMaxWidth().padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(language.ifEmpty { "code" }, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
+                Text(language.ifEmpty { strings.getString(R.string.code) }, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
                     modifier = Modifier.weight(1f))
-                IconButton(onClick = { scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Code", code))) } },
+                IconButton(onClick = { scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(strings.getString(R.string.code_51), code))) } },
                     modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy code", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = strings.getString(R.string.copy_code), tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
                 }
             }
             Text(code, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp),
@@ -294,6 +302,7 @@ private fun CodeBlock(code: String, language: String) {
 
 @Composable
 private fun TableView(table: TableBlock, math: List<MathSpan>, color: Color) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val style = MaterialTheme.typography.bodyMedium
     val rows = remember(table) {

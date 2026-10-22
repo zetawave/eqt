@@ -98,12 +98,14 @@ private val Type = Typography(
 
 @Composable
 fun EquityTheme(content: @Composable () -> Unit) {
+    val strings = LocalContext.current.resources
     MaterialTheme(colorScheme = Colors, typography = Type, content = content)
 }
 
 /** The Equity mark (equals sign on the brand gradient) with an optional wordmark. */
 @Composable
 fun Logo(size: Dp, wordmark: Boolean = true, modifier: Modifier = Modifier) {
+    val strings = LocalContext.current.resources
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Image(painterResource(R.drawable.ic_equity_mark), contentDescription = "Equity", modifier = Modifier.size(size))
         if (wordmark) {

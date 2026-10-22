@@ -81,6 +81,7 @@ private const val REPOSITORY_URL = "https://github.com/zetawave/eqt"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(engine: EngineState) {
+    val strings = LocalContext.current.resources
     val context = LocalContext.current
     val settings by SettingsStore.state.collectAsStateWithLifecycle()
     val chats by ChatStore.state.collectAsStateWithLifecycle()
@@ -93,8 +94,8 @@ fun SettingsScreen(engine: EngineState) {
         val text = engine.lastResult
         if (uri != null && text != null) scope.launch {
             exported = withContext(Dispatchers.IO) {
-                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }; "Exported" }
-                    .getOrElse { it.message ?: "Export failed" }
+                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }; strings.getString(R.string.exported) }
+                    .getOrElse { it.message ?: strings.getString(R.string.export_failed) }
             }
         }
     }
@@ -103,13 +104,13 @@ fun SettingsScreen(engine: EngineState) {
             .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium)
+        Text(strings.getString(R.string.settings), style = MaterialTheme.typography.headlineMedium)
 
-        Section("Conversation") {
+        Section(strings.getString(R.string.conversation)) {
             OutlinedTextField(
                 value = settings.systemPrompt,
                 onValueChange = { value -> SettingsStore.update(context) { it.copy(systemPrompt = value) } },
-                label = { Text("System prompt") },
+                label = { Text(strings.getString(R.string.system_prompt)) },
                 minLines = 3,
                 maxLines = 6,
                 textStyle = MaterialTheme.typography.bodyMedium,
@@ -118,10 +119,10 @@ fun SettingsScreen(engine: EngineState) {
             val unlimited = settings.maxTokens == ANSWER_UNLIMITED
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Answer length without limit", style = MaterialTheme.typography.bodyMedium)
+                    Text(strings.getString(R.string.answer_length_without_limit), style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        if (unlimited) "Answers run until the model ends them or the context window is full."
-                        else "Answers stop at the length below.",
+                        if (unlimited) strings.getString(R.string.answers_run_until_the_model_ends_them_or_the_context_window_is_full)
+                        else strings.getString(R.string.answers_stop_at_the_length_below),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -130,89 +131,84 @@ fun SettingsScreen(engine: EngineState) {
                 })
             }
             if (!unlimited) SliderField(
-                label = "Maximum answer length",
+                label = strings.getString(R.string.maximum_answer_length),
                 value = settings.maxTokens.toFloat(),
                 onValueChange = { value -> SettingsStore.update(context) { it.copy(maxTokens = value.roundToInt()) } },
                 range = MIN_ANSWER_TOKENS.toFloat()..MAX_ANSWER_TOKENS.toFloat(),
                 step = 256f,
                 format = { it.roundToInt().toString() },
                 integer = true,
-                hint = "Tokens, $MIN_ANSWER_TOKENS to $MAX_ANSWER_TOKENS. Thinking uses part of them.",
+                hint = strings.getString(R.string.tokens_1_d_to_2_d_thinking_uses_part_of_them, MIN_ANSWER_TOKENS, MAX_ANSWER_TOKENS),
             )
             SliderField(
-                label = "Creativity",
+                label = strings.getString(R.string.creativity),
                 value = settings.temperature,
                 onValueChange = { value -> SettingsStore.update(context) { it.copy(temperature = value) } },
                 range = 0f..MAX_TEMPERATURE,
                 step = 0.1f,
                 format = { formatDecimal(it, 2) },
-                hint = if (settings.temperature == 0f) "0 · most predictable" else "Higher values vary answers more.",
+                hint = if (settings.temperature == 0f) strings.getString(R.string.0_most_predictable) else strings.getString(R.string.higher_values_vary_answers_more),
             )
         }
 
-        Section("Performance", "Applies the next time a model is loaded.") {
-            Text("Processor", style = MaterialTheme.typography.labelLarge)
+        Section(strings.getString(R.string.performance), strings.getString(R.string.applies_the_next_time_a_model_is_loaded)) {
+            Text(strings.getString(R.string.processor), style = MaterialTheme.typography.labelLarge)
             Choice(listOf(false, true), settings.gpu, { if (it) "CPU + GPU" else "CPU" }) { value ->
                 SettingsStore.update(context) { it.copy(gpu = value) }
             }
-            Text("CPU + GPU reads long prompts, chat history and images faster on the GPU and uses a little more memory. " +
-                "Answers are written by the CPU either way.",
+            Text(strings.getString(R.string.cpu_gpu_reads_long_prompts_chat_history_and_images_faster_on_the_gpu_and_us),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("CPU threads", style = MaterialTheme.typography.labelLarge)
+            Text(strings.getString(R.string.cpu_threads), style = MaterialTheme.typography.labelLarge)
             Choice(listOf(2, 4, 6), settings.threads, { "$it" }) { value -> SettingsStore.update(context) { it.copy(threads = value) } }
-            Text("Context window", style = MaterialTheme.typography.labelLarge)
+            Text(strings.getString(R.string.context_window), style = MaterialTheme.typography.labelLarge)
             Choice(listOf(CONTEXT_AUTO, 2048, 4096, 8192, CONTEXT_MAX), settings.context, { value ->
                 when (value) {
-                    CONTEXT_AUTO -> "Auto"
-                    CONTEXT_MAX -> "Max"
+                    CONTEXT_AUTO -> strings.getString(R.string.auto)
+                    CONTEXT_MAX -> strings.getString(R.string.max)
                     else -> "${value / 1024}K"
                 }
             }) { value -> SettingsStore.update(context) { it.copy(context = value) } }
             Text(
                 when (settings.context) {
-                    CONTEXT_AUTO -> "Auto sizes the window from free memory at load, without taking the expert cache a " +
-                        "large model needs for its speed."
-                    CONTEXT_MAX -> "Max loads the model's full trained length, or as much as free memory allows. Large " +
-                        "models then keep a smaller expert cache and answer more slowly."
-                    else -> "Starting size."
-                } + " The window grows for longer messages and attachments when memory allows; the circle beside " +
-                    "Send shows how much of it a chat uses.",
+                    CONTEXT_AUTO -> strings.getString(R.string.auto_sizes_the_window_from_free_memory_at_load_without_taking_the_expert_ca)
+                    CONTEXT_MAX -> strings.getString(R.string.max_loads_the_model_s_full_trained_length_or_as_much_as_free_memory_allows)
+                    else -> strings.getString(R.string.starting_size)
+                } + strings.getString(R.string.the_window_grows_for_longer_messages_and_attachments_when_memory_allows_the),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Expert cache (large model)", style = MaterialTheme.typography.labelLarge)
-            Choice(listOf(0, 1024, 2048, 3072), settings.expertCacheMiB, { if (it == 0) "Auto" else "${it / 1024} GB" }) { value ->
+            Text(strings.getString(R.string.expert_cache_large_model), style = MaterialTheme.typography.labelLarge)
+            Choice(listOf(0, 1024, 2048, 3072), settings.expertCacheMiB, { if (it == 0) strings.getString(R.string.auto) else "${it / 1024} GB" }) { value ->
                 SettingsStore.update(context) { it.copy(expertCacheMiB = value) }
             }
-            Text("Auto sizes the cache from free memory. A larger cache reads storage less often and is faster.",
+            Text(strings.getString(R.string.auto_sizes_the_cache_from_free_memory_a_larger_cache_reads_storage_less_oft),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        Section("Diagnostics") {
-            Labeled("Engine", engine.configuration ?: "No model loaded")
+        Section(strings.getString(R.string.diagnostics)) {
+            Labeled(strings.getString(R.string.engine), engine.configuration ?: strings.getString(R.string.no_model_loaded))
             val result = engine.lastResult?.let { runCatching { JSONObject(it) }.getOrNull() }
             if (result != null) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Labeled("Generation", "%.2f tokens/s".format(Locale.US, result.optDouble("decode_tokens_per_second")))
-                Labeled("Prompt", "%d tokens in %.1f s".format(Locale.US, result.optInt("prompt_tokens"), result.optDouble("prefill_ms") / 1000))
+                Labeled(strings.getString(R.string.generation), strings.getString(R.string.1_2f_tokens_s, result.optDouble("decode_tokens_per_second")))
+                Labeled(strings.getString(R.string.prompt), strings.getString(R.string.1_d_tokens_in_2_1f_s, result.optInt("prompt_tokens"), result.optDouble("prefill_ms") / 1000))
                 result.optJSONObject("expert_cache")?.let { cache ->
                     val hits = cache.optLong("hits")
                     val total = hits + cache.optLong("misses")
-                    if (total > 0) Labeled("Expert cache hits", "%.0f%%".format(Locale.US, hits * 100.0 / total))
+                    if (total > 0) Labeled(strings.getString(R.string.expert_cache_hits), "%.0f%%".format(Locale.US, hits * 100.0 / total))
                 }
                 result.optJSONObject("memory_after")?.optLong("peak_rss_bytes")?.takeIf { it > 0 }?.let {
-                    Labeled("Peak memory", "${it shr 20} MiB")
+                    Labeled(strings.getString(R.string.peak_memory), "${it shr 20} MiB")
                 }
-                OutlinedButton(onClick = { exporter.launch("equity-run.json") }) { Text("Export last run (JSON)") }
+                OutlinedButton(onClick = { exporter.launch("equity-run.json") }) { Text(strings.getString(R.string.export_last_run_json)) }
                 exported?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             } else {
-                Text("Run a conversation to see speed and memory details.", style = MaterialTheme.typography.bodySmall,
+                Text(strings.getString(R.string.run_a_conversation_to_see_speed_and_memory_details), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
-        Section("Privacy") {
+        Section(strings.getString(R.string.privacy)) {
             Text(
-                "Equity runs models entirely on this phone. Prompts, answers and conversations are never uploaded, " +
-                    "and there are no accounts, ads or analytics. The network is used only for model downloads you start.",
+                strings.getString(R.string.equity_runs_models_entirely_on_this_phone_prompts_answers_and_conversations),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedButton(
@@ -222,23 +218,23 @@ fun SettingsScreen(engine: EngineState) {
             ) {
                 Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(if (chats.summaries.isEmpty()) "No chats to delete" else "Delete all chats")
+                Text(if (chats.summaries.isEmpty()) strings.getString(R.string.no_chats_to_delete) else strings.getString(R.string.delete_all_chats))
             }
         }
 
-        Section("About") {
+        Section(strings.getString(R.string.about)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Logo(28.dp)
                 Spacer(Modifier.weight(1f))
-                Text("Version ${BuildConfigInfo.VERSION}", style = MaterialTheme.typography.bodySmall,
+                Text(strings.getString(R.string.version_1_s, BuildConfigInfo.VERSION), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("Developed by Zetawave.", style = MaterialTheme.typography.bodyMedium)
+            Text(strings.getString(R.string.developed_by_zetawave), style = MaterialTheme.typography.bodyMedium)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { openLink(context, WEBSITE_URL) }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Outlined.Language, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Website")
+                    Text(strings.getString(R.string.website))
                 }
                 OutlinedButton(onClick = { openLink(context, REPOSITORY_URL) }, modifier = Modifier.weight(1f)) {
                     Icon(painterResource(R.drawable.ic_github), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -246,11 +242,11 @@ fun SettingsScreen(engine: EngineState) {
                     Text("GitHub")
                 }
             }
-            Text("Built on llama.cpp and GGML. Model weights belong to their publishers under their own licenses.",
+            Text(strings.getString(R.string.built_on_llama_cpp_and_ggml_model_weights_belong_to_their_publishers_under),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = {
                 licenses = context.assets.list("")?.filter { it.endsWith(".txt") }?.sorted().orEmpty()
-            }) { Text("Open-source licenses") }
+            }) { Text(strings.getString(R.string.open_source_licenses)) }
         }
     }
 
@@ -258,13 +254,13 @@ fun SettingsScreen(engine: EngineState) {
         val count = chats.summaries.size
         AlertDialog(
             onDismissRequest = { confirmDeleteAll = false },
-            title = { Text("Delete all chats?") },
+            title = { Text(strings.getString(R.string.delete_all_chats_90)) },
             text = {
                 Text(
-                    (if (count == 1) "The chat, with its attachments and saved state, is"
-                    else "All $count chats, with their attachments and saved states, are") +
-                        " removed from this phone. This cannot be undone." +
-                        if (engine.generation != null) " The answer being written is stopped." else "",
+                    (if (count == 1) strings.getString(R.string.the_chat_with_its_attachments_and_saved_state_is)
+                    else strings.getString(R.string.all_1_d_chats_with_their_attachments_and_saved_states_are, count)) +
+                        strings.getString(R.string.removed_from_this_phone_this_cannot_be_undone) +
+                        if (engine.generation != null) strings.getString(R.string.the_answer_being_written_is_stopped) else "",
                 )
             },
             confirmButton = {
@@ -275,16 +271,16 @@ fun SettingsScreen(engine: EngineState) {
                         confirmDeleteAll = false
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text("Delete all") }
+                ) { Text(strings.getString(R.string.delete_all)) }
             },
-            dismissButton = { TextButton(onClick = { confirmDeleteAll = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDeleteAll = false }) { Text(strings.getString(R.string.cancel)) } },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         )
     }
     licenses?.let { files ->
         AlertDialog(
             onDismissRequest = { licenses = null },
-            title = { Text("Licenses") },
+            title = { Text(strings.getString(R.string.licenses)) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     files.forEach { file ->
@@ -294,7 +290,7 @@ fun SettingsScreen(engine: EngineState) {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { licenses = null }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { licenses = null }) { Text(strings.getString(R.string.close)) } },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         )
     }
@@ -306,7 +302,7 @@ fun SettingsScreen(engine: EngineState) {
                 Text(text, fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 15.sp,
                     modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()))
             },
-            confirmButton = { TextButton(onClick = { licenseText = null }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { licenseText = null }) { Text(strings.getString(R.string.close)) } },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         )
     }
@@ -314,15 +310,17 @@ fun SettingsScreen(engine: EngineState) {
 
 /** Opens a web page in the browser; the app itself never loads it. */
 private fun openLink(context: Context, url: String) {
+    val strings = context.resources
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
     } catch (_: ActivityNotFoundException) {
-        Toast.makeText(context, "No app on this phone can open $url", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, strings.getString(R.string.no_app_on_this_phone_can_open_1_s, url), Toast.LENGTH_LONG).show()
     }
 }
 
 @Composable
 private fun Section(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    val strings = LocalContext.current.resources
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Column {
@@ -339,6 +337,7 @@ private fun Section(title: String, subtitle: String? = null, content: @Composabl
 
 @Composable
 private fun Labeled(label: String, value: String) {
+    val strings = LocalContext.current.resources
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -348,6 +347,7 @@ private fun Labeled(label: String, value: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun <T> Choice(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+    val strings = LocalContext.current.resources
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         options.forEachIndexed { index, option ->
             SegmentedButton(

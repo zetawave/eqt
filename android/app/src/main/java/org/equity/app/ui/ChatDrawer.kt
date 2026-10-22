@@ -1,5 +1,7 @@
 package org.equity.app.ui
 
+import org.equity.app.R
+import androidx.compose.ui.platform.LocalContext
 import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,21 +49,22 @@ import org.equity.app.EngineState
 
 @Composable
 fun ChatDrawer(chats: ChatsState, engine: EngineState, onSelect: (String) -> Unit, onNewChat: () -> Unit) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     var deleting by remember { mutableStateOf<ChatSummary?>(null) }
     ModalDrawerSheet(drawerContainerColor = colors.surfaceContainerLow, drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)) {
         Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = 16.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Chats", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                Text(strings.getString(R.string.chats), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
                 FilledTonalButton(onClick = onNewChat, enabled = chats.currentId != null) {
                     Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("New chat")
+                    Text(strings.getString(R.string.new_chat))
                 }
             }
             Spacer(Modifier.height(12.dp))
             if (chats.summaries.isEmpty()) {
-                Text("No conversations yet. They are saved here as you chat.",
+                Text(strings.getString(R.string.no_conversations_yet_they_are_saved_here_as_you_chat),
                     style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
             }
@@ -79,7 +82,7 @@ fun ChatDrawer(chats: ChatsState, engine: EngineState, onSelect: (String) -> Uni
             Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Lock, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Chats and attachments are stored only on this phone.", style = MaterialTheme.typography.labelSmall,
+                Text(strings.getString(R.string.chats_and_attachments_are_stored_only_on_this_phone), style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant)
             }
         }
@@ -87,16 +90,16 @@ fun ChatDrawer(chats: ChatsState, engine: EngineState, onSelect: (String) -> Uni
     deleting?.let { chat ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("Delete this chat?") },
-            text = { Text("\"${chat.title}\" and its attachments will be removed from this phone.") },
+            title = { Text(strings.getString(R.string.delete_this_chat)) },
+            text = { Text(strings.getString(R.string.1_s_and_its_attachments_will_be_removed_from_this_phone, chat.title)) },
             confirmButton = {
                 TextButton(onClick = {
                     deleting = null
                     if (engine.generation?.chatId == chat.id) EngineController.stop()
                     ChatStore.delete(chat.id)
-                }) { Text("Delete", color = colors.error) }
+                }) { Text(strings.getString(R.string.delete), color = colors.error) }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Keep") } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(strings.getString(R.string.keep)) } },
             containerColor = colors.surfaceContainerHigh,
         )
     }
@@ -104,6 +107,7 @@ fun ChatDrawer(chats: ChatsState, engine: EngineState, onSelect: (String) -> Uni
 
 @Composable
 private fun ChatRow(chat: ChatSummary, selected: Boolean, answering: Boolean, onClick: () -> Unit, onDelete: () -> Unit) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     Surface(
         color = if (selected) colors.secondaryContainer else colors.surfaceContainerLow,
@@ -120,14 +124,14 @@ private fun ChatRow(chat: ChatSummary, selected: Boolean, answering: Boolean, on
                         Spacer(Modifier.width(6.dp))
                     }
                     Text(
-                        if (answering) "Answering…"
+                        if (answering) strings.getString(R.string.answering)
                         else DateUtils.getRelativeTimeSpanString(chat.updatedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString(),
                         style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
                     )
                 }
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Outlined.Delete, contentDescription = "Delete chat", tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.Delete, contentDescription = strings.getString(R.string.delete_chat), tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
         }
     }

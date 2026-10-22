@@ -1,5 +1,7 @@
 package org.equity.app.ui
 
+import org.equity.app.R
+import androidx.compose.ui.platform.LocalContext
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.foundation.Image
@@ -61,6 +63,7 @@ private fun decode(file: File, maxSide: Int): ImageBitmap? {
 @Composable
 private fun rememberPreview(file: File, maxSide: Int): ImageBitmap? {
     val image by produceState<ImageBitmap?>(null, file.path, maxSide) {
+    val strings = LocalContext.current.resources
         value = withContext(Dispatchers.IO) { decode(file, maxSide) }
     }
     return image
@@ -68,6 +71,7 @@ private fun rememberPreview(file: File, maxSide: Int): ImageBitmap? {
 
 @Composable
 fun ImageThumbnail(file: File, size: Dp, onClick: (() -> Unit)? = null) {
+    val strings = LocalContext.current.resources
     val pixels = with(LocalDensity.current) { size.roundToPx() }
     val image = rememberPreview(file, pixels * 2)
     val shape = RoundedCornerShape(14.dp)
@@ -81,6 +85,7 @@ fun ImageThumbnail(file: File, size: Dp, onClick: (() -> Unit)? = null) {
 
 @Composable
 fun DocumentChip(attachment: Attachment, trailing: @Composable (() -> Unit)? = null) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     Surface(color = colors.surfaceContainerHighest, shape = RoundedCornerShape(14.dp)) {
         Row(Modifier.padding(start = 10.dp, end = if (trailing == null) 12.dp else 2.dp, top = 8.dp, bottom = 8.dp),
@@ -96,11 +101,12 @@ fun DocumentChip(attachment: Attachment, trailing: @Composable (() -> Unit)? = n
 
 @Composable
 fun ImageViewer(file: File, onDismiss: () -> Unit) {
+    val strings = LocalContext.current.resources
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.92f)).clickable(onClick = onDismiss),
             contentAlignment = Alignment.Center) {
             rememberPreview(file, 2048)?.let {
-                Image(it, contentDescription = "Attached image", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(12.dp))
+                Image(it, contentDescription = strings.getString(R.string.attached_image), contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(12.dp))
             }
         }
     }

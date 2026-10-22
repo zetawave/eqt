@@ -1,5 +1,6 @@
 package org.equity.app.ui
 
+import org.equity.app.R
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -131,10 +132,10 @@ import java.io.File
 import kotlin.math.roundToInt
 
 private val Suggestions = listOf(
-    "Spiegami in due frasi la differenza tra RAM e memoria di archiviazione.",
-    "Write a short, friendly email to reschedule a meeting.",
-    "Dammi tre idee per una cena veloce e sana.",
-    "Explain how a mixture-of-experts model works, simply.",
+    R.string.explain_the_difference_between_ram_and_storage_in_two_sentences,
+    R.string.write_a_short_friendly_email_to_reschedule_a_meeting,
+    R.string.give_me_three_ideas_for_a_quick_healthy_dinner,
+    R.string.explain_how_a_mixture_of_experts_model_works_simply,
 )
 
 // Matches the number of images the engine is shown per request.
@@ -142,6 +143,7 @@ private const val MAX_IMAGES_PER_MESSAGE = 4
 
 @Composable
 fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit, onOpenChats: () -> Unit) {
+    val strings = LocalContext.current.resources
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var input by rememberSaveable { mutableStateOf("") }
@@ -164,7 +166,7 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
             importing++
             for (uri in uris) {
                 if (pending.count { it.kind == AttachmentKind.Image } >= MAX_IMAGES_PER_MESSAGE) {
-                    Toast.makeText(context, "Up to $MAX_IMAGES_PER_MESSAGE images per message", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, strings.getString(R.string.up_to_1_d_images_per_message, MAX_IMAGES_PER_MESSAGE), Toast.LENGTH_SHORT).show()
                     break
                 }
                 try {
@@ -172,7 +174,7 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
                 } catch (error: AttachmentException) {
                     Toast.makeText(context, error.message, Toast.LENGTH_LONG).show()
                 } catch (error: Exception) {
-                    Toast.makeText(context, "Cannot attach this file", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, strings.getString(R.string.cannot_attach_this_file), Toast.LENGTH_LONG).show()
                 }
             }
             cleanup?.invoke()
@@ -206,7 +208,7 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
             camera.launch(uri)
         } catch (_: ActivityNotFoundException) {
             capture = null
-            Toast.makeText(context, "No camera app is available", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, strings.getString(R.string.no_camera_app_is_available), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -282,26 +284,27 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
 
 @Composable
 private fun ChatHeader(engine: EngineState, title: String?, onOpenChats: () -> Unit, onNewChat: () -> Unit, canStartNew: Boolean) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onOpenChats) { Icon(Icons.Rounded.Menu, contentDescription = "Chats") }
+        IconButton(onClick = onOpenChats) { Icon(Icons.Rounded.Menu, contentDescription = strings.getString(R.string.chats)) }
         Spacer(Modifier.width(4.dp))
         Column(Modifier.weight(1f)) {
-            Text(title ?: if (engine.phase == Phase.Empty) "Equity" else "New chat", style = MaterialTheme.typography.titleMedium, maxLines = 1,
+            Text(title ?: if (engine.phase == Phase.Empty) "Equity" else strings.getString(R.string.new_chat), style = MaterialTheme.typography.titleMedium, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusDot(engine.phase)
                 Spacer(Modifier.width(6.dp))
                 val detail = when (engine.phase) {
-                    Phase.Empty -> "No model loaded"
-                    Phase.Loading -> engine.loadPercent?.let { "Loading $it%" } ?: engine.status
+                    Phase.Empty -> strings.getString(R.string.no_model_loaded)
+                    Phase.Loading -> engine.loadPercent?.let { strings.getString(R.string.loading_1_d, it) } ?: engine.status
                     Phase.Ready -> buildString {
-                        append(engine.modelName ?: "Ready")
-                        engine.lastSpeed?.let { append(" · last %.1f tok/s".format(it)) }
+                        append(engine.modelName ?: strings.getString(R.string.ready))
+                        engine.lastSpeed?.let { append(strings.getString(R.string.last_1_1f_tok_s, it)) }
                     }
                     else -> engine.status
                 }
@@ -311,9 +314,9 @@ private fun ChatHeader(engine: EngineState, title: String?, onOpenChats: () -> U
         }
         val reload = Catalog.byId(engine.lastModelId)
         if (engine.phase == Phase.Empty && reload != null) {
-            TextButton(onClick = { EngineController.load(context, reload) }) { Text("Load model") }
+            TextButton(onClick = { EngineController.load(context, reload) }) { Text(strings.getString(R.string.load_model)) }
         }
-        IconButton(onClick = onNewChat, enabled = canStartNew) { Icon(Icons.Rounded.Add, contentDescription = "New chat") }
+        IconButton(onClick = onNewChat, enabled = canStartNew) { Icon(Icons.Rounded.Add, contentDescription = strings.getString(R.string.new_chat)) }
     }
     if (engine.phase == Phase.Loading) {
         val percent = engine.loadPercent
@@ -324,6 +327,7 @@ private fun ChatHeader(engine: EngineState, title: String?, onOpenChats: () -> U
 
 @Composable
 fun StatusDot(phase: Phase) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val color = when (phase) {
         Phase.Ready -> colors.primary
@@ -342,6 +346,7 @@ fun StatusDot(phase: Phase) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EmptyChat(engine: EngineState, onOpenModels: () -> Unit, onSuggestion: (String) -> Unit) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     Column(
         Modifier.fillMaxSize().padding(horizontal = 28.dp),
@@ -351,20 +356,21 @@ private fun EmptyChat(engine: EngineState, onOpenModels: () -> Unit, onSuggestio
         Logo(48.dp)
         Spacer(Modifier.height(16.dp))
         Text(
-            "Private AI that runs on your phone.\nYour conversations never leave this device.",
+            strings.getString(R.string.private_ai_that_runs_on_your_phone_nyour_conversations_never_leave_this_dev),
             style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant, textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(28.dp))
         when (engine.phase) {
-            Phase.Empty -> Button(onClick = onOpenModels) { Text("Choose a model") }
+            Phase.Empty -> Button(onClick = onOpenModels) { Text(strings.getString(R.string.choose_a_model)) }
             Phase.Loading, Phase.Unloading -> Text(engine.status, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-            Phase.Generating -> Text("Equity is answering in another chat.", style = MaterialTheme.typography.bodyMedium,
+            Phase.Generating -> Text(strings.getString(R.string.equity_is_answering_in_another_chat), style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant)
             Phase.Ready -> FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Suggestions.forEach { prompt ->
+                Suggestions.forEach { promptId ->
+                    val prompt = strings.getString(promptId)
                     SuggestionChip(
                         onClick = { onSuggestion(prompt) },
                         label = { Text(prompt, maxLines = 2, style = MaterialTheme.typography.bodySmall) },
@@ -382,6 +388,7 @@ private fun EmptyChat(engine: EngineState, onOpenModels: () -> Unit, onSuggestio
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UserMessage(chatId: String, message: Message, onView: (File) -> Unit) {
+    val strings = LocalContext.current.resources
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         if (message.attachments.isNotEmpty()) {
             FlowRow(
@@ -414,6 +421,7 @@ private fun UserMessage(chatId: String, message: Message, onView: (File) -> Unit
 
 @Composable
 internal fun AssistantMessage(message: Message, generatedTokens: Int? = null) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
@@ -428,14 +436,14 @@ internal fun AssistantMessage(message: Message, generatedTokens: Int? = null) {
             // Static: an animation here would compete with the prompt's evaluation for the big cores.
             val sampled = (generatedTokens ?: 0) > 0 || message.text.isNotEmpty()
             Text(when {
-                !message.streaming && reasoning != null -> "The model stopped while reasoning, before writing an answer."
-                !message.streaming -> "The model finished without producing visible text."
-                sampled -> "Generating tokens; no visible text yet"
-                else -> "Reading your message…"
+                !message.streaming && reasoning != null -> strings.getString(R.string.the_model_stopped_while_reasoning_before_writing_an_answer)
+                !message.streaming -> strings.getString(R.string.the_model_finished_without_producing_visible_text)
+                sampled -> strings.getString(R.string.generating_tokens_no_visible_text_yet)
+                else -> strings.getString(R.string.reading_your_message)
             }, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp))
             if (message.streaming && generatedTokens != null && generatedTokens > 0) {
-                Text("$generatedTokens tokens", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                Text(strings.getString(R.string.1_d_tokens, generatedTokens), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             }
         } else {
             SelectionContainer {
@@ -447,13 +455,13 @@ internal fun AssistantMessage(message: Message, generatedTokens: Int? = null) {
         }
         if (!message.streaming) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val note = message.stats ?: if (message.failed) "Not completed" else null
+                val note = message.stats ?: if (message.failed) strings.getString(R.string.not_completed) else null
                 note?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
                         modifier = Modifier.weight(1f, fill = false))
                 }
-                IconButton(onClick = { scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Equity answer", message.text))) } }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy answer", tint = colors.onSurfaceVariant,
+                IconButton(onClick = { scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(strings.getString(R.string.equity_answer), message.text))) } }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = strings.getString(R.string.copy_answer), tint = colors.onSurfaceVariant,
                         modifier = Modifier.size(16.dp))
                 }
             }
@@ -467,6 +475,7 @@ internal fun AssistantMessage(message: Message, generatedTokens: Int? = null) {
  */
 @Composable
 private fun ReasoningBlock(reasoning: String, inProgress: Boolean, reasoningMs: Long?, generatedTokens: Int?) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     var expanded by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
@@ -477,12 +486,12 @@ private fun ReasoningBlock(reasoning: String, inProgress: Boolean, reasoningMs: 
             Icon(Icons.Outlined.Psychology, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(when {
-                inProgress -> "Thinking…" + (generatedTokens?.takeIf { it > 0 }?.let { " · $it tokens" } ?: "")
-                reasoningMs != null -> "Thought for %.1f s".format(Locale.US, reasoningMs / 1000.0)
-                else -> "Reasoning"
+                inProgress -> strings.getString(R.string.thinking) + (generatedTokens?.takeIf { it > 0 }?.let { strings.getString(R.string.1_d_tokens_190, it) } ?: "")
+                reasoningMs != null -> strings.getString(R.string.thought_for_1_1f_s, reasoningMs / 1000.0)
+                else -> strings.getString(R.string.reasoning)
             }, style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
             Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                contentDescription = if (expanded) "Hide reasoning" else "Show reasoning",
+                contentDescription = if (expanded) strings.getString(R.string.hide_reasoning) else strings.getString(R.string.show_reasoning),
                 tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
         when {
@@ -501,6 +510,7 @@ private fun ReasoningBlock(reasoning: String, inProgress: Boolean, reasoningMs: 
 /** The newest reasoning lines, bottom-aligned and fading upward, so the line being written stays readable. */
 @Composable
 private fun ReasoningPreview(reasoning: String) {
+    val strings = LocalContext.current.resources
     // Only the tail is laid out: enough characters to fill the preview at any phone width.
     val tail = reasoning.takeLast(480)
     Box(
@@ -538,6 +548,7 @@ private fun Composer(
     onStop: () -> Unit,
     contextUsed: Int,
 ) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val ready = engine.phase == Phase.Ready
     val generating = engine.phase == Phase.Generating
@@ -561,7 +572,7 @@ private fun Composer(
                             } else {
                                 DocumentChip(attachment) {
                                     IconButton(onClick = { onRemove(attachment) }, modifier = Modifier.size(28.dp)) {
-                                        Icon(Icons.Rounded.Close, contentDescription = "Remove ${attachment.name}", modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Rounded.Close, contentDescription = strings.getString(R.string.remove_1_s, attachment.name), modifier = Modifier.size(16.dp))
                                     }
                                 }
                             }
@@ -575,9 +586,9 @@ private fun Composer(
                     enabled = ready || generating,
                     placeholder = {
                         Text(when {
-                            engine.phase == Phase.Empty -> "Load a model to start"
-                            answeringElsewhere -> "Equity is answering in another chat"
-                            else -> "Message Equity"
+                            engine.phase == Phase.Empty -> strings.getString(R.string.load_a_model_to_start)
+                            answeringElsewhere -> strings.getString(R.string.equity_is_answering_in_another_chat_23)
+                            else -> strings.getString(R.string.message_equity)
                         })
                     },
                     maxLines = 6,
@@ -595,24 +606,24 @@ private fun Composer(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, end = 6.dp, bottom = 6.dp)) {
                     Box {
                         IconButton(onClick = { menu = true }, enabled = ready || generating) {
-                            Icon(Icons.Outlined.AttachFile, contentDescription = "Attach")
+                            Icon(Icons.Outlined.AttachFile, contentDescription = strings.getString(R.string.attach))
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = colors.surfaceContainerHighest) {
-                            val imageHint = if (engine.vision) null else "Needs a model with image support"
+                            val imageHint = if (engine.vision) null else strings.getString(R.string.needs_a_model_with_image_support)
                             DropdownMenuItem(
-                                text = { MenuLabel("Photos", imageHint) },
+                                text = { MenuLabel(strings.getString(R.string.photos), imageHint) },
                                 leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = null) },
                                 enabled = engine.vision,
                                 onClick = { menu = false; onPhotos() },
                             )
                             DropdownMenuItem(
-                                text = { MenuLabel("Camera", imageHint) },
+                                text = { MenuLabel(strings.getString(R.string.camera), imageHint) },
                                 leadingIcon = { Icon(Icons.Outlined.PhotoCamera, contentDescription = null) },
                                 enabled = engine.vision,
                                 onClick = { menu = false; onCamera() },
                             )
                             DropdownMenuItem(
-                                text = { MenuLabel("File", "Text, code or PDF") },
+                                text = { MenuLabel(strings.getString(R.string.file), strings.getString(R.string.text_code_or_pdf)) },
                                 leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) },
                                 onClick = { menu = false; onFile() },
                             )
@@ -620,7 +631,7 @@ private fun Composer(
                     }
                     // Chat settings: the saved state, and steering while the loaded model has an imported vector.
                     IconButton(onClick = onConfigure) {
-                        Icon(Icons.Outlined.Tune, contentDescription = "Chat settings",
+                        Icon(Icons.Outlined.Tune, contentDescription = strings.getString(R.string.chat_settings),
                             tint = if (configured) colors.primary else colors.onSurfaceVariant)
                     }
                     // Applies to the next message; disabled when the loaded model's template has no thinking mode.
@@ -628,7 +639,7 @@ private fun Composer(
                         selected = thinking,
                         onClick = onToggleThinking,
                         enabled = thinkingSupported,
-                        label = { Text("Think") },
+                        label = { Text(strings.getString(R.string.think)) },
                         leadingIcon = { Icon(Icons.Outlined.Psychology, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.padding(start = 2.dp),
@@ -639,10 +650,10 @@ private fun Composer(
                         FilledIconButton(
                             onClick = onStop,
                             colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.onSurface, contentColor = colors.surface),
-                        ) { Icon(Icons.Rounded.Stop, contentDescription = "Stop") }
+                        ) { Icon(Icons.Rounded.Stop, contentDescription = strings.getString(R.string.stop)) }
                     } else {
                         FilledIconButton(onClick = onSend, enabled = ready && !importing && (value.isNotBlank() || pending.isNotEmpty())) {
-                            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send")
+                            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = strings.getString(R.string.send))
                         }
                     }
                 }
@@ -652,7 +663,7 @@ private fun Composer(
             verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Lock, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(12.dp))
             Spacer(Modifier.width(4.dp))
-            Text("Runs on this device. Nothing is sent online.", style = MaterialTheme.typography.labelSmall,
+            Text(strings.getString(R.string.runs_on_this_device_nothing_is_sent_online), style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant)
         }
     }
@@ -661,6 +672,7 @@ private fun Composer(
 /** How much of the loaded context window this chat uses; a tap shows the numbers. Redrawn only as tokens arrive. */
 @Composable
 private fun ContextGauge(used: Int, size: Int) {
+    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val share = (used.toFloat() / size).coerceIn(0f, 1f)
     var open by remember { mutableStateOf(false) }
@@ -677,10 +689,10 @@ private fun ContextGauge(used: Int, size: Int) {
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = colors.surfaceContainerHighest) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text("Context", style = MaterialTheme.typography.labelLarge)
-                Text("%,d of %,d tokens · %d%%".format(java.util.Locale.US, used, size, (share * 100).roundToInt()),
+                Text(strings.getString(R.string.context), style = MaterialTheme.typography.labelLarge)
+                Text(strings.getString(R.string.1_d_of_2_d_tokens_3_d, used, size, (share * 100).roundToInt()),
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                Text(if (share >= 0.9f) "Nearly full: a new chat starts fresh." else "Grows with the conversation.",
+                Text(if (share >= 0.9f) strings.getString(R.string.nearly_full_a_new_chat_starts_fresh) else strings.getString(R.string.grows_with_the_conversation),
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             }
         }
@@ -689,6 +701,7 @@ private fun ContextGauge(used: Int, size: Int) {
 
 @Composable
 private fun MenuLabel(title: String, hint: String?) {
+    val strings = LocalContext.current.resources
     Column {
         Text(title)
         hint?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -697,10 +710,11 @@ private fun MenuLabel(title: String, hint: String?) {
 
 @Composable
 private fun RemoveBadge(modifier: Modifier, onClick: () -> Unit) {
+    val strings = LocalContext.current.resources
     Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), shape = CircleShape,
         modifier = modifier.padding(3.dp).size(22.dp), onClick = onClick) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Close, contentDescription = "Remove image", modifier = Modifier.size(14.dp))
+            Icon(Icons.Rounded.Close, contentDescription = strings.getString(R.string.remove_image), modifier = Modifier.size(14.dp))
         }
     }
 }
