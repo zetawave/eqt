@@ -17,8 +17,18 @@ int main(int argc, char **argv) {
         eqt::Engine engine;
         engine.prepare();
         engine.load(argv[1], request.value("load", eqt::Json::object()));
-        auto result =
-            engine.generate(request, [](const std::string &piece) { std::cout << piece << std::flush; });
+        const auto emit = [](const std::string &piece) { std::cout << piece << std::flush; };
+        // "sequence": requests run one after another on the same loaded model; the result holds them in order.
+        eqt::Json result;
+        if (request.contains("sequence")) {
+            result = {{"results", eqt::Json::array()}};
+            for (const auto &step : request.at("sequence")) {
+                result["results"].push_back(engine.generate(step, emit));
+                std::cout << '\n';
+            }
+        } else {
+            result = engine.generate(request, emit);
+        }
         std::ofstream output(argv[3]);
         if (!output) {
             throw std::runtime_error("Cannot open result path");

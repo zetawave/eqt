@@ -1,0 +1,13 @@
+{
+  "repository": "unsloth/Qwen3.8-Flash-Next-GGUF",
+  "revision": "766911a6b7369840a91dbcd95f9f997acaab6cd6",
+  "license": "Qwen Community License 1.0",
+  "purpose": "Qwen3.8-Flash-Next vision encoder in Unsloth's F16 conversion (clip, projector qwen3vl_merger, 27 blocks of width 1152, 449M parameters, projection to the language model's 2560 channels). Same repository and revision as the language weights; the app downloads it as the model's optional image support.",
+  "files": [
+    {
+      "name": "mmproj-F16.gguf",
+      "size_bytes": 904004000,
+      "sha256": "1f7b7f0b984cf065c604360c29c8098362ed61b290db0ff12c6f360bb1a8a980"
+    }
+  ]
+}

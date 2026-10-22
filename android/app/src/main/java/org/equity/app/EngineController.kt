@@ -404,16 +404,17 @@ object EngineController {
         val gpuStagingMiB = if (settings.gpu) GPU_STAGING_MIB else 0
         val workMiB = if (batch == 2048) kvMiB + 512 + GPU_WORK_MIB else kvMiB + stream.computeMiBPer512 * batch / 512
         val layerMiB = stream.layerWorkingSetMiB(batch)
-        // Images are encoded before the prompt is read and the projector is released before it, so image memory and
-        // the prompt-time prefetch allowance are never needed at the same time.
-        val transientMiB = maxOf(prefillMiB + gpuStagingMiB, visionMiB)
+        val transientMiB = prefillMiB + gpuStagingMiB
         val floor = maxOf(512, layerMiB)
         val cache = settings.expertCacheMiB.takeIf { it > 0 }
             ?: available?.let { (it - residentMiB - workMiB - transientMiB - SYSTEM_RESERVE_MIB).coerceIn(floor, 3072) }
             ?: floor
         val shortfallMiB = maxOf(0, layerMiB - cache)
+        // Images are encoded with the expert cache emptied (images_release_expert_cache) and the projector is released
+        // before the prompt is read, so the encoder's memory replaces the cache instead of adding to it.
+        val imagePhaseMiB = residentMiB + visionMiB + gpuStagingMiB + workMiB + SYSTEM_RESERVE_MIB
         return StreamPlan(batch, prefillMiB, cache, shortfallMiB,
-            residentMiB + cache + shortfallMiB + transientMiB + workMiB + SYSTEM_RESERVE_MIB)
+            maxOf(residentMiB + cache + shortfallMiB + transientMiB + workMiB + SYSTEM_RESERVE_MIB, imagePhaseMiB))
     }
 
     /** Free memory, in MiB, that [model] needs to load with full prompt batches and the next-layer allowance. */
@@ -455,7 +456,9 @@ object EngineController {
             val layerMiB = stream.layerWorkingSetMiB(batch)
             val floor = maxOf(512, layerMiB)
             val cache = settings.expertCacheMiB.takeIf { it > 0 } ?: if (max) floor else maxOf(floor, stream.speedCacheMiB)
-            residentMiB + cache + maxOf(0, layerMiB - cache) + maxOf(gpuStagingMiB, visionMiB) + workMiB + SYSTEM_RESERVE_MIB
+            // The image encoder takes the emptied expert cache's place (streamPlan), not memory beside it.
+            maxOf(residentMiB + cache + maxOf(0, layerMiB - cache) + gpuStagingMiB + workMiB + SYSTEM_RESERVE_MIB,
+                residentMiB + visionMiB + gpuStagingMiB + workMiB + SYSTEM_RESERVE_MIB)
         }
         val spareMiB = maxOf(0, available - fixedMiB - extraMiB).toLong().let { if (max) it else it / 2 }
         val tokens = (spareMiB * 1024 / maxOf(1, contextMiBPer1k) / 1024 * 1024).toInt()
@@ -537,9 +540,11 @@ object EngineController {
         fun options(visionMiB: Int) = loadOptions(context, source.streamed, source.residentMiB,
             source.contextMiBPer1k, source.fileBytes, source.settings, visionMiB, source.stream, source.trainedContext,
             source.kvStorageMiBPer1k, source.kvMemoryMiBPer1k)
+        // A streamed model empties its expert cache before encoding images, which the admission above counts on.
+        fun withProjector(path: String) = options(source.visionMiB).put("mmproj", path)
+            .apply { if (source.streamed) put("images_release_expert_cache", true) }
         val withVision = source.projectorPath?.let { path ->
-            if (growing) options(source.visionMiB).put("mmproj", path)
-            else runCatching { options(source.visionMiB).put("mmproj", path) }.getOrNull()
+            if (growing) withProjector(path) else runCatching { withProjector(path) }.getOrNull()
         }
         val options = withVision ?: options(0)
         source.hash?.let { options.put("model_sha256", it) }

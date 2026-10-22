@@ -565,9 +565,12 @@ private fun ProjectorSection(model: CatalogModel, projector: Artifact, engine: E
             Text("Image input", style = MaterialTheme.typography.titleSmall)
             Text(
                 when {
-                    installed && loaded && !engine.vision -> "Downloaded · load the model again to use it"
+                    installed && loaded && !engine.vision -> "Downloaded · reload the model to read images"
                     installed -> "Ready · photos and scanned PDFs can be attached"
-                    else -> "Lets this model read photos, screenshots and scanned documents. While it reads an image " +
+                    model.streamed -> "Lets this model read photos, screenshots and scanned documents. While it reads " +
+                        "an image, the expert cache makes room for the image encoder (about " +
+                        "${formatBytes(projector.sizeBytes + (128L shl 20))}), so text answers keep their speed."
+                    else ->"Lets this model read photos, screenshots and scanned documents. While it reads an image " +
                         "it needs about ${formatBytes(projector.sizeBytes + (512L shl 20))} of extra memory."
                 },
                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
@@ -581,10 +584,19 @@ private fun ProjectorSection(model: CatalogModel, projector: Artifact, engine: E
             Spacer(Modifier.height(4.dp))
             TextButton(onClick = { Downloads.pause(context, projector) }) { Text("Pause") }
         }
-        installed -> TextButton(onClick = { confirmDelete = true }, enabled = engine.phase != Phase.Generating) {
-            Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Remove image support")
+        installed -> Row(verticalAlignment = Alignment.CenterVertically) {
+            // Loads attach a downloaded projector on their own; a model loaded before the download needs one reload.
+            if (loaded && !engine.vision) {
+                OutlinedButton(onClick = { EngineController.load(context, model) }, enabled = engine.phase == Phase.Ready) {
+                    Text("Reload with images")
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+            TextButton(onClick = { confirmDelete = true }, enabled = engine.phase != Phase.Generating) {
+                Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Remove image support")
+            }
         }
         else -> Column {
             if (state == WorkInfo.State.FAILED) {

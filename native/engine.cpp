@@ -766,6 +766,9 @@ struct Engine::State {
     // Vision projector (mmproj GGUF). It is loaded only for requests with images and released as soon as they
     // are encoded, so text chats, prompt evaluation and decoding never hold its weights in memory.
     std::string projector_path;
+    // A streamed model's expert cache is emptied before the projector loads (images_release_expert_cache), so the
+    // app need not keep the encoder's memory free beside the cache.
+    bool images_release_cache = false;
     int image_max_tokens = 0;
     int threads = 0;
     // Persistent pool sized to min(configured threads, allowed CPUs).
@@ -1272,6 +1275,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     }
     state->chat_template = tmpl;
     state->projector_path = projector;
+    state->images_release_cache = state->store && !projector.empty() && options.value("images_release_expert_cache", false);
     state->image_max_tokens = image_max_tokens;
     state->threads = threads;
     if (state->gpu) {
@@ -1323,7 +1327,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                    {"vision", projector.empty() ? Json(nullptr)
                                                 : Json{{"projector_bytes", std::filesystem::file_size(projector)},
                                                        {"image_max_tokens", image_max_tokens},
-                                                       {"residency", "per_request"}}},
+                                                       {"residency", "per_request"},
+                                                       {"releases_expert_cache", state->images_release_cache}}},
                    {"load_ms", milliseconds(start)},
                    {"eqt_revision", EQT_REV},
                    {"compiler", EQT_COMPILER},
@@ -1406,6 +1411,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     int count = 0;
     llama_pos positions = 0;
     double media_load_ms = 0;
+    Json cache_released = nullptr;
     if (!has_media) {
         count = -llama_tokenize(vocab, prompt.data(), static_cast<int>(prompt.size()), nullptr, 0, true, true);
         if (count > 0 && count + reserve <= s.context_size) {
@@ -1431,6 +1437,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         media_params.n_threads = allowed > 0 ? std::min(s.threads, allowed) : s.threads;
         media_params.warmup = false;
         media_params.image_max_tokens = s.image_max_tokens;
+        // The cached experts give their memory to the projector and its encoder buffers. Exact: the prompt reads its
+        // experts again, and an image prompt reads most of every layer's experts in any case.
+        if (s.images_release_cache) {
+            cache_released = s.store->release_cache();
+        }
         media.reset(mtmd_init_from_file(s.projector_path.c_str(), s.model.get(), media_params));
         if (!media) {
             throw std::runtime_error("Cannot load the vision projector; see native log");
@@ -2164,6 +2175,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"image_encode_ms", has_media ? Json(encode_ms) : Json(nullptr)},
         {"image_prefill_ms", has_media ? Json(image_ms) : Json(nullptr)},
         {"memory_after_image_encode", encode_memory},
+        {"expert_cache_released_bytes", cache_released},
         {"generated_tokens", generated.size()},
         {"prefill_ms", prefill_ms},
         {"prefill_tokens_per_second",

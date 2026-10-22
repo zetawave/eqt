@@ -156,3 +156,8 @@ Four-row kernels and the verification replay (D037):
 `eqt-kernel-bench THREADS --experts` times Flash-Next's expert products (gate and up 2560→640 IQ2_XS, down 640→2560 IQ4_NL, 160 distinct experts, one decoded token) with the four-row kernels off and on, interleaved, and checks them bit for bit, also with three tokens and row counts that leave one-row edges. `eqt-kernel-bench THREADS --sustain=SECONDS` repeats the raw DRAM read rate (256 MiB), Q5_K/Q8_0/Q6_K products and the expert products back to back and prints one sample per 0.5 s with the CPU clocks of cpu0, cpu4, cpu7 and cpu9 (null when unreadable).
 
 `tools/sustained_run.py --powered` runs on a charging phone: speed and thermal behavior only; energy fields are null.
+
+Image input with a streamed model (D038):
+
+- `images_release_expert_cache` (load option, default false; needs `mmproj` and `expert_streaming`): before a request with images loads the projector, the expert cache is emptied and its pages returned, so the encoder fits where the cache was. Exact. The result reports `expert_cache_released_bytes` (null when not used), and `configuration.vision.releases_expert_cache` shows the option.
+- `eqt-bench` request `"sequence": [request, …]` runs the requests one after another on the same load (the top-level `load` applies) and writes `{"results": [...]}`.

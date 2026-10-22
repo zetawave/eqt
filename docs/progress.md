@@ -39,6 +39,12 @@ The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 
 - **Dense products** fall with the big-core clock under the thermal cap (1,824 MHz within 25 s of full load).
 - **First sustained run** (1,800 tokens): 2.19 tokens/s mean, 2.0 after six minutes, thermal status 4. Cache hits fell from 54% to 39% and reads rose to 861 MB per token, but most of that text was degenerate (past EOS), so it needs a natural long-answer prompt.
 
+**Image input for Flash-Next (D038, 2026-10-22):**
+- The pinned projector (904 MB, `configs/flash-next-mmproj.json`) is in the catalog as "Add image support". Loads attach it on their own, and "Reload with images" serves a model already loaded.
+- A streamed model empties its expert cache before encoding images, so the encoder does not cost text speed.
+- On the Galaxy (CLI as the app user) Flash-Next read a synthetic image correctly: first token after 85 s, 4.63 GiB RSS while encoding.
+- The debug APK with it is installed, and the projector is already in the app's storage. The in-app flow still needs a look on the phone.
+
 **Next performance goals, in order:**
 
 1. **Energy per token,** which sets sustained speed:

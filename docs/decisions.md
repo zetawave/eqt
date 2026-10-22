@@ -883,3 +883,47 @@ The option stays off until the phone measures it.
   - thermal status 0 → 4; skin 50.4 °C, AP 66.1 °C, battery 51 °C. The battery fell from 86% to 81% while charging.
 
   Over the run, cache hits fall to 39% (54% in 64-token runs), misses rise to 129 per token and reads to 861 MB per token, with storage busy 88%. The answer ends after about 70 tokens; the rest continues past EOS as repeated special tokens, so this run is not a natural long answer. The hit-rate drop may come from that text. A sustained run with a prompt that asks for a long answer is the next measurement.
+
+## D038: Image input for Qwen3.8-Flash-Next; the expert cache makes room for the encoder — 2026-10-22
+
+**The projector.** The pinned Flash-Next revision ships `mmproj-F16.gguf` (904,004,000 bytes, SHA-256 `1f7b7f0b…a980`; `configs/flash-next-mmproj.json`). Its header:
+- `clip`, projector `qwen3vl_merger`;
+- 27 blocks of width 1152, 449M parameters;
+- 768-pixel images in 16-pixel patches, merged 2×2;
+- projection to 2560 channels, the language model's width.
+
+The model's own header has `qwen4exp.ple.image_token_id` 248056 and M-RoPE sections, and the pinned llama.cpp handles image embeddings in qwen4exp: the PLE table uses that token id for image rows (rope type IMROPE). Equity's image path takes its positions from `mtmd_decode_use_mrope`. Nothing else was needed in the engine for correctness.
+
+**Memory was the problem.** The app kept the encoder's memory free for the whole load, beside the expert cache: the projector plus 128 MiB, about 990 MiB. On a phone with about 5.6 GB available, Flash-Next's 3.5 GB of shared weights and its one-layer cache floor (916 MiB at 512-token prompts) leave no room for both. With image support installed, admission would have fallen back to 32-token prompt batches and a 540 MiB cache, which would also slow text-only chats.
+
+**Change: the expert cache gives way to the encoder** (load option `images_release_expert_cache`):
+- Before a request with images loads the projector, `ExpertStore::release_cache()`:
+  1. waits for reads in flight;
+  2. evicts every cached expert;
+  3. returns the slots' pages.
+- The prompt then reads its experts again. An image prompt reads most experts of every layer anyway.
+- This is exact: the cache only decides where bytes come from.
+- The result reports `expert_cache_released_bytes`, and `configuration.vision.releases_expert_cache` shows the option.
+
+The app sets the option for streamed models with a projector. Its admission counts the image phase separately: resident weights, encoder, buffers and reserve, with the cache empty. The text phases keep the same plan as without images. For Flash-Next with about 5.6 GB available, the admission formula gives the 512-token plan, the same as text-only (arithmetic; the in-app load is not yet observed).
+
+**App.**
+- The catalog gives Flash-Next the projector: "Add image support · 904 MB" in the model's options sheet, a pinned, resumable, hash-verified download. Each later load attaches the projector on its own.
+- A model already loaded when the download finishes shows "Reload with images".
+- The streamed models' description says the cache makes room for the encoder.
+
+**Checks:**
+- **Host, real model** (`results/2026-10-22/host/flash-next-vision-cache-release.json`):
+  - A synthetic 768×512 image (the text "EQUITY 42", a red circle, a blue near-square). Answer: "The text "EQUITY 42" is displayed above a red circle and a blue square."
+  - A 24-token text request, then the image request on the same load, with and without the release: 1.86 GB released, and the image and text tokens are identical.
+- **Galaxy** (`results/2026-10-22/galaxy/flash-next-vision.json`; CLI as the app user, D032's options, the projector copied into the app's storage at its catalog path with the device-verified hash):
+  - The same answer.
+  - 1.72 GiB of cached experts released; RSS with the projector loaded 4.63 GiB, against 5.48 GiB after the text turn. The process peak (6.22 GiB) is decoding's, not the encoder's.
+  - Projector load 1.5 s, encode 18.1 s, image prefill 50.5 s (431 prompt tokens), first token after 85.4 s, decode 2.55 tokens/s. Single run, thermal status 0 → 2.
+
+**Tools:** `eqt-bench` takes `"sequence": [request, …]` to run several requests on one load.
+
+**Not verified:**
+- the in-app download, the options sheet and a chat with a photo on the Galaxy;
+- the 35B with the new admission (it also gets `images_release_expert_cache` and a larger cache when its projector is installed);
+- image answer quality beyond one synthetic image.

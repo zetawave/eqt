@@ -1336,6 +1336,31 @@ void ExpertStore::end_request() {
     }
 }
 
+uint64_t ExpertStore::release_cache() {
+    end_request(); // no read in flight and every finished one reaped
+    const uint64_t before = resident_bytes_;
+    for (auto &layer : layers_) {
+        if (!layer || layer->banks.empty()) {
+            continue;
+        }
+        for (int e = 0; e < layer->experts; ++e) {
+            if (layer->entries[e].state == State::resident) {
+                evict(*layer, e);
+            }
+        }
+    }
+    if (options_.slots) {
+        for (auto &slots : slot_classes_) {
+            for (uint8_t *slot : slots.warm) {
+                discard_pages(slot, slots.bytes);
+                slots.cold.push_back(slot);
+            }
+            slots.warm.clear();
+        }
+    }
+    return before - resident_bytes_;
+}
+
 bool ExpertStore::observe(ggml_tensor *tensor, bool ask, void *opaque) {
     auto &store = *static_cast<ExpertStore *>(opaque);
     int layer = -1;

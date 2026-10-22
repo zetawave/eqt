@@ -150,6 +150,9 @@ class ExpertStore {
     // and returns the freed slots' pages at once.
     void set_decode_extra(uint64_t bytes);
     void end_request();
+    // Between requests: evicts every cached expert and returns their pages, so another user of the memory (a vision
+    // encoder) fits beside the shared weights. Exact: the next prompt reads its experts again. Returns the bytes freed.
+    uint64_t release_cache();
     Json configuration() const;
     Json statistics() const;
     std::string error() const;

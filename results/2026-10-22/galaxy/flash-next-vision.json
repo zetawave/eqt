@@ -1,0 +1,92 @@
+{
+ "date": "2026-10-22",
+ "device": "Galaxy S24+ SM-S926B, stock Android 16, USB-powered; CLI as the app user",
+ "measurement_kind": "local Galaxy functional check, single run",
+ "model": {
+  "path": "files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+  "sha256": "f26a5e679710fb4cd048f481ff082d9af9c79fbd640d1867ef58c425518659d7",
+  "experts": "expert pack"
+ },
+ "projector": {
+  "path": "files/models/qwen3.8-flash-next-mmproj-f16/mmproj-F16.gguf",
+  "manifest": "configs/flash-next-mmproj.json",
+  "sha256": "1f7b7f0b984cf065c604360c29c8098362ed61b290db0ff12c6f360bb1a8a980"
+ },
+ "image": "synthetic 768x512 PNG: the text \"EQUITY 42\", a red circle, a blue near-square rectangle (generated for this check)",
+ "load": "D032 options (pool, two-layer lookahead, 1,792 MiB cache, read priority, 2 in flight, Q8_0 router, pack split 2) + mmproj + images_release_expert_cache",
+ "configuration_vision": {
+  "projector_bytes": 904004000,
+  "image_max_tokens": 1024,
+  "residency": "per_request",
+  "releases_expert_cache": true
+ },
+ "text_turn": {
+  "decode_tokens_per_second": 2.044425172617551,
+  "generated_tokens": 24,
+  "memory_after": {
+   "rss_bytes": 5885804544,
+   "peak_rss_bytes": 6166716416,
+   "pss_bytes": 5886917632,
+   "minor_faults": 1604733,
+   "major_faults": 82155,
+   "storage_read_bytes": 28886900736
+  }
+ },
+ "image_turn": {
+  "text": "The text \"EQUITY 42\" is displayed above a red circle and a blue square.",
+  "token_ids": [
+   760,
+   1414,
+   328,
+   36,
+   5579,
+   3224,
+   220,
+   19,
+   17,
+   1,
+   369,
+   12234,
+   3294,
+   264,
+   2438,
+   12307,
+   321,
+   264,
+   6105,
+   9057,
+   13
+  ],
+  "prompt_tokens": 431,
+  "prompt_images": 1,
+  "image_projector_load_ms": 1487.381172,
+  "image_encode_ms": 18087.626524,
+  "image_prefill_ms": 50544.015742,
+  "prefill_ms": 65588.833203,
+  "ttft_ms": 85395.0525,
+  "decode_tokens_per_second": 2.5471714980494817,
+  "generated_tokens": 21,
+  "termination": "eos",
+  "memory_after_image_encode": {
+   "rss_bytes": 4975415296,
+   "peak_rss_bytes": 6166716416,
+   "pss_bytes": 4976662528,
+   "minor_faults": 1861488,
+   "major_faults": 82245,
+   "storage_read_bytes": 29792923648
+  },
+  "memory_after": {
+   "rss_bytes": 5977206784,
+   "peak_rss_bytes": 6673510400,
+   "pss_bytes": 5978338304,
+   "minor_faults": 2615713,
+   "major_faults": 82839,
+   "storage_read_bytes": 86584594432
+  },
+  "expert_cache_released_bytes": 1844092928
+ },
+ "notes": [
+  "The answer equals the host run of the same model and image, token for token in the host check of the cache release.",
+  "Memory after the image encode is measured with the projector still loaded: the peak of the image path."
+ ]
+}

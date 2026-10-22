@@ -137,6 +137,16 @@ object Catalog {
         unmeteredOnly = true,
     )
 
+    // Unsloth's F16 conversion of the Qwen3.8 Flash-Next vision encoder (qwen3vl_merger, 449M parameters), from the
+    // same repository and revision as the language weights.
+    private val flashNextProjector = Artifact(
+        id = "qwen3.8-flash-next-mmproj-f16", name = "Qwen3.8 Flash Next image support",
+        repository = "unsloth/Qwen3.8-Flash-Next-GGUF", revision = "766911a6b7369840a91dbcd95f9f997acaab6cd6",
+        file = "mmproj-F16.gguf", sizeBytes = 904_004_000L,
+        sha256 = "1f7b7f0b984cf065c604360c29c8098362ed61b290db0ff12c6f360bb1a8a980",
+        unmeteredOnly = true,
+    )
+
     val models = listOf(
         CatalogModel(
             id = "qwen3-0.6b-q8", name = "Qwen3 0.6B", tagline = "Small · fully in memory · fast",
@@ -191,7 +201,7 @@ object Catalog {
             // QSA reads 2,048 selected cells per layer: its 24 KiB per token of keys and values stay on storage and
             // only the 6 KiB of indexer rows in memory.
             kvStorageMiBPer1k = 24, kvMemoryMiBPer1k = 6,
-            badge = "125B",
+            projector = flashNextProjector, badge = "125B",
             // Compute buffers measured on the host: 518 MiB at 512 tokens and 4,096 context, 534 at 16,384; linear
             // in the batch. 512 experts: a prompt shorter than ~118 tokens uses under 90% of a layer's experts, so
             // reading the next layer whole wastes reads (52 tokens: 54 GB read instead of 31, measured on the host).
