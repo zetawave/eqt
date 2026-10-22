@@ -736,6 +736,7 @@ struct Engine::State {
     // Uses the store's experts; removed before it.
     std::unique_ptr<GpuOffload> gpu;
     bool gpu_vision_flash_attn = false;
+    bool vision_flash_attn = true;
     bool reclaim_compute = false; // decode_reclaims_compute
     AbortSource abort;
     std::unique_ptr<gguf_context, decltype(&gguf_free)> meta{nullptr, gguf_free};
@@ -1164,6 +1165,9 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         state->gpu = std::make_unique<GpuOffload>(gpu_options, state->store.get());
         state->gpu_vision_flash_attn = options.value("gpu_vision_flash_attn", false);
     }
+    // CPU encoder: flash attention by default (llama.cpp's own default once its warmup resolves "auto"); off, a
+    // 1,024-token image needs about 1 GiB more and runs slower (D038).
+    state->vision_flash_attn = options.value("vision_flash_attn", true);
     state->abort = {&cancelled_, state->store.get(), state->gpu.get()};
     params.abort_callback = [](void *opaque) {
         const auto *abort = static_cast<const AbortSource *>(opaque);
@@ -1328,7 +1332,9 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                                                 : Json{{"projector_bytes", std::filesystem::file_size(projector)},
                                                        {"image_max_tokens", image_max_tokens},
                                                        {"residency", "per_request"},
-                                                       {"releases_expert_cache", state->images_release_cache}}},
+                                                       {"releases_expert_cache", state->images_release_cache},
+                                                       {"flash_attn", state->gpu ? state->gpu_vision_flash_attn
+                                                                                 : state->vision_flash_attn}}},
                    {"load_ms", milliseconds(start)},
                    {"eqt_revision", EQT_REV},
                    {"compiler", EQT_COMPILER},
@@ -1430,6 +1436,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
             // Without matrix cores the Vulkan flash-attention shader is the slow path on mobile GPUs (measured on
             // the Xclipse 940 for the decoder); the encoder then uses plain matrix products for attention.
             media_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
+        } else if (!s.gpu) {
+            // Without a warmup mtmd never resolves "auto", and the encoder then holds every head's whole attention
+            // matrix: 16 x n_patches^2 floats, about 1 GiB at 4,096 patches (a 1,024-token image), and as much again
+            // for its softmax. Flash attention works on tiles of it.
+            media_params.flash_attn_type = s.vision_flash_attn ? LLAMA_FLASH_ATTN_TYPE_ENABLED : LLAMA_FLASH_ATTN_TYPE_DISABLED;
         }
         media_params.print_timings = false;
         // The encoder spins at barriers like the decoder; it uses at most the CPUs Android allows right now.

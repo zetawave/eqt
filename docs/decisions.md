@@ -927,3 +927,27 @@ The app sets the option for streamed models with a projector. Its admission coun
 - the in-app download, the options sheet and a chat with a photo on the Galaxy;
 - the 35B with the new admission (it also gets `images_release_expert_cache` and a larger cache when its projector is installed);
 - image answer quality beyond one synthetic image.
+
+**Large photos ended the app (found the same day).** In the app, an 864×1536 photo ended the process before the first token, and the chat showed "Interrupted.". lmkd killed Equity in the foreground (RSS 2.47 GiB, about 200 MB free on the phone) after killing most other processes.
+
+The cause: Equity creates the mtmd context without a warmup, and mtmd resolves `flash_attn` "auto" only in that warmup. The CPU encoder therefore ran plain attention. At the 1,024-token cap (4,096 patches) its KQ matrix alone is 16 × 4,096² floats, about 1 GiB, far beyond the 128 MiB the app kept for the encoder. The synthetic test image (about 1,500 patches) needed about 150 MiB and passed.
+
+**Fix:**
+- The CPU encoder uses flash attention (load option `vision_flash_attn`, default true; `configuration.vision.flash_attn` reports it). This is llama.cpp's own default once its warmup resolves "auto".
+- The app reserves 256 MiB of encoder work.
+
+Host, real model, a synthetic 864×1536 image (1,055 prompt tokens), plain against flash attention:
+- encode 80 s against 48 s;
+- both answers correct: the text and the three shapes;
+- first-token logits: KL 0.022, the same top-1, 9 of the top-10 shared; the answers' tokens differ.
+
+This is the same class of deviation as GPU mode's images (D025, KL 0.027). An image quality evaluation is still to do.
+
+Galaxy, the same image, flash attention, the app's 1,024 MiB cache with keys and values on storage (`results/2026-10-22/galaxy/flash-next-vision-large-image.json`):
+- correct answer;
+- RSS after encoding 4.69 GiB, with the projector loaded and 0.95 GiB of cached experts released; the encoder's own buffers are about 120 MiB;
+- process peak 5.52 GiB (prompt and decoding);
+- no lmkd kill;
+- encode 63.5 s, image prefill 127 s, first token after 209 s, decode 2.54 tokens/s.
+
+A full-resolution photo on Flash-Next takes three to four minutes to its first token.

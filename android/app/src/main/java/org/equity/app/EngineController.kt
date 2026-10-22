@@ -154,9 +154,10 @@ object EngineController {
     // Images shown to the model per request: older images in a chat are described in text instead, so a long
     // conversation does not re-encode every photo on each turn.
     private const val MAX_CONTEXT_IMAGES = 4
-    // Vision encoder working memory on top of the projector weights while images are encoded (its compute buffer
-    // measured 35 MiB at 1024x1024 on the Galaxy).
-    private const val VISION_WORK_MIB = 128
+    // Vision encoder working memory on top of the projector weights while images are encoded. With flash attention it
+    // measured 35 MiB at 1024x1024 (Qwen3.6) and about 120 MiB for an 864x1536 photo at the 1,024-token cap
+    // (Flash-Next, D038); without it the attention matrices alone take about 1 GiB at that size.
+    private const val VISION_WORK_MIB = 256
     // Free memory left to the rest of the phone once a streamed model is loaded. The admission sum below matched
     // the measured peak RSS of a decode (3,088 MiB predicted 3,126 with a 512 MiB cache), so no further margin
     // is needed; Android also reclaims cached apps and swaps before it would stop the foreground app.

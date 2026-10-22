@@ -161,3 +161,4 @@ Image input with a streamed model (D038):
 
 - `images_release_expert_cache` (load option, default false; needs `mmproj` and `expert_streaming`): before a request with images loads the projector, the expert cache is emptied and its pages returned, so the encoder fits where the cache was. Exact. The result reports `expert_cache_released_bytes` (null when not used), and `configuration.vision.releases_expert_cache` shows the option.
 - `eqt-bench` request `"sequence": [request, …]` runs the requests one after another on the same load (the top-level `load` applies) and writes `{"results": [...]}`.
+- `vision_flash_attn` (load option, default true): the CPU vision encoder uses flash attention. Without it a 1,024-token image holds about 1 GiB of attention matrices (D038). GPU mode keeps `gpu_vision_flash_attn`.

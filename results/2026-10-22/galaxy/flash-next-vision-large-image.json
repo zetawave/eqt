@@ -1,0 +1,63 @@
+{
+ "date": "2026-10-22",
+ "problem": "In the app, an 864x1536 photo on Flash-Next ended the process before the first token (\"Interrupted.\"). lmkd killed Equity in the foreground at 09:56:36 (killinfo: RSS 2.47 GiB, about 200 MB free) after killing most other processes; a second attempt died the same way at 10:00:21.",
+ "cause": "Equity creates the mtmd context without a warmup, and mtmd resolves flash_attn \"auto\" only in its warmup: the CPU encoder ran plain attention, whose KQ matrix is 16 heads x 4,096^2 floats (about 1 GiB) at a 1,024-token image, beyond the 128 MiB the app reserved.",
+ "fix": "vision_flash_attn (default true) sets flash attention for the CPU encoder; the app reserves 256 MiB of encoder work.",
+ "host_comparison": {
+  "measurement_kind": "x86 host, real model, synthetic 864x1536 image, 1,055 prompt tokens",
+  "encode_s": {
+   "plain": 79.9,
+   "flash": 48.3
+  },
+  "answers": {
+   "plain": "The text is \"EQUITY 42\", and the image contains a red circle, a blue square, and a green triangle.",
+   "flash": "The text \"EQUITY 42\" appears above a red circle, a blue square, and a green triangle."
+  },
+  "kl_plain_to_flash": 0.0218494785875734,
+  "max_abs_logit_delta": 3.2310967445373535,
+  "top1_equal": true,
+  "top10_shared": 9,
+  "tokens_equal": false,
+  "note": "Windows working-set figures are not usable for the encoder buffer and are omitted."
+ },
+ "galaxy": {
+  "measurement_kind": "Galaxy CLI as the app user, single run, flash attention on; cache 1,024 MiB, keys and values on storage, pack, D032 options",
+  "image": "synthetic 864x1536 PNG (text \"EQUITY 42\", red circle, blue square, green triangle)",
+  "configuration_vision": {
+   "projector_bytes": 904004000,
+   "image_max_tokens": 1024,
+   "residency": "per_request",
+   "releases_expert_cache": true,
+   "flash_attn": true
+  },
+  "text_turn_rss_bytes": 5022593024,
+  "image_turn": {
+   "text": "The text \"EQUITY 42\" appears at the top, accompanied by a red circle, a blue square, and a green triangle.",
+   "prompt_tokens": 1055,
+   "image_projector_load_ms": 1323.861094,
+   "image_encode_ms": 63546.720664,
+   "image_prefill_ms": 127076.058711,
+   "prefill_ms": 143583.945039,
+   "ttft_ms": 208673.00461,
+   "decode_tokens_per_second": 2.5433888222864707,
+   "memory_after_image_encode": {
+    "rss_bytes": 5031350272,
+    "peak_rss_bytes": 5283897344,
+    "pss_bytes": 5032080384,
+    "minor_faults": 1699606,
+    "major_faults": 621,
+    "storage_read_bytes": 32075567104
+   },
+   "memory_after": {
+    "rss_bytes": 5139800064,
+    "peak_rss_bytes": 5929267200,
+    "pss_bytes": 5139744768,
+    "minor_faults": 2288111,
+    "major_faults": 9148,
+    "storage_read_bytes": 136449458176
+   },
+   "expert_cache_released_bytes": 1017667584
+  },
+  "lmkd_kills_during_run": 0
+ }
+}
