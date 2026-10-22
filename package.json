@@ -2,9 +2,13 @@
   "name": "eqt",
   "version": "0.1.0",
   "private": true,
-  "description": "Equity — research inference engine. Website scripts and manual GitHub Pages deployment.",
+  "description": "Equity — research inference engine. Website scripts, manual GitHub Pages deployment and Android APK builds.",
   "scripts": {
     "start": "python -m http.server 8377 --directory website",
-    "deploy": "node scripts/deploy-website.mjs"
+    "deploy": "node scripts/deploy-website.mjs",
+    "apk:debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-app.ps1 -Variant Debug",
+    "apk:debug:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-app.ps1 -Variant Debug -Install",
+    "apk:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-app.ps1 -Variant Release",
+    "apk:release:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-app.ps1 -Variant Release -Install"
   }
 }
