@@ -1,0 +1,792 @@
+{
+ "date": "2026-10-22",
+ "device": "Galaxy S24+ SM-S926B (Exynos 2400), stock Android 16, USB-powered, app closed",
+ "measurement_kind": "local Galaxy measurements, CLI as the app user (run-as), one prompt, 64 greedy tokens unless stated",
+ "model": {
+  "path": "files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+  "sha256": "f26a5e679710fb4cd048f481ff082d9af9c79fbd640d1867ef58c425518659d7",
+  "experts": "expert pack (D032)"
+ },
+ "binaries": {
+  "eqt-bench": "a4175ba0b221b30c137c0e9ebe4502c1df382eba39583ce5b2a235701c48214b",
+  "eqt-kernel-bench": "3affc8915fa43df21a9e567a65099c5ebc1687e09a6d58f1e46b38a959caad5e",
+  "eqt-io-bench": "12c1ee9ea7990ec41716727e8caf38a5a7d4a9457e91d2dbfb0df677daeae3fe",
+  "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84"
+ },
+ "cpu_variant": "android_armv9.0_1",
+ "base_load": "D032 options: pool, two-layer lookahead (5), 1,792 MiB cache, read priority, 2 in flight, Q8_0 router, pack split 2; each run cooled to skin <= 37 C (at most 3 min)",
+ "fixture_exactness": [
+  {
+   "model": "models/eqt-tiny-qwen35moe.gguf",
+   "cases": 9,
+   "passed": 9,
+   "row_kernels_case_passed": [
+    true
+   ]
+  },
+  {
+   "model": "models/eqt-tiny-qwen35moe-ff96.gguf",
+   "cases": 9,
+   "passed": 9,
+   "row_kernels_case_passed": [
+    true
+   ]
+  },
+  {
+   "model": "models/eqt-tiny-qwen4exp.gguf",
+   "cases": 9,
+   "passed": 9,
+   "row_kernels_case_passed": [
+    true
+   ]
+  }
+ ],
+ "expert_kernels": [
+  {
+   "repetition": 0,
+   "products": [
+    {
+     "product": "gate_up",
+     "type": "iq2_xs",
+     "shape": [
+      2560,
+      640
+     ],
+     "row_kernel_available": true,
+     "rows4_bitwise_equal": true,
+     "one_row_us": 358.0,
+     "four_rows_us": 312.6,
+     "one_row_gb_s": 13.2,
+     "four_rows_gb_s": 15.1,
+     "speedup": 1.145
+    },
+    {
+     "product": "down",
+     "type": "iq4_nl",
+     "shape": [
+      640,
+      2560
+     ],
+     "row_kernel_available": true,
+     "rows4_bitwise_equal": true,
+     "one_row_us": 283.7,
+     "four_rows_us": 254.1,
+     "one_row_gb_s": 32.5,
+     "four_rows_gb_s": 36.3,
+     "speedup": 1.117
+    }
+   ]
+  },
+  {
+   "repetition": 1,
+   "products": [
+    {
+     "product": "gate_up",
+     "type": "iq2_xs",
+     "shape": [
+      2560,
+      640
+     ],
+     "row_kernel_available": true,
+     "rows4_bitwise_equal": true,
+     "one_row_us": 358.8,
+     "four_rows_us": 312.4,
+     "one_row_gb_s": 13.2,
+     "four_rows_gb_s": 15.2,
+     "speedup": 1.148
+    },
+    {
+     "product": "down",
+     "type": "iq4_nl",
+     "shape": [
+      640,
+      2560
+     ],
+     "row_kernel_available": true,
+     "rows4_bitwise_equal": true,
+     "one_row_us": 284.5,
+     "four_rows_us": 257.4,
+     "one_row_gb_s": 32.4,
+     "four_rows_gb_s": 35.8,
+     "speedup": 1.105
+    }
+   ]
+  }
+ ],
+ "sustained_kernel_loop": {
+  "seconds": 90,
+  "phases": [
+   {
+    "window": "0-12 s",
+    "samples": 22,
+    "median_mhz_cpu0_4_7_9": [
+     400.0,
+     2304.0,
+     2400.0,
+     2880.0
+    ],
+    "raw_read_gb_s": 18.6,
+    "q5_K": 17.3,
+    "q8_0": 32.0,
+    "q6_K": 31.2,
+    "iq2_xs": 5.8,
+    "iq2_xs_rows4": 13.0,
+    "iq4_nl": 28.8,
+    "iq4_nl_rows4": 33.0
+   },
+   {
+    "window": "12-25 s",
+    "samples": 23,
+    "median_mhz_cpu0_4_7_9": [
+     400,
+     2016,
+     2016,
+     2016
+    ],
+    "raw_read_gb_s": 18.5,
+    "q5_K": 12.3,
+    "q8_0": 28.6,
+    "q6_K": 28.3,
+    "iq2_xs": 6.7,
+    "iq2_xs_rows4": 12.9,
+    "iq4_nl": 25.5,
+    "iq4_nl_rows4": 27.6
+   },
+   {
+    "window": "30-90 s",
+    "samples": 110,
+    "median_mhz_cpu0_4_7_9": [
+     400.0,
+     1824.0,
+     1824.0,
+     1824.0
+    ],
+    "raw_read_gb_s": 17.4,
+    "q5_K": 18.0,
+    "q8_0": 24.4,
+    "q6_K": 23.3,
+    "iq2_xs": 6.1,
+    "iq2_xs_rows4": 11.5,
+    "iq4_nl": 20.9,
+    "iq4_nl_rows4": 23.1
+   }
+  ],
+  "notes": [
+   "raw_read_gb_s uses unpinned std::threads and stays below the kernels' own rates: it is not a DRAM ceiling and does not separate CPU from memory-side throttling.",
+   "Single windows dip to 1-5 GB/s (scheduling stalls); medians are reported.",
+   "The one-row IQ2_XS item runs after the dense products and before its four-row twin on the same weights, so their ratio here (about 2x) is biased; the interleaved --experts bench gives 1.15x."
+  ]
+ },
+ "storage_ceiling": [
+  {
+   "read_bytes": 1884160,
+   "threads": 2,
+   "reads": 3184,
+   "gb_s": 0.9,
+   "p50_ms": 4.2,
+   "p95_ms": 6.1,
+   "direct": true
+  },
+  {
+   "read_bytes": 1884160,
+   "threads": 4,
+   "reads": 3184,
+   "gb_s": 1.18,
+   "p50_ms": 6.7,
+   "p95_ms": 7.3,
+   "direct": true
+  },
+  {
+   "read_bytes": 1884160,
+   "threads": 8,
+   "reads": 3184,
+   "gb_s": 2.4,
+   "p50_ms": 6.2,
+   "p95_ms": 7.3,
+   "direct": true
+  },
+  {
+   "read_bytes": 1884160,
+   "threads": 16,
+   "reads": 3184,
+   "gb_s": 2.41,
+   "p50_ms": 12.4,
+   "p95_ms": 13.8,
+   "direct": true
+  },
+  {
+   "read_bytes": 3768320,
+   "threads": 2,
+   "reads": 1592,
+   "gb_s": 1.24,
+   "p50_ms": 6.2,
+   "p95_ms": 9.6,
+   "direct": true
+  },
+  {
+   "read_bytes": 3768320,
+   "threads": 4,
+   "reads": 1592,
+   "gb_s": 2.21,
+   "p50_ms": 6.0,
+   "p95_ms": 13.4,
+   "direct": true
+  },
+  {
+   "read_bytes": 3768320,
+   "threads": 8,
+   "reads": 1592,
+   "gb_s": 2.38,
+   "p50_ms": 12.5,
+   "p95_ms": 14.7,
+   "direct": true
+  },
+  {
+   "read_bytes": 3768320,
+   "threads": 16,
+   "reads": 1592,
+   "gb_s": 2.6,
+   "p50_ms": 23.1,
+   "p95_ms": 25.0,
+   "direct": true
+  },
+  {
+   "read_bytes": 7536640,
+   "threads": 2,
+   "reads": 796,
+   "gb_s": 1.14,
+   "p50_ms": 13.4,
+   "p95_ms": 19.2,
+   "direct": true
+  },
+  {
+   "read_bytes": 7536640,
+   "threads": 4,
+   "reads": 796,
+   "gb_s": 2.79,
+   "p50_ms": 10.7,
+   "p95_ms": 12.3,
+   "direct": true
+  },
+  {
+   "read_bytes": 7536640,
+   "threads": 8,
+   "reads": 796,
+   "gb_s": 2.84,
+   "p50_ms": 21.2,
+   "p95_ms": 22.8,
+   "direct": true
+  },
+  {
+   "read_bytes": 7536640,
+   "threads": 16,
+   "reads": 796,
+   "gb_s": 2.75,
+   "p50_ms": 42.7,
+   "p95_ms": 53.4,
+   "direct": true
+  },
+  {
+   "read_bytes": 15073280,
+   "threads": 2,
+   "reads": 398,
+   "gb_s": 2.71,
+   "p50_ms": 10.9,
+   "p95_ms": 16.3,
+   "direct": true
+  },
+  {
+   "read_bytes": 15073280,
+   "threads": 4,
+   "reads": 398,
+   "gb_s": 2.77,
+   "p50_ms": 20.9,
+   "p95_ms": 26.5,
+   "direct": true
+  },
+  {
+   "read_bytes": 15073280,
+   "threads": 8,
+   "reads": 398,
+   "gb_s": 2.87,
+   "p50_ms": 41.8,
+   "p95_ms": 54.6,
+   "direct": true
+  },
+  {
+   "read_bytes": 15073280,
+   "threads": 16,
+   "reads": 398,
+   "gb_s": 2.74,
+   "p50_ms": 86.1,
+   "p95_ms": 112.8,
+   "direct": true
+  }
+ ],
+ "decode_row_kernels": {
+  "rows": [
+   {
+    "arm": "base_a-rep0",
+    "tokens_per_second": 2.638,
+    "p50_ms": 366.1,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 0,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.7,
+    "cache_hit": 0.534,
+    "decode_io_mb_per_token": 555,
+    "decode_io_busy": 0.784,
+    "compute_wait_ms_per_token": 92.0,
+    "verify_replay": null,
+    "thermal": [
+     null,
+     null
+    ]
+   },
+   {
+    "arm": "base_b-rep0",
+    "tokens_per_second": 3.079,
+    "p50_ms": 318.2,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 0,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.7,
+    "cache_hit": 0.538,
+    "decode_io_mb_per_token": 546,
+    "decode_io_busy": 0.817,
+    "compute_wait_ms_per_token": 85.3,
+    "verify_replay": null,
+    "thermal": [
+     null,
+     null
+    ]
+   },
+   {
+    "arm": "iq4_a-rep0",
+    "tokens_per_second": 2.811,
+    "p50_ms": 323.4,
+    "generated_tokens": 64,
+    "row_kernels": [
+     "iq4_nl"
+    ],
+    "rollback_slots": 0,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.5,
+    "cache_hit": 0.537,
+    "decode_io_mb_per_token": 545,
+    "decode_io_busy": 0.768,
+    "compute_wait_ms_per_token": 94.0,
+    "verify_replay": null,
+    "thermal": [
+     null,
+     null
+    ]
+   },
+   {
+    "arm": "iq4_b-rep0",
+    "tokens_per_second": 2.921,
+    "p50_ms": 324.5,
+    "generated_tokens": 64,
+    "row_kernels": [
+     "iq4_nl"
+    ],
+    "rollback_slots": 0,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.5,
+    "cache_hit": 0.537,
+    "decode_io_mb_per_token": 546,
+    "decode_io_busy": 0.8,
+    "compute_wait_ms_per_token": 93.9,
+    "verify_replay": null,
+    "thermal": [
+     null,
+     null
+    ]
+   },
+   {
+    "arm": "rows_a-rep0",
+    "tokens_per_second": 3.159,
+    "p50_ms": 315.2,
+    "generated_tokens": 64,
+    "row_kernels": [
+     "iq2_xs",
+     "iq4_nl"
+    ],
+    "rollback_slots": 0,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.5,
+    "cache_hit": 0.539,
+    "decode_io_mb_per_token": 540,
+    "decode_io_busy": 0.818,
+    "compute_wait_ms_per_token": 92.6,
+    "verify_replay": null,
+    "thermal": [
+     null,
+     null
+    ]
+   },
+   {
+    "arm": "rows_b-rep0",
+    "tokens_per_second": 2.946,
+    "p50_ms": 332.9,
+    "generated_tokens": 64,
+    "row_kernels": [
+     "iq2_xs",
+     "iq4_nl"
+    ],
+    "rollback_slots": 0,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.7,
+    "cache_hit": 0.537,
+    "decode_io_mb_per_token": 543,
+    "decode_io_busy": 0.801,
+    "compute_wait_ms_per_token": 97.7,
+    "verify_replay": null,
+    "thermal": [
+     null,
+     null
+    ]
+   }
+  ],
+  "identical_tokens": true
+ },
+ "op_profile_with_row_kernels": {
+  "decode_tokens_per_second": 2.9734086310421026,
+  "rows": [
+   {
+    "op": "MUL_MAT_ID",
+    "type": "iq2_xs",
+    "ms_per_token": 130.86615979687465,
+    "nodes_per_token": 92.53125
+   },
+   {
+    "op": "MUL_MAT",
+    "type": "q5_K",
+    "ms_per_token": 54.18075970312496,
+    "nodes_per_token": 185.0625
+   },
+   {
+    "op": "MUL_MAT",
+    "type": "q8_0",
+    "ms_per_token": 28.05483539062492,
+    "nodes_per_token": 240.1875
+   },
+   {
+    "op": "MUL_MAT",
+    "type": "q6_K",
+    "ms_per_token": 20.039355765624943,
+    "nodes_per_token": 63.0
+   },
+   {
+    "op": "MUL_MAT_ID",
+    "type": "iq4_nl",
+    "ms_per_token": 19.370457984374955,
+    "nodes_per_token": 47.25
+   },
+   {
+    "op": "MUL_MAT",
+    "type": "q4_K",
+    "ms_per_token": 16.904769359374995,
+    "nodes_per_token": 0.96875
+   },
+   {
+    "op": "ARGSORT",
+    "type": "f32",
+    "ms_per_token": 14.738147171874997,
+    "nodes_per_token": 47.25
+   },
+   {
+    "op": "MUL_MAT",
+    "type": "f32",
+    "ms_per_token": 10.600631265624994,
+    "nodes_per_token": 259.875
+   },
+   {
+    "op": "GATED_DELTA_NET",
+    "type": "f32",
+    "ms_per_token": 7.8675505312499965,
+    "nodes_per_token": 35.4375
+   },
+   {
+    "op": "MUL_MAT_ID",
+    "type": "iq3_xxs",
+    "ms_per_token": 6.327849109374998,
+    "nodes_per_token": 1.96875
+   },
+   {
+    "op": "CPY",
+    "type": "f32",
+    "ms_per_token": 4.016102250000016,
+    "nodes_per_token": 83.671875
+   },
+   {
+    "op": "MUL_MAT",
+    "type": "bf16",
+    "ms_per_token": 3.8141040468749994,
+    "nodes_per_token": 23.625
+   }
+  ]
+ },
+ "verify_replay": {
+  "reference_tokens": 72,
+  "rows": [
+   {
+    "arm": "plain-rep0",
+    "tokens_per_second": 3.068,
+    "p50_ms": 316.3,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 0,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.8,
+    "cache_hit": 0.539,
+    "decode_io_mb_per_token": 543,
+    "decode_io_busy": 0.816,
+    "compute_wait_ms_per_token": 89.8,
+    "verify_replay": null,
+    "thermal": [
+     "0",
+     "1"
+    ]
+   },
+   {
+    "arm": "plain-rep1",
+    "tokens_per_second": 2.989,
+    "p50_ms": 321.7,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 0,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.9,
+    "cache_hit": 0.538,
+    "decode_io_mb_per_token": 544,
+    "decode_io_busy": 0.808,
+    "compute_wait_ms_per_token": 93.2,
+    "verify_replay": null,
+    "thermal": [
+     "0",
+     "1"
+    ]
+   },
+   {
+    "arm": "plain_slots-rep0",
+    "tokens_per_second": 2.843,
+    "p50_ms": 339.5,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 2,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.6,
+    "cache_hit": 0.538,
+    "decode_io_mb_per_token": 550,
+    "decode_io_busy": 0.794,
+    "compute_wait_ms_per_token": 91.9,
+    "verify_replay": null,
+    "thermal": [
+     "0",
+     "1"
+    ]
+   },
+   {
+    "arm": "plain_slots-rep1",
+    "tokens_per_second": 2.608,
+    "p50_ms": 363.0,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 2,
+    "demanded_experts_per_token": 472.5,
+    "misses_per_token": 64.7,
+    "cache_hit": 0.537,
+    "decode_io_mb_per_token": 556,
+    "decode_io_busy": 0.774,
+    "compute_wait_ms_per_token": 94.4,
+    "verify_replay": null,
+    "thermal": [
+     "0",
+     "1"
+    ]
+   },
+   {
+    "arm": "replay_065-rep0",
+    "tokens_per_second": 3.026,
+    "p50_ms": 487.3,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 2,
+    "demanded_experts_per_token": 468.6,
+    "misses_per_token": 101.7,
+    "cache_hit": 0.479,
+    "decode_io_mb_per_token": 587,
+    "decode_io_busy": 0.848,
+    "compute_wait_ms_per_token": 101.5,
+    "verify_replay": {
+     "verification_steps": 39,
+     "acceptance_requested": 0.65,
+     "accepted_drafts": 25,
+     "acceptance_rate": 0.6410256410256411,
+     "tokens_per_step": 1.641025641025641,
+     "step_ms": 542.2877964615385,
+     "target_agreement": 0.984375,
+     "draft_head_ms": null
+    },
+    "thermal": [
+     "0",
+     "1"
+    ]
+   },
+   {
+    "arm": "replay_065-rep1",
+    "tokens_per_second": 3.04,
+    "p50_ms": 479.2,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 2,
+    "demanded_experts_per_token": 468.6,
+    "misses_per_token": 101.6,
+    "cache_hit": 0.479,
+    "decode_io_mb_per_token": 586,
+    "decode_io_busy": 0.85,
+    "compute_wait_ms_per_token": 99.3,
+    "verify_replay": {
+     "verification_steps": 39,
+     "acceptance_requested": 0.65,
+     "accepted_drafts": 25,
+     "acceptance_rate": 0.6410256410256411,
+     "tokens_per_step": 1.641025641025641,
+     "step_ms": 539.7239293076923,
+     "target_agreement": 0.984375,
+     "draft_head_ms": null
+    },
+    "thermal": [
+     "0",
+     "1"
+    ]
+   },
+   {
+    "arm": "replay_065_rows-rep0",
+    "tokens_per_second": 2.813,
+    "p50_ms": 480.6,
+    "generated_tokens": 64,
+    "row_kernels": [
+     "iq2_xs",
+     "iq4_nl"
+    ],
+    "rollback_slots": 2,
+    "demanded_experts_per_token": 468.6,
+    "misses_per_token": 101.7,
+    "cache_hit": 0.479,
+    "decode_io_mb_per_token": 582,
+    "decode_io_busy": 0.818,
+    "compute_wait_ms_per_token": 113.5,
+    "verify_replay": {
+     "verification_steps": 39,
+     "acceptance_requested": 0.65,
+     "accepted_drafts": 25,
+     "acceptance_rate": 0.6410256410256411,
+     "tokens_per_step": 1.641025641025641,
+     "step_ms": 583.4753425641026,
+     "target_agreement": 0.984375,
+     "draft_head_ms": null
+    },
+    "thermal": [
+     "0",
+     "1"
+    ]
+   },
+   {
+    "arm": "replay_065_rows-rep1",
+    "tokens_per_second": 3.045,
+    "p50_ms": 464.1,
+    "generated_tokens": 64,
+    "row_kernels": [
+     "iq2_xs",
+     "iq4_nl"
+    ],
+    "rollback_slots": 2,
+    "demanded_experts_per_token": 468.6,
+    "misses_per_token": 101.8,
+    "cache_hit": 0.479,
+    "decode_io_mb_per_token": 583,
+    "decode_io_busy": 0.832,
+    "compute_wait_ms_per_token": 104.2,
+    "verify_replay": {
+     "verification_steps": 39,
+     "acceptance_requested": 0.65,
+     "accepted_drafts": 25,
+     "acceptance_rate": 0.6410256410256411,
+     "tokens_per_step": 1.641025641025641,
+     "step_ms": 538.840672076923,
+     "target_agreement": 0.984375,
+     "draft_head_ms": null
+    },
+    "thermal": [
+     "0",
+     "1"
+    ]
+   },
+   {
+    "arm": "replay_100-rep0",
+    "tokens_per_second": 2.848,
+    "p50_ms": 2.8,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 2,
+    "demanded_experts_per_token": 377.6,
+    "misses_per_token": 83.3,
+    "cache_hit": 0.457,
+    "decode_io_mb_per_token": 481,
+    "decode_io_busy": 0.796,
+    "compute_wait_ms_per_token": 94.6,
+    "verify_replay": {
+     "verification_steps": 32,
+     "acceptance_requested": 1.0,
+     "accepted_drafts": 32,
+     "acceptance_rate": 1.0,
+     "tokens_per_step": 2.0,
+     "step_ms": 702.1501953125,
+     "target_agreement": 0.984375,
+     "draft_head_ms": null
+    },
+    "thermal": [
+     "0",
+     "1"
+    ]
+   },
+   {
+    "arm": "replay_100-rep1",
+    "tokens_per_second": 2.302,
+    "p50_ms": 9.1,
+    "generated_tokens": 64,
+    "row_kernels": [],
+    "rollback_slots": 2,
+    "demanded_experts_per_token": 377.6,
+    "misses_per_token": 83.4,
+    "cache_hit": 0.458,
+    "decode_io_mb_per_token": 484,
+    "decode_io_busy": 0.683,
+    "compute_wait_ms_per_token": 91.8,
+    "verify_replay": {
+     "verification_steps": 32,
+     "acceptance_requested": 1.0,
+     "accepted_drafts": 32,
+     "acceptance_rate": 1.0,
+     "tokens_per_step": 2.0,
+     "step_ms": 868.9370825,
+     "target_agreement": 0.984375,
+     "draft_head_ms": null
+    },
+    "thermal": [
+     "0",
+     "2"
+    ]
+   }
+  ],
+  "notes": [
+   "No MTP head ran: its cost is not included.",
+   "A rejected draft is the reference's next-but-one token, whose experts the next step partly reuses: the 0.65 arms are optimistic against real wrong drafts.",
+   "All arms produced the reference tokens; target_agreement 0.984 (one row differs: two-row batches round differently)."
+  ]
+ }
+}

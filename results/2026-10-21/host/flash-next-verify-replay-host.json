@@ -1,0 +1,75 @@
+{
+ "date": "2026-10-21",
+ "measurement_kind": "local measurement on the 16 GB x86 host; not a Galaxy result",
+ "model": {
+  "file": "models/flash-next/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+  "sha256": "f26a5e679710fb4cd048f481ff082d9af9c79fbd640d1867ef58c425518659d7"
+ },
+ "binary": {
+  "eqt-bench.exe": "31005e946baa6c1c8cce523e92feef869dbe1f0dcdff50743eedbb27b154a8e4"
+ },
+ "request": "configs/flash-next-stream-request.json, 40 greedy tokens (ignore_eos); threads 4, cache 1792 MiB, io_threads 8, buffered reads, pool, two-layer lookahead (5), Q8_0 router, read priority, 2 in flight",
+ "method": "verify_replay: every step evaluates [last, draft] as MTP k=1 verification does; the draft is the plain run's next token on a fixed schedule at the given rate, otherwise the token after it; the answer follows the plain run's tokens. No draft head ran: its cost is not included.",
+ "results": [
+  {
+   "arm": "plain",
+   "rollback_slots": 0,
+   "generated_tokens": 40,
+   "decode_tokens_per_second": 1.385,
+   "decode_ms": 28875,
+   "verify_replay": null,
+   "decode_demanded_experts_per_token": 468.0,
+   "decode_misses_per_token": 69.6,
+   "decode_io_mb_per_token": 531,
+   "compute_wait_thread_ms_per_token": 831
+  },
+  {
+   "arm": "replay_acceptance_0.65",
+   "rollback_slots": 2,
+   "generated_tokens": 39,
+   "decode_tokens_per_second": 1.249,
+   "decode_ms": 31218,
+   "verify_replay": {
+    "verification_steps": 24,
+    "acceptance_requested": 0.65,
+    "accepted_drafts": 15,
+    "acceptance_rate": 0.625,
+    "tokens_per_step": 1.625,
+    "step_ms": 1300.7381458333332,
+    "target_agreement": 0.9743589743589743,
+    "draft_head_ms": null
+   },
+   "decode_demanded_experts_per_token": 475.9,
+   "decode_misses_per_token": 110.2,
+   "decode_io_mb_per_token": 593,
+   "compute_wait_thread_ms_per_token": 997
+  },
+  {
+   "arm": "replay_acceptance_0",
+   "rollback_slots": 2,
+   "generated_tokens": 39,
+   "decode_tokens_per_second": 0.898,
+   "decode_ms": 43432,
+   "verify_replay": {
+    "verification_steps": 39,
+    "acceptance_requested": 0.0,
+    "accepted_drafts": 0,
+    "acceptance_rate": 0.0,
+    "tokens_per_step": 1.0,
+    "step_ms": 1113.6352538461538,
+    "target_agreement": 0.9743589743589743,
+    "draft_head_ms": null
+   },
+   "decode_demanded_experts_per_token": 810.6,
+   "decode_misses_per_token": 186.3,
+   "decode_io_mb_per_token": 969,
+   "compute_wait_thread_ms_per_token": 1611
+  }
+ ],
+ "notes": [
+  "Per accepted token, two-row steps demand as many experts as plain decoding (476 against 468): the union of two consecutive tokens' experts, as D026's traces predict.",
+  "Decode reads per token rise from 531 to 593 MB at 0.65: misses per token go from 70 to 110.",
+  "target_agreement 0.974 in both replays: one row's greedy token differs from the plain run (two-row batches round floats differently on this host).",
+  "Single runs on a PC whose storage and compute differ from the phone's; the Galaxy session measures the same arms."
+ ]
+}

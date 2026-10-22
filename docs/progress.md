@@ -32,6 +32,13 @@ The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 
 
 **Flash-Next on the phone is moved (2026-10-20, D032).** `eqt-pack move` moved its experts into `files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack`; the GGUF beside it has holes in its routed ranges and loads only with the pack. The installed debug app (2026-10-21, 17:54) passes the pack automatically, with D032's tuning, saved sessions and keys and values on storage. `eqt-pack unpack MODEL PACK` restores the original GGUF byte for byte. `eqt-pack sha256` against the pinned hash has not been run on the phone yet.
 
+**Flash-Next and 5 tokens/s (D037, measured on the Galaxy 2026-10-22):**
+- **Storage:** with today's reads (545 MB per token in 64-token runs) and the measured 2.4 GB/s for whole experts, plain decoding cannot pass about 4.4 tokens/s however fast compute gets. 5 tokens/s needs more cache hits or almost no wasted speculation.
+- **MTP k=1 is not pursued:** a two-row verification step costs 2.1–2.6 plain tokens even with every draft accepted, and reads rise to 587 MB per token at 0.65.
+- **Four-row IQ2_XS/IQ4_NL kernels** (`row_kernels`): bitwise equal on the phone and 1.11–1.15× in isolation, but only about 3–4 ms per token in decoding; off by default.
+- **Dense products** fall with the big-core clock under the thermal cap (1,824 MHz within 25 s of full load).
+- **First sustained run** (1,800 tokens): 2.19 tokens/s mean, 2.0 after six minutes, thermal status 4. Cache hits fell from 54% to 39% and reads rose to 861 MB per token, but most of that text was degenerate (past EOS), so it needs a natural long-answer prompt.
+
 **Next performance goals, in order:**
 
 1. **Energy per token,** which sets sustained speed:
@@ -47,11 +54,39 @@ The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 
    - `topk_in_graph` removes the per-layer graph split (exact; −2 ms per token on the Galaxy), default off;
    - `decode_reclaims_compute` was measured and gained nothing;
    - the graph split per layer (about 0.28 ms each);
-   - the IQ2_XS expert kernel (instruction-bound);
+   - the IQ2_XS/IQ4_NL expert kernels: four-row kernels measured, bitwise equal, about 3–4 ms per token (D037);
+   - a sustained run on a prompt that asks for a long answer: does the cache hit rate fall from 54% to 39% in natural long text too (D037)?
    - the BF16 indexer GEMV (scalar, about 7 ms per token; vectorizing changes summation order, so it needs a numerical comparison);
    - misses stay at 13.7% of demanded experts: the late lookahead adds only 4 points of precision.
-5. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build is lossless and faster.
+5. **Exact Q4_K/Q8_0 tiles,** so MTP on the reference build (the 35B) is lossless and faster. Not for Flash-Next, where two-row steps lose (D037).
 6. **Quality:** a larger evaluation set before UD-IQ2_M can replace the reference.
+
+## Flash-Next: 2026-10-21 night — the 5 tokens/s analysis, four-row kernels, verification replay (D037)
+
+Checked against the records of D029–D036:
+- **Holds:** the per-token breakdown (≈100 ms waiting for reads, ≈145 ms dense weights, ≈55 ms expert compute, the rest overhead), and that storage bytes per token become the binding limit.
+- **Does not hold:** that MTP k=1 lowers storage reads per token. Lookahead and demand reads work per row, so a two-row step reads the union of both tokens' experts.
+- **Does not hold:** that the dense weights cost "once" for two rows. Exact tiles cost 1.25–1.39× per extra column (D015), and Q8_0/Q4_K have no exact tile.
+- **Does not hold:** that IQ2_XS was benched at 12.2 GB/s. That figure is the IQ2_XXS/IQ3_XXS bench.
+
+Implemented (not yet on the phone):
+- **`row_kernels`** (patch 0002): four-row IQ2_XS and IQ4_NL GEMV kernels, bitwise equal to the one-row kernels. A static aarch64 check under QEMU passes 8,000 of 8,000 random cases for v8.2 and v9.0; a non-fused variant fails 3,064, so the check is sensitive. Off by default.
+- **`verify_replay` with `rollback_slots`:** the cost of k=1 verification steps without a draft head. On the fixtures, target agreement is 1.000 at acceptance 1, 0.65 and 0, resident and streamed. On the real model on the host it measured 1.25 tokens/s against 1.39 plain (record in `results/2026-10-21/host/`).
+- **`eqt-kernel-bench --experts` / `--sustain=S`**, and `sustained_run.py --powered`.
+- Host: 72/72 streaming cases and 5/5 MTP cases pass; the Android and host builds are clean.
+
+**Phone session** (run on 2026-10-22, results in D037): `python .cache/phone_kernels.py` (USB, phone unlocked, Equity app closed; about 75 minutes, of which about 14 are the sustained run). Steps, in order:
+1. `state`, `stage`;
+2. `exact`: fixtures, four-row kernels against the resident path;
+3. `kernels`: bitwise and GB/s;
+4. `sustain_kernels`: the thermal cap, memory against clocks;
+5. `io`: storage ceiling for 1.9–15 MB reads;
+6. `rows`: decode A/B;
+7. `ops`;
+8. `replay`: plain, plain with slots, replays at 0.65 and 1.0, alternated twice;
+9. `sustained`: 1,800 tokens.
+
+Raw results are in `results/local/galaxy-flash-next/kernels/`; records are `results/2026-10-22/galaxy/flash-next-d037-session.json` and `flash-next-sustained-usb.json`.
 
 ## App: 2026-10-21 — answer length, context window, compact Models, context gauge, saved sessions, KV on storage
 

@@ -77,6 +77,11 @@ CASES = [
     dict(name="topk_in_graph_pool_priority", batch=128,
          load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, lookahead_layers=2,
                    read_priority=True, prefetch_inflight=2, lookahead_router_q8=True, topk_in_graph=True)),
+    # Four-row IQ2_XS/IQ4_NL GEMV kernels (AArch64 dotprod; elsewhere the option selects nothing) against the
+    # resident path's one-row kernels: bit for bit.
+    dict(name="row_kernels_pool_priority", batch=128,
+         load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, lookahead_layers=2,
+                   read_priority=True, prefetch_inflight=2, lookahead_router_q8=True, row_kernels=["iq2_xs", "iq4_nl"])),
     dict(name="kv_on_storage_prefetch", batch=128,
          load=dict(expert_cache_mib=1, io_threads=4, prefetch=True, speculative_pool=True, kv_file_dir="{kvdir}")),
     # Expert pack (native/expert_pack.h): "{pack}" is replaced by the fixture's pack path.

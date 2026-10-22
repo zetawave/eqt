@@ -11,8 +11,8 @@
       },
       {
         "file": "patches/llama.cpp/0002-ggml-cpu-exact-tiles-and-paired-experts.patch",
-        "sha256": "fe11e97537d515d87a7ed0992b23eef70feffc84b94ed0c1575cc86520c060d3",
-        "purpose": "ggml-cpu (AArch64 dotprod): 2x2 tiles for Q5_K/IQ2_XXS/IQ3_XXS bitwise equal to one-column dot products; MUL_MAT pairs columns for odd batches; MUL_MAT_ID pairs tokens routed to the same expert; tiled GEMM path enabled on AArch64 i8mm with a USMMLA microkernel; NEON simd_gemm for SVE builds; MUL_MAT_ID expert-address hook for slot-addressed expert caches; MUL_MAT_ID processes experts reported ready by an optional hook first, so an expert cache can overlap a pending read with the other experts' work (same results); an external compute hook lets the host run selected nodes elsewhere (Equity's GPU mode computes prompt-sized products and DeltaNet nodes on the GPU; unused unless installed)"
+        "sha256": "af2dbbc7a1e221cfc117c7ea01409bea325ba5590b94f4a127dd0a8ff6703cfb",
+        "purpose": "ggml-cpu (AArch64 dotprod): 2x2 tiles for Q5_K/IQ2_XXS/IQ3_XXS bitwise equal to one-column dot products; four-row single-column kernels for IQ2_XS/IQ4_NL bitwise equal to one-row dot products, off unless ggml_cpu_set_row_kernels enables them; MUL_MAT pairs columns for odd batches; MUL_MAT_ID pairs tokens routed to the same expert; tiled GEMM path enabled on AArch64 i8mm with a USMMLA microkernel; NEON simd_gemm for SVE builds; MUL_MAT_ID expert-address hook for slot-addressed expert caches; MUL_MAT_ID processes experts reported ready by an optional hook first, so an expert cache can overlap a pending read with the other experts' work (same results); an external compute hook lets the host run selected nodes elsewhere (Equity's GPU mode computes prompt-sized products and DeltaNet nodes on the GPU; unused unless installed)"
       },
       {
         "file": "patches/llama.cpp/0003-cvec-directional-ablation.patch",

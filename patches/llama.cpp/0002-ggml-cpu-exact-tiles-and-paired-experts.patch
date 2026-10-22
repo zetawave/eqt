@@ -1,8 +1,8 @@
 diff --git a/ggml/include/ggml-cpu.h b/ggml/include/ggml-cpu.h
-index dc6453c..3591ce8 100644
+index dc6453c..d9df78b 100644
 --- a/ggml/include/ggml-cpu.h
 +++ b/ggml/include/ggml-cpu.h
-@@ -138,6 +138,23 @@ extern "C" {
+@@ -138,6 +138,27 @@ extern "C" {
  
      GGML_BACKEND_API void ggml_backend_cpu_set_use_ref(ggml_backend_t backend_cpu, bool use_ref);
  
@@ -22,12 +22,16 @@ index dc6453c..3591ce8 100644
 +    // threads of a node agree. One per process; it must not change while a graph computes.
 +    typedef bool (*ggml_cpu_external_compute_t)(struct ggml_tensor * dst, int ith, int nth, void * user);
 +    GGML_BACKEND_API void ggml_cpu_set_external_compute(ggml_cpu_external_compute_t fn, void * user);
++    // Single-column MUL_MAT and MUL_MAT_ID products of the weight types in `type_mask` (bit t for ggml_type t) use
++    // four-row kernels where this build has them (AArch64 dotprod: IQ2_XS, IQ4_NL), bitwise equal to the one-row
++    // kernels. Returns the mask of types that have one. Off by default; it must not change while a graph computes.
++    GGML_BACKEND_API uint64_t ggml_cpu_set_row_kernels(uint64_t type_mask);
 +
      GGML_BACKEND_API ggml_backend_reg_t ggml_backend_cpu_reg(void);
  
      GGML_BACKEND_API void ggml_cpu_fp32_to_fp32(const float *,       float *, int64_t);
 diff --git a/ggml/src/ggml-cpu/arch/arm/quants.c b/ggml/src/ggml-cpu/arch/arm/quants.c
-index cfbbf66..720c652 100644
+index cfbbf66..7bd2517 100644
 --- a/ggml/src/ggml-cpu/arch/arm/quants.c
 +++ b/ggml/src/ggml-cpu/arch/arm/quants.c
 @@ -2863,9 +2863,27 @@ void ggml_vec_dot_q4_K_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const voi
@@ -231,7 +235,82 @@ index cfbbf66..720c652 100644
  #if defined(__ARM_NEON)
  
      const uint64_t * signs64 = (const uint64_t *)keven_signs_q2xs;
-@@ -3863,7 +4030,11 @@ void ggml_vec_dot_iq2_s_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
+@@ -3764,6 +3931,74 @@ void ggml_vec_dot_iq2_xs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const v
+ #endif
+ }
+ 
++#if defined(GGML_CPU_EXACT_TILES)
++// Row r's FP16 block scale in lane r, converted exactly as the one-row kernels' scalar conversion does.
++static inline float32x4_t rows4_scales(const ggml_half * d0, const ggml_half * d1, const ggml_half * d2, const ggml_half * d3) {
++    uint16x4_t h = vdup_n_u16(*d0);
++    h = vld1_lane_u16(d1, h, 1);
++    h = vld1_lane_u16(d2, h, 2);
++    h = vld1_lane_u16(d3, h, 3);
++    return vcvt_f32_f16(vreinterpret_f16_u16(h));
++}
++
++// One IQ2_XS row's 64 weights (eight 16-bit codes: 9-bit grid index, 7-bit sign index) against 64 activations:
++// lane g holds the integer dot product of 16-weight group g times its scale 2s+1 (two scale nibbles per byte).
++static inline int32x4_t iq2_xs_dot64(const uint16_t * GGML_RESTRICT qs, const uint8_t * GGML_RESTRICT scales,
++                                     const ggml_int8x16x4_t * GGML_RESTRICT q8b) {
++    const uint64_t * GGML_RESTRICT signs64 = (const uint64_t *)keven_signs_q2xs;
++    uint64_t codes[2];
++    memcpy(codes, qs, sizeof(codes));
++    int8x16_t w[4];
++    for (int k = 0; k < 4; ++k) {
++        const uint32_t pair = (uint32_t)(codes[k >> 1] >> (32*(k & 1)));
++        const uint32_t a = pair & 0xffff, b = pair >> 16;
++        const uint64x2_t grid = vcombine_u64(vld1_u64(iq2xs_grid + (a & 511)), vld1_u64(iq2xs_grid + (b & 511)));
++        const uint64x2_t sign = vcombine_u64(vld1_u64(signs64 + (a >> 9)), vld1_u64(signs64 + (b >> 9)));
++        w[k] = vmulq_s8(vreinterpretq_s8_u64(grid), vreinterpretq_s8_u64(sign));
++    }
++    const int32x4_t p1 = ggml_vdotq_s32(vdupq_n_s32(0), w[0], q8b->val[0]);
++    const int32x4_t p2 = ggml_vdotq_s32(vdupq_n_s32(0), w[1], q8b->val[1]);
++    const int32x4_t p3 = ggml_vdotq_s32(vdupq_n_s32(0), w[2], q8b->val[2]);
++    const int32x4_t p4 = ggml_vdotq_s32(vdupq_n_s32(0), w[3], q8b->val[3]);
++    uint16_t packed;
++    memcpy(&packed, scales, sizeof(packed));
++    const int32x4_t shifts = { 0, -4, -8, -12 };
++    const uint32x4_t nibbles = vandq_u32(vshlq_u32(vdupq_n_u32(packed), shifts), vdupq_n_u32(0xf));
++    const uint32x4_t scale = vorrq_u32(vshlq_n_u32(nibbles, 1), vdupq_n_u32(1));
++    return vmulq_s32(vpaddq_s32(vpaddq_s32(p1, p2), vpaddq_s32(p3, p4)), vreinterpretq_s32_u32(scale));
++}
++
++// Four IQ2_XS rows against one Q8_K column (decode GEMV). Each row's integer sum per super-block is exact in any
++// order; lane r of the float vectors then performs row r's operations of the one-row kernel in its order,
++// sum = fma(d_x*d_y, isum, sum) and 0.125*sum at the end, so every output equals the nrc == 1 call bit for bit.
++// The activation blocks are loaded once for the four rows and the 16-bit codes as two 64-bit words.
++void ggml_vec_dot_iq2_xs_q8_K_rows4(int n, float * GGML_RESTRICT s, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy) {
++    assert(n % QK_K == 0);
++    const block_iq2_xs * GGML_RESTRICT x0 = vx;
++    const block_iq2_xs * GGML_RESTRICT x1 = (const block_iq2_xs *)((const char *)vx + 1*bx);
++    const block_iq2_xs * GGML_RESTRICT x2 = (const block_iq2_xs *)((const char *)vx + 2*bx);
++    const block_iq2_xs * GGML_RESTRICT x3 = (const block_iq2_xs *)((const char *)vx + 3*bx);
++    const block_q8_K * GGML_RESTRICT y = vy;
++    const int nb = n / QK_K;
++
++    float32x4_t sumv = vdupq_n_f32(0.0f);
++    for (int i = 0; i < nb; ++i) {
++        int32x4_t sumi0 = vdupq_n_s32(0), sumi1 = vdupq_n_s32(0), sumi2 = vdupq_n_s32(0), sumi3 = vdupq_n_s32(0);
++        for (int ib64 = 0; ib64 < QK_K/64; ++ib64) {
++            const ggml_int8x16x4_t q8b = ggml_vld1q_s8_x4(y[i].qs + 64*ib64);
++            sumi0 = vaddq_s32(sumi0, iq2_xs_dot64(x0[i].qs + 8*ib64, x0[i].scales + 2*ib64, &q8b));
++            sumi1 = vaddq_s32(sumi1, iq2_xs_dot64(x1[i].qs + 8*ib64, x1[i].scales + 2*ib64, &q8b));
++            sumi2 = vaddq_s32(sumi2, iq2_xs_dot64(x2[i].qs + 8*ib64, x2[i].scales + 2*ib64, &q8b));
++            sumi3 = vaddq_s32(sumi3, iq2_xs_dot64(x3[i].qs + 8*ib64, x3[i].scales + 2*ib64, &q8b));
++        }
++        const int32x4_t isum = vpaddq_s32(vpaddq_s32(sumi0, sumi1), vpaddq_s32(sumi2, sumi3));
++        const float32x4_t d = vmulq_f32(rows4_scales(&x0[i].d, &x1[i].d, &x2[i].d, &x3[i].d), vdupq_n_f32(y[i].d));
++        sumv = vfmaq_f32(sumv, d, vcvtq_f32_s32(isum));
++    }
++    vst1q_f32(s, vmulq_n_f32(sumv, 0.125f));
++}
++#endif
++
+ void ggml_vec_dot_iq2_s_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
+     assert(n % QK_K == 0);
+     assert(nrc == 1);
+@@ -3863,7 +4098,11 @@ void ggml_vec_dot_iq2_s_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
  
  void ggml_vec_dot_iq3_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
      assert(n % QK_K == 0);
@@ -243,7 +322,7 @@ index cfbbf66..720c652 100644
      UNUSED(nrc);
      UNUSED(bx);
      UNUSED(by);
-@@ -3874,6 +4045,34 @@ void ggml_vec_dot_iq3_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const
+@@ -3874,6 +4113,34 @@ void ggml_vec_dot_iq3_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const
  
      const int nb = n / QK_K;
  
@@ -278,11 +357,73 @@ index cfbbf66..720c652 100644
  #if defined(__ARM_NEON)
  
      const uint64_t * signs64 = (const uint64_t *)keven_signs_q2xs;
+@@ -4253,6 +4520,61 @@ void ggml_vec_dot_iq4_nl_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const v
+     *s = sumf;
+ }
+ 
++#if defined(GGML_CPU_EXACT_TILES)
++// Four IQ4_NL rows against one Q8_0 column (decode GEMV). Lane r of the float vectors performs row r's operations
++// of the one-row kernel in its order: for each pair of blocks fma(dx0*dy0, isum0, (dx1*dy1)*isum1) is added to the
++// sum (the one-row loop's contraction, as compiled), and an odd last block runs the same scalar code. Integer sums
++// are exact, so every output equals the nrc == 1 call bit for bit; the activation blocks are loaded once.
++void ggml_vec_dot_iq4_nl_q8_0_rows4(int n, float * GGML_RESTRICT s, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy) {
++    assert(n % QK4_NL == 0);
++    const block_iq4_nl * GGML_RESTRICT x[4];
++    for (int r = 0; r < 4; ++r) {
++        x[r] = (const block_iq4_nl *)((const char *)vx + r*bx);
++    }
++    const block_q8_0 * GGML_RESTRICT y = vy;
++    const int nb = n / QK4_NL;
++
++    const int8x16_t values = vld1q_s8(kvalues_iq4nl);
++    const uint8x16_t m4b = vdupq_n_u8(0x0f);
++    float32x4_t sumv = vdupq_n_f32(0.0f);
++    int ib = 0;
++    for (; ib + 1 < nb; ib += 2) {
++        const int8x16_t y0l = vld1q_s8(y[ib + 0].qs), y0h = vld1q_s8(y[ib + 0].qs + 16);
++        const int8x16_t y1l = vld1q_s8(y[ib + 1].qs), y1h = vld1q_s8(y[ib + 1].qs + 16);
++        int32x4_t p0[4], p1[4];
++        for (int r = 0; r < 4; ++r) {
++            const uint8x16_t q0 = vld1q_u8(x[r][ib + 0].qs);
++            const uint8x16_t q1 = vld1q_u8(x[r][ib + 1].qs);
++            p0[r] = ggml_vdotq_s32(ggml_vdotq_s32(vdupq_n_s32(0), ggml_vqtbl1q_s8(values, vandq_u8(q0, m4b)), y0l),
++                                   ggml_vqtbl1q_s8(values, vshrq_n_u8(q0, 4)), y0h);
++            p1[r] = ggml_vdotq_s32(ggml_vdotq_s32(vdupq_n_s32(0), ggml_vqtbl1q_s8(values, vandq_u8(q1, m4b)), y1l),
++                                   ggml_vqtbl1q_s8(values, vshrq_n_u8(q1, 4)), y1h);
++        }
++        const int32x4_t isum0 = vpaddq_s32(vpaddq_s32(p0[0], p0[1]), vpaddq_s32(p0[2], p0[3]));
++        const int32x4_t isum1 = vpaddq_s32(vpaddq_s32(p1[0], p1[1]), vpaddq_s32(p1[2], p1[3]));
++        const float32x4_t dx0 = rows4_scales(&x[0][ib + 0].d, &x[1][ib + 0].d, &x[2][ib + 0].d, &x[3][ib + 0].d);
++        const float32x4_t dx1 = rows4_scales(&x[0][ib + 1].d, &x[1][ib + 1].d, &x[2][ib + 1].d, &x[3][ib + 1].d);
++        const float32x4_t t0 = vmulq_f32(dx0, vdupq_n_f32(GGML_CPU_FP16_TO_FP32(y[ib + 0].d)));
++        const float32x4_t u1 = vmulq_f32(vmulq_f32(dx1, vdupq_n_f32(GGML_CPU_FP16_TO_FP32(y[ib + 1].d))), vcvtq_f32_s32(isum1));
++        sumv = vaddq_f32(sumv, vfmaq_f32(u1, t0, vcvtq_f32_s32(isum0)));
++    }
++    float sumf[4];
++    vst1q_f32(sumf, sumv);
++    for (int r = 0; r < 4; ++r) {
++        for (int jb = ib; jb < nb; ++jb) {
++            const float d = GGML_CPU_FP16_TO_FP32(y[jb].d)*GGML_CPU_FP16_TO_FP32(x[r][jb].d);
++            int sumi1 = 0, sumi2 = 0;
++            for (int j = 0; j < QK4_NL/2; ++j) {
++                sumi1 += y[jb].qs[j+       0] * kvalues_iq4nl[x[r][jb].qs[j] & 0xf];
++                sumi2 += y[jb].qs[j+QK4_NL/2] * kvalues_iq4nl[x[r][jb].qs[j] >>  4];
++            }
++            sumf[r] += d * (sumi1 + sumi2);
++        }
++        s[r] = sumf[r];
++    }
++}
++#endif
++
+ void ggml_vec_dot_iq4_xs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
+     assert(nrc == 1);
+     UNUSED(nrc);
 diff --git a/ggml/src/ggml-cpu/ggml-cpu-impl.h b/ggml/src/ggml-cpu/ggml-cpu-impl.h
-index 5dd9ec8..fc88ab0 100644
+index 5dd9ec8..036650b 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu-impl.h
 +++ b/ggml/src/ggml-cpu/ggml-cpu-impl.h
-@@ -29,6 +29,15 @@ struct ggml_compute_params {
+@@ -29,6 +29,24 @@ struct ggml_compute_params {
      bool use_ref;
  };
  
@@ -293,13 +434,22 @@ index 5dd9ec8..fc88ab0 100644
 +#define GGML_CPU_EXACT_TILES 1
 +#endif
 +
++// Four consecutive weight rows (bx bytes apart) against one activation column: s[r] = row r . y, bitwise equal to
++// four nrc == 1 vec_dot calls. Used for single-column products of the types ggml_cpu_set_row_kernels enables.
++typedef void (*ggml_vec_dot_rows4_t)(int n, float * GGML_RESTRICT s, const void * GGML_RESTRICT vx, size_t bx,
++                                     const void * GGML_RESTRICT vy);
++#if defined(GGML_CPU_EXACT_TILES)
++void ggml_vec_dot_iq2_xs_q8_K_rows4(int n, float * GGML_RESTRICT s, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy);
++void ggml_vec_dot_iq4_nl_q8_0_rows4(int n, float * GGML_RESTRICT s, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy);
++#endif
++
 +// Expert matrix `expert` of a MUL_MAT_ID weight, through ggml_cpu_set_expert_address when one is installed.
 +const char * ggml_cpu_expert_data(const struct ggml_tensor * weights, int64_t expert);
  
  #if defined(_MSC_VER)
  
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
-index 7c274c0..e47f83b 100644
+index 7c274c0..510fa7e 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.c
 +++ b/ggml/src/ggml-cpu/ggml-cpu.c
 @@ -322,7 +322,11 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
@@ -338,7 +488,49 @@ index 7c274c0..e47f83b 100644
      },
      [GGML_TYPE_IQ3_S] = {
          //.from_float               = quantize_row_iq3_s,
-@@ -1210,8 +1222,11 @@ static void ggml_compute_forward_mul_mat_one_chunk(
+@@ -1162,6 +1174,33 @@ void ggml_set_f32_nd(const struct ggml_tensor * tensor, int i0, int i1, int i2,
+ 
+ // ggml_compute_forward_mul_mat
+ 
++// Weight types whose single-column products use four-row kernels (ggml_cpu_set_row_kernels).
++static uint64_t row_kernel_types = 0;
++
++uint64_t ggml_cpu_set_row_kernels(uint64_t type_mask) {
++    _Static_assert(GGML_TYPE_COUNT <= 64, "row kernel mask holds one bit per type");
++    uint64_t available = 0;
++#if defined(GGML_CPU_EXACT_TILES)
++    available = (1ull << GGML_TYPE_IQ2_XS) | (1ull << GGML_TYPE_IQ4_NL);
++#endif
++    row_kernel_types = type_mask & available;
++    return available;
++}
++
++static ggml_vec_dot_rows4_t vec_dot_rows4_for(enum ggml_type type) {
++#if defined(GGML_CPU_EXACT_TILES)
++    if (row_kernel_types >> type & 1) {
++        switch (type) {
++            case GGML_TYPE_IQ2_XS: return ggml_vec_dot_iq2_xs_q8_K_rows4;
++            case GGML_TYPE_IQ4_NL: return ggml_vec_dot_iq4_nl_q8_0_rows4;
++            default: break;
++        }
++    }
++#endif
++    GGML_UNUSED(type);
++    return NULL;
++}
++
+ static void ggml_compute_forward_mul_mat_one_chunk(
+     const struct ggml_compute_params * params,
+     struct ggml_tensor * dst,
+@@ -1181,6 +1220,7 @@ static void ggml_compute_forward_mul_mat_one_chunk(
+ 
+     ggml_vec_dot_t const vec_dot      = type_traits_cpu[type].vec_dot;
+     enum ggml_type const vec_dot_type = type_traits_cpu[type].vec_dot_type;
++    ggml_vec_dot_rows4_t const vec_dot_rows4 = vec_dot_rows4_for(type);
+ 
+     // broadcast factors
+     const int64_t r2 = ne12 / ne02;
+@@ -1210,8 +1250,11 @@ static void ggml_compute_forward_mul_mat_one_chunk(
      float tmp[32];
  
      for (int64_t iir1 = ir1_start; iir1 < ir1_end; iir1 += blck_1) {
@@ -351,7 +543,7 @@ index 7c274c0..e47f83b 100644
                  const int64_t i13 = (ir1 / (ne12 * ne1));
                  const int64_t i12 = (ir1 - i13 * ne12 * ne1) / ne1;
                  const int64_t i11 = (ir1 - i13 * ne12 * ne1 - i12 * ne1);
-@@ -1240,12 +1255,23 @@ static void ggml_compute_forward_mul_mat_one_chunk(
+@@ -1240,12 +1283,27 @@ static void ggml_compute_forward_mul_mat_one_chunk(
                  //    vec_dot(ne00, &dst_col[ir0], src0_row + ir0*nb01, src1_col);
                  //}
  
@@ -364,6 +556,10 @@ index 7c274c0..e47f83b 100644
 +                if (ncols == 2) {
 +                    for (; ir0 + 1 < ir0_block_end; ir0 += 2) {
 +                        vec_dot(ne00, &tmp[ir0 - iir0], 16, src0_row + ir0 * nb01, nb01, src1_col, src1_col_stride, 2);
++                    }
++                } else if (vec_dot_rows4) {
++                    for (; ir0 + 3 < ir0_block_end; ir0 += 4) {
++                        vec_dot_rows4(ne00, &tmp[ir0 - iir0], src0_row + ir0 * nb01, nb01, src1_col);
 +                    }
 +                }
 +                for (; ir0 < ir0_block_end; ++ir0) {
@@ -379,7 +575,7 @@ index 7c274c0..e47f83b 100644
                  }
              }
          }
-@@ -1453,15 +1479,9 @@ UseGgmlGemm2:;
+@@ -1453,15 +1511,9 @@ UseGgmlGemm2:;
          const int64_t ir1_start = dr1 * ith1;
          const int64_t ir1_end = MIN(ir1_start + dr1, nr1);
  
@@ -398,12 +594,14 @@ index 7c274c0..e47f83b 100644
  
          if (nth >= nchunk0 * nchunk1) {
              break;
-@@ -1503,44 +1523,104 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
+@@ -1502,45 +1554,110 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
+ 
      ggml_vec_dot_t    const vec_dot      = type_traits_cpu[type].vec_dot;
      enum ggml_type    const vec_dot_type = type_traits_cpu[type].vec_dot_type;
- 
-+    const int64_t num_rows_per_vec_dot = type_traits_cpu[type].nrows;
++    ggml_vec_dot_rows4_t const vec_dot_rows4 = vec_dot_rows4_for(type);
 +
++    const int64_t num_rows_per_vec_dot = type_traits_cpu[type].nrows;
+ 
      const int64_t blck_0 = 16;
      const int64_t blck_1 = 16;
  
@@ -450,13 +648,15 @@ index 7c274c0..e47f83b 100644
 +                if (ncols == 2 && src1_col[1] <= src1_col[0]) {
 +                    ncols = 1;
 +                }
- 
--                struct mmid_row_mapping row_mapping = MMID_MATRIX_ROW(cur_a, _i12);
--                const int id       = row_mapping.i1; // selected expert index
++
 +                int64_t ir0 = iir0;
 +                if (ncols == 2) {
 +                    for (; ir0 + 1 < ir0_block_end; ir0 += 2) {
 +                        vec_dot(ne00, &tmp[ir0 - iir0], 16, src0_cur + ir0*nb01, nb01, src1_col[0], (size_t) (src1_col[1] - src1_col[0]), 2);
++                    }
++                } else if (vec_dot_rows4) {
++                    for (; ir0 + 3 < ir0_block_end; ir0 += 4) {
++                        vec_dot_rows4(ne00, &tmp[ir0 - iir0], src0_cur + ir0*nb01, nb01, src1_col[0]);
 +                    }
 +                }
 +                for (; ir0 < ir0_block_end; ++ir0) {
@@ -465,8 +665,8 @@ index 7c274c0..e47f83b 100644
 +                    }
 +                }
  
--                const int64_t  i11 = id % ne11;
--                const int64_t  i12 = row_mapping.i2; // row index in src1
+-                struct mmid_row_mapping row_mapping = MMID_MATRIX_ROW(cur_a, _i12);
+-                const int id       = row_mapping.i1; // selected expert index
 +                for (int64_t cn = 0; cn < ncols; ++cn) {
 +                    memcpy(&dst_col[cn][iir0], tmp + cn*16, (ir0_block_end - iir0)*sizeof(float));
 +                }
@@ -475,10 +675,17 @@ index 7c274c0..e47f83b 100644
 +    }
 +}
  
--                const int64_t  i1 = id;  // selected expert index
--                const int64_t  i2 = i12; // row
+-                const int64_t  i11 = id % ne11;
+-                const int64_t  i12 = row_mapping.i2; // row index in src1
 +static ggml_cpu_expert_address_t expert_address_fn   = NULL;
 +static void *                    expert_address_user = NULL;
+ 
+-                const int64_t  i1 = id;  // selected expert index
+-                const int64_t  i2 = i12; // row
++void ggml_cpu_set_expert_address(ggml_cpu_expert_address_t fn, void * user) {
++    expert_address_fn   = fn;
++    expert_address_user = user;
++}
  
 -                // desc: when src1 is not a contiguous memory block we have to calculate the offset using the strides
 -                //       if it is, then we have either copied the data to params->wdata and made it contiguous or we are using
@@ -488,33 +695,28 @@ index 7c274c0..e47f83b 100644
 -                    (src1_cont || src1->type != vec_dot_type
 -                    ? (i11      + i12*ne11)*row_size
 -                    : (i11*nb11 + i12*nb12));
-+void ggml_cpu_set_expert_address(ggml_cpu_expert_address_t fn, void * user) {
-+    expert_address_fn   = fn;
-+    expert_address_user = user;
-+}
- 
--                float * dst_col = (float *) ((char *) dst->data + (i1*nb1 + i2*nb2));
 +static ggml_cpu_expert_ready_t expert_ready_fn   = NULL;
 +static void *                  expert_ready_user = NULL;
- 
--                for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
--                    vec_dot(ne00, &tmp[ir0 - iir0], 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
--                }
++
 +void ggml_cpu_set_expert_ready(ggml_cpu_expert_ready_t fn, void * user) {
 +    expert_ready_fn   = fn;
 +    expert_ready_user = user;
 +}
  
--                memcpy(&dst_col[iir0], tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
--            }
+-                float * dst_col = (float *) ((char *) dst->data + (i1*nb1 + i2*nb2));
 +static ggml_cpu_external_compute_t external_compute_fn   = NULL;
 +static void *                      external_compute_user = NULL;
-+
+ 
+-                for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
+-                    vec_dot(ne00, &tmp[ir0 - iir0], 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
+-                }
 +void ggml_cpu_set_external_compute(ggml_cpu_external_compute_t fn, void * user) {
 +    external_compute_fn   = fn;
 +    external_compute_user = user;
 +}
-+
+ 
+-                memcpy(&dst_col[iir0], tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
+-            }
 +const char * ggml_cpu_expert_data(const struct ggml_tensor * weights, int64_t expert) {
 +    if (expert_address_fn) {
 +        const void * data = expert_address_fn(weights, expert, expert_address_user);
@@ -526,7 +728,7 @@ index 7c274c0..e47f83b 100644
  }
  
  static void * incr_ptr_aligned(void ** p, size_t size, size_t align) {
-@@ -1600,6 +1680,9 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1600,6 +1717,9 @@ static void ggml_compute_forward_mul_mat_id(
      char (*atomic_current_chunk)[CACHE_LINE_SIZE] = // [n_as]
          incr_ptr_aligned(&wdata_cur, CACHE_LINE_SIZE * n_as, CACHE_LINE_SIZE);
  
@@ -536,7 +738,7 @@ index 7c274c0..e47f83b 100644
      // Tiled matmul (see tiled.h); per-thread work buffers, 0 bytes when disabled. The
      // reservation is unconditional, the per expert eligibility is decided at dispatch time
      char * tiled_scratch = incr_ptr_aligned(&wdata_cur, ggml_tiled_wdata_size(nth, dst), 64);
-@@ -1658,6 +1741,30 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1658,6 +1778,30 @@ static void ggml_compute_forward_mul_mat_id(
                  matrix_row_counts[i02] += 1;
              }
          }
@@ -567,7 +769,7 @@ index 7c274c0..e47f83b 100644
      }
  
      // reset current_chunk
-@@ -1668,19 +1775,16 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1668,19 +1812,16 @@ static void ggml_compute_forward_mul_mat_id(
  
      ggml_barrier(params->threadpool);
  
@@ -590,7 +792,7 @@ index 7c274c0..e47f83b 100644
          const void * wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;
          const size_t row_size = ggml_row_size(vec_dot_type, ne10);
  
-@@ -1744,6 +1848,10 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
+@@ -1744,6 +1885,10 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
          return;
      }
  
@@ -601,7 +803,7 @@ index 7c274c0..e47f83b 100644
      // extra_buffer op?
      if (ggml_cpu_extra_compute_forward(params, tensor)) {
          return;
-@@ -2908,6 +3016,8 @@ struct ggml_cplan ggml_graph_plan(
+@@ -2908,6 +3053,8 @@ struct ggml_cplan ggml_graph_plan(
                          cur += n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping) + sizeof(int64_t);
                          // atomic_current_chunk
                          cur += CACHE_LINE_SIZE*n_as + CACHE_LINE_SIZE;
@@ -611,10 +813,10 @@ index 7c274c0..e47f83b 100644
                          cur = GGML_PAD(cur, 64);
                          cur += ggml_tiled_wdata_size(n_tasks, node);
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
-index 81ff5d7..6b053f6 100644
+index 81ff5d7..246e8fc 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.cpp
 +++ b/ggml/src/ggml-cpu/ggml-cpu.cpp
-@@ -690,6 +690,15 @@ static void * ggml_backend_cpu_get_proc_address(ggml_backend_reg_t reg, const ch
+@@ -690,6 +690,18 @@ static void * ggml_backend_cpu_get_proc_address(ggml_backend_reg_t reg, const ch
      if (strcmp(name, "ggml_backend_cpu_set_threadpool") == 0) {
          return (void *)ggml_backend_cpu_set_threadpool;
      }
@@ -626,6 +828,9 @@ index 81ff5d7..6b053f6 100644
 +    }
 +    if (strcmp(name, "ggml_cpu_set_external_compute") == 0) {
 +        return (void *)ggml_cpu_set_external_compute;
++    }
++    if (strcmp(name, "ggml_cpu_set_row_kernels") == 0) {
++        return (void *)ggml_cpu_set_row_kernels;
 +    }
  
      return NULL;

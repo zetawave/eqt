@@ -803,3 +803,83 @@ Both cut reads by about 4% and moved part of them to demand reads, with no chang
 - The memory controller's clock is not readable without root (null).
 
 Equity does not override thermal limits. The lever left is energy per token: less heat per token keeps higher clocks. The spinning compute threads (barriers, and pending expert banks for up to `bank_spin_us`) are the first suspect; a sleeping alternative was slower in short runs (D016, D029), so it needs sustained measurement.
+
+## D037: Five tokens per second on Flash-Next: the storage arithmetic, four-row kernels, a verification replay — 2026-10-21
+
+**The proposal.** An external analysis proposed two levers for 5 tokens/s on Flash-Next: faster IQ2_XS/IQ4_NL expert kernels, and MTP k=1 (Unsloth's separate head, acceptance 0.64–0.66 by their measurement). It argued that MTP would amortize the dense weights over 1.65 tokens and cut storage reads from about 553 to 380–430 MB per token, "because the lookahead runs per step".
+
+**Storage is already close to its floor.** This is arithmetic from D035/D036's records (`flash-next-diagnostics.json`), not a new measurement:
+- Decoding reads 545 MB per token. Storage is busy 79% of a ~330 ms token, about 2.1 GB/s while busy. `eqt-io-bench` peaks at 2.0–2.3 GB/s (D029).
+- 46% of demanded experts come from storage (54% cache hits at 1,792 MiB): 480 × 1.88 MB × 0.46 ≈ 415 MB per token is needed in any schedule. About 135 MB more is speculation that is never used.
+- At 2.2 GB/s, 415 MB take about 190 ms. With today's waste, 545 MB take about 250–260 ms, so faster compute alone cannot pass about 3.8 tokens/s. 5 tokens/s needs about 10 more points of cache hits (LRU reaches 59.5% only at 3 GiB, D026) or nearly all of the waste and the full storage rate.
+
+**MTP does not lower storage reads per token.** The lookahead and the demanded reads work per row: a two-row step reads the union of both tokens' experts, 16.4 per layer (D026), so 9.9 per accepted token at 0.65 against 10. The real model on the host confirms this with `verify_replay` (`results/2026-10-21/host/flash-next-verify-replay-host.json`; x86 PC, 40 tokens, single runs):
+
+| Arm | Tokens/s | Demanded experts per token | Misses per token | Reads per token |
+|---|---|---|---|---|
+| plain | 1.39 | 468 | 70 | 531 MB |
+| two-row steps, 0.65 accepted | 1.25 | 476 | 110 | 593 MB |
+| two-row steps, none accepted | 0.90 | 811 | 186 | 969 MB |
+
+A two-row step cost 1.55× a plain token there, before any draft head. The phone decides; the arms are prepared. Exactness of MTP on the phone would also need Q8_0/Q4_K tiles bitwise equal to one column (D015), and rollback slots bring back the recurrent-state gather that patch 0007 removed.
+
+**Four-row kernels (patch 0002, `row_kernels`).** IQ2_XS (gate, up) and IQ4_NL (down) products of one decoded token are GEMVs. GGML calls one row at a time, and the IQ kernels are instruction-bound (IQ4_NL ran at about 19 GB/s inside decoding, D032's profile). The new kernels compute four rows per call against one activation column:
+- the activation blocks and their scales are loaded once for four rows;
+- IQ2_XS codes are read as two 64-bit words per 64 weights: about 18 load instructions per row instead of 26, for the same instruction count (from the compiled code);
+- IQ4_NL's per-block float work is vectorized across the rows: 110 instructions per four rows and 64 weights, against 172.
+
+Exactness is kept by construction. Integer sums are exact in any order. Lane r of every float vector performs row r's operations of the one-row kernel in its order, including its FMA contraction, read from the compiled code: IQ4_NL `fma(dx0·dy0, isum0, (dx1·dy1)·isum1)` then the sum, and IQ2_XS `fma(dx·dy, isum, sum)` then ×0.125.
+
+Checks:
+- A static aarch64 build of the kernels, run under emulation (`docker run`, QEMU), compares the four-row kernels against four one-row calls on random valid blocks. It covers FP16 subnormal and zero scales, odd block counts and extreme activations: 8,000 of 8,000 equal, bit for bit, for both the v8.2 dotprod and the v9.0 flags. A variant without the fused multiply-add differs in 3,064 of 8,000, so the check is sensitive.
+- Host suite: 72/72 streaming cases and 5/5 MTP cases pass. The new `row_kernels_pool_priority` case compares the streamed fixture with the kernels against the resident one-row path; it runs on the phone, where the kernels exist.
+
+The option stays off until the phone measures it.
+
+**Measurement tools:**
+- `eqt-kernel-bench --experts`: the expert products with the kernels off and on, bitwise and timed.
+- `eqt-kernel-bench --sustain=S`: whether the dense products follow the raw DRAM rate under the thermal cap (memory-bound) or fall while it holds (clock-bound, where fewer instructions per byte would help the 145 ms of dense weights).
+- `verify_replay` and `rollback_slots`: the cost of k=1 verification steps without a draft head.
+- `sustained_run.py --powered`.
+
+**Galaxy, 2026-10-22** (`.cache/phone_kernels.py`; records `results/2026-10-22/galaxy/flash-next-d037-session.json` and `flash-next-sustained-usb.json`; variant `android_armv9.0_1`, USB-powered, each decode arm cooled to 37 °C):
+
+- **Exactness.** Every selected fixture case passes on f2fs, including `row_kernels_pool_priority` on all three fixtures. The kernel bench finds the four-row kernels bitwise equal in both repetitions. All decode and replay arms produced the same tokens.
+- **Kernels.** In isolation (`--experts`, interleaved), IQ2_XS goes from 13.2 to 15.1–15.2 GB/s (1.15×) and IQ4_NL from 32.5 to 35.8–36.3 GB/s (1.11×). In decoding, the op profile puts IQ4_NL at 19.4 ms per token against 22.9 (D035). IQ2_XS stays at about 131 ms, which is mostly waiting for reads. Decode speed:
+
+  | Arm | Tokens/s |
+  |---|---|
+  | D032's options | 2.64 / 3.08 |
+  | IQ4_NL only | 2.81 / 2.92 |
+  | both kernels | 3.16 / 2.95 |
+
+  The spread is within the run-to-run noise: two identical baseline runs differ by 17%. The gain is real but small (about 3–4 ms of ~335), against my estimate of 15–25 ms. The option stays off by default for now.
+- **Dense products under the thermal cap** (90 s loop). Within 25 s the big cores fall to 1,824 MHz. Median rates:
+  - Q8_0: 32.0 → 24.4 GB/s;
+  - Q6_K: 31.2 → 23.3 GB/s;
+  - IQ4_NL: 28.8 → 20.9 GB/s.
+
+  Throughput follows the CPU clock: −37% clock, −25% throughput. The raw-read probe is not valid: its threads are unpinned and it stays at ~18 GB/s, below the kernels themselves. Memory-side throttling therefore cannot be excluded (the memory clock is unreadable without root).
+- **Storage ceiling** (direct reads over the pack):
+  - one whole expert (1.88 MB): 2.40 GB/s at 8–16 threads;
+  - 3.77 MB: 2.38–2.60 GB/s;
+  - 7.54–15.07 MB: 2.75–2.87 GB/s.
+
+  With today's reads, the arithmetic floor moves from about 3.8 to about 4.4 tokens/s.
+- **Two-row verification steps** (`verify_replay`, 64 tokens, two repetitions each):
+
+  | Arm | Tokens/s | Reads per token | Misses per token |
+  |---|---|---|---|
+  | plain | 3.07 / 2.99 | 543 MB | 65 |
+  | plain + 2 rollback slots | 2.84 / 2.61 | 553 MB | 65 |
+  | two rows, 0.65 accepted | 3.03 / 3.04 | 587 MB | 102 |
+  | two rows, 0.65, four-row kernels | 2.81 / 3.05 | 583 MB | 102 |
+  | two rows, 1.0 accepted | 2.85 / 2.30 | 482 MB | 83 |
+
+  Even with every draft accepted and no draft head, a two-row step costs 702–869 ms, 2.1–2.6 plain tokens. At 0.65 it only matches plain decoding, and that arm is optimistic: its wrong draft is the next reference token, whose experts the next step reuses. Rollback slots alone cost about 10% (the recurrent-state gather). **MTP k=1 is not pursued for Flash-Next on this phone.**
+- **First sustained run** (1,800 tokens, 13.7 min, charging):
+  - 2.19 tokens/s mean;
+  - by minute: 2.81, 2.44–2.45 through minute 6, then 1.74–2.03;
+  - thermal status 0 → 4; skin 50.4 °C, AP 66.1 °C, battery 51 °C. The battery fell from 86% to 81% while charging.
+
+  Over the run, cache hits fall to 39% (54% in 64-token runs), misses rise to 129 per token and reads to 861 MB per token, with storage busy 88%. The answer ends after about 70 tokens; the rest continues past EOS as repeated special tokens, so this run is not a natural long answer. The hit-rate drop may come from that text. A sustained run with a prompt that asks for a long answer is the next measurement.

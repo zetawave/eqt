@@ -43,6 +43,8 @@ def main():
     parser.add_argument("--request", default="configs/target-stream-request.json")
     parser.add_argument("--tokens", type=int, default=3600)
     parser.add_argument("--idle-seconds", type=int, default=60)
+    parser.add_argument("--powered", action="store_true",
+                        help="Allow a charging phone: speed and thermal behavior only, energy reported as null")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
@@ -54,11 +56,15 @@ def main():
     request["load"]["context"] = max(request["load"].get("context", 2048), args.tokens + 256)
 
     idle_start = battery(args.serial)
-    if idle_start["powered"]:
-        raise SystemExit("The phone is powered; unplug it so the battery counter measures the run.")
-    time.sleep(args.idle_seconds)
-    idle_end = battery(args.serial)
-    idle_watts = joules(idle_start, idle_end) / (idle_end["time"] - idle_start["time"])
+    if idle_start["powered"] and not args.powered:
+        raise SystemExit("The phone is powered; unplug it so the battery counter measures the run, or pass --powered.")
+    # While charging, the charge counter measures the charger too: no energy figures.
+    measure_energy = not idle_start["powered"]
+    idle_watts = None
+    if measure_energy:
+        time.sleep(args.idle_seconds)
+        idle_end = battery(args.serial)
+        idle_watts = joules(idle_start, idle_end) / (idle_end["time"] - idle_start["time"])
 
     start = dict(battery=battery(args.serial), thermal=thermal(args.serial), celsius=temperatures(args.serial))
     with tempfile.TemporaryDirectory(prefix="eqt-sustained-", dir=ROOT / ".cache") as workdir:
@@ -68,8 +74,8 @@ def main():
         raise SystemExit(f"eqt-bench failed: {process.stderr[-800:]}")
 
     seconds = end["battery"]["time"] - start["battery"]["time"]
-    run_joules = joules(start["battery"], end["battery"])
-    net_joules = run_joules - idle_watts * seconds
+    run_joules = joules(start["battery"], end["battery"]) if measure_energy else None
+    net_joules = run_joules - idle_watts * seconds if measure_energy else None
     latencies = result["token_latency_ms"]
     # Decode speed per minute shows throttling; latencies are per generated token.
     minutes, elapsed, count = [], 0.0, 0
@@ -84,7 +90,8 @@ def main():
         decode_tokens_per_second=result["decode_tokens_per_second"], tokens_per_second_by_minute=minutes,
         prefill_ms=result["prefill_ms"], decode_ms=result["decode_ms"], wall_seconds=seconds,
         idle_watts=idle_watts, run_joules=run_joules, net_joules=net_joules,
-        net_joules_per_token=net_joules / max(result["generated_tokens"], 1),
+        net_joules_per_token=net_joules / max(result["generated_tokens"], 1) if measure_energy else None,
+        powered=[start["battery"]["powered"], end["battery"]["powered"]],
         battery_level=[start["battery"]["level"], end["battery"]["level"]],
         thermal=[start["thermal"], end["thermal"]], celsius=[start["celsius"], end["celsius"]],
         expert_cache=result["expert_cache"], decode_process_cpu=result.get("decode_process_cpu"),

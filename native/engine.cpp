@@ -178,6 +178,40 @@ ThreadpoolApi threadpool_api() {
             reinterpret_cast<decltype(&ggml_threadpool_free)>(ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_free"))};
 }
 
+// Four-row GEMV kernels for the named weight types (patch 0002), bitwise equal to GGML's one-row kernels. The switch
+// is process-wide, so every load sets it; returns the types that got one (null when the CPU backend has no switch).
+Json set_row_kernels(const Json &names) {
+    if (!names.is_array()) {
+        throw std::invalid_argument("row_kernels must be an array of weight type names");
+    }
+    uint64_t wanted = 0;
+    for (const auto &name : names) {
+        const std::string type = name.get<std::string>();
+        int t = 0;
+        while (t < GGML_TYPE_COUNT && type != (ggml_type_name(static_cast<ggml_type>(t)) ? ggml_type_name(static_cast<ggml_type>(t)) : "")) {
+            ++t;
+        }
+        if (t == GGML_TYPE_COUNT) {
+            throw std::invalid_argument("row_kernels: unknown weight type " + type);
+        }
+        wanted |= 1ull << t;
+    }
+    using Setter = uint64_t (*)(uint64_t);
+    ggml_backend_reg_t reg = ggml_backend_reg_by_name("CPU");
+    const auto setter = reg ? reinterpret_cast<Setter>(ggml_backend_reg_get_proc_address(reg, "ggml_cpu_set_row_kernels")) : nullptr;
+    if (!setter) {
+        return nullptr;
+    }
+    const uint64_t active = wanted & setter(wanted);
+    Json types = Json::array();
+    for (int t = 0; t < GGML_TYPE_COUNT; ++t) {
+        if (active >> t & 1) {
+            types.push_back(ggml_type_name(static_cast<ggml_type>(t)));
+        }
+    }
+    return types;
+}
+
 // CPUs this process may run on now; 0 when unknown. Android moves a backgrounded app, even one with a foreground
 // service, into a smaller cpuset (on the Galaxy S24+, the four little cores), which narrows every thread's affinity.
 int allowed_cpus() {
@@ -825,6 +859,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         setenv("GGML_CPU_TILED_MM", value, 1);
 #endif
     }
+    const Json row_kernels = set_row_kernels(options.value("row_kernels", Json::array()));
     const bool streaming = options.value("expert_streaming", false);
     const std::string projector = options.value("mmproj", std::string());
     const int image_max_tokens = integer(options, "image_max_tokens", 1024, 64, 4096);
@@ -1139,6 +1174,9 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         }
         // Recurrent-state snapshots let the target roll back rejected draft positions without re-evaluation.
         params.n_rs_seq = static_cast<uint32_t>(draft_max + 1);
+    } else {
+        // The same snapshots without a draft head, for verify_replay.
+        params.n_rs_seq = static_cast<uint32_t>(integer(options, "rollback_slots", 0, 0, 8));
     }
     if (state->store) {
         params.cb_eval = &ExpertStore::observe;
@@ -1247,6 +1285,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                    {"file_type", metadata(state->model.get(), "general.file_type")},
                    {"context", state->context_size},
                    {"tiled_mm", options.contains("tiled_mm") ? options.at("tiled_mm") : Json(nullptr)},
+                   {"row_kernels", row_kernels},
+                   {"rollback_slots", llama_n_rs_seq(state->context.get())},
                    {"trained_context", context_cost_estimate.trained > 0 ? Json(context_cost_estimate.trained) : Json(nullptr)},
                    {"kv_on_storage", state->kv_file ? Json{{"directory", state->kv_file->directory()},
                                                            {"reserved_bytes", state->kv_file->reserved_bytes()}}
@@ -1333,6 +1373,28 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     }
     const bool ignore_eos = request.value("ignore_eos", false);
     const auto *vocab = llama_model_get_vocab(s.model.get());
+    // A measurement of k = 1 speculative verification without a draft head: every step evaluates [last, draft] as
+    // MTP verification does and rolls a rejected draft back. The draft is the reference's next token on a fixed
+    // schedule at the given rate, otherwise the reference token after it (a wrong draft that still routes like
+    // text), and the answer follows the reference (teacher forcing), so the cost is measured on that text's routing.
+    std::vector<llama_token> replay;
+    double replay_acceptance = 0;
+    if (request.contains("verify_replay")) {
+        const Json &value = request.at("verify_replay");
+        replay = value.at("tokens").get<std::vector<llama_token>>();
+        replay_acceptance = value.value("acceptance", 0.65);
+        if (replay.size() < 2 || !(replay_acceptance >= 0 && replay_acceptance <= 1)) {
+            throw std::invalid_argument("verify_replay needs at least two reference tokens and acceptance in [0, 1]");
+        }
+        for (const llama_token token : replay) {
+            if (token < 0 || token >= llama_vocab_n_tokens(vocab)) {
+                throw std::invalid_argument("verify_replay token outside the vocabulary");
+            }
+        }
+        if (temperature != 0 || s.draft || !input.images.empty()) {
+            throw std::invalid_argument("verify_replay is greedy, text-only and needs a load without mtp");
+        }
+    }
     const auto prompt = render_chat(s.chat_template, input.messages, thinking,
                                     piece(vocab, llama_vocab_bos(vocab)), piece(vocab, llama_vocab_eos(vocab)));
     // A text prompt is one token sequence. With images, mtmd splits it into text and image chunks; an image
@@ -1523,7 +1585,8 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     // context still holds, only the new tokens are evaluated. Anything else rebuilds the entire prefix, which is
     // always safe for hybrid recurrent state and after cancellation. Reused and rebuilt states evaluate the same
     // tokens in different batch shapes: float rounding, which can flip near-tie expert choices (D027).
-    const bool reusable = request.value("prompt_cache", true) && !has_media && !steering_scope.active && !s.draft;
+    const bool reusable = request.value("prompt_cache", true) && !has_media && !steering_scope.active && !s.draft &&
+                          replay.empty();
     // A saved session stands in for the state this context no longer holds (another chat answered last, or the
     // model was loaded since). It is read only when its tokens are a strict prefix of this prompt; a session of this
     // chat that the prompt no longer extends (an edited or regenerated turn) or that this engine cannot read is
@@ -1713,8 +1776,12 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         llama_memory_clear(llama_get_memory(s.draft.get()), true);
         std::fill(s.pending_h.begin(), s.pending_h.end(), 0.0f);
     }
+    const bool replaying = !replay.empty();
+    if (replaying && (count < 2 || steering_scope.active)) {
+        throw std::invalid_argument("verify_replay needs a prompt of at least two tokens and no steering");
+    }
     // With MTP the last prompt token is evaluated by the first verification batch, as in llama.cpp.
-    const int prefill = speculative ? count - 1 : count;
+    const int prefill = speculative || replaying ? count - 1 : count;
     const auto prefill_start = Clock::now();
     bool ready = true;
     double image_ms = 0;
@@ -1921,7 +1988,61 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         return static_cast<int>(generated.size()) < limit;
     };
     int steps = 0, drafted = 0, accepted_total = 0;
-    if (!speculative) {
+    int replay_agreements = 0, replay_compared = 0;
+    if (replaying) {
+        llama_token last = tokens[count - 1];
+        int past = count - 1;
+        size_t next = 0; // the reference token the next step's first row predicts
+        // Row i's greedy token against the reference: how far the replay's text is from the target's own (a check of
+        // the setup, not of exactness: two-row batches round floats differently).
+        const auto agrees = [&](int row, llama_token expected) {
+            ++replay_compared;
+            replay_agreements += llama_sampler_sample(sampler.get(), s.context.get(), row) == expected;
+        };
+        while (ready && next + 1 < replay.size()) {
+            if (cancelled_) {
+                reason = "cancelled";
+                break;
+            }
+            // Step k accepts when floor((k + 1) * rate) passes an integer: exactly the rate, evenly spread.
+            const bool hit = std::floor((steps + 1) * replay_acceptance) > std::floor(steps * replay_acceptance);
+            llama_token draft = replay[next];
+            if (!hit) {
+                draft = replay[next + 1] != replay[next] ? replay[next + 1] : (replay[next] + 1) % llama_vocab_n_tokens(vocab);
+            }
+            llama_batch_ext_clear(s.batch.get());
+            add(s.batch.get(), last, past, true);
+            add(s.batch.get(), draft, past + 1, true);
+            if (!run(s.context.get(), s.batch.get())) {
+                reason = "cancelled";
+                break;
+            }
+            ++steps;
+            ++drafted;
+            agrees(0, replay[next]);
+            bool more = push(replay[next]);
+            int advanced = 1;
+            if (hit && more) {
+                agrees(1, replay[next + 1]);
+                more = push(replay[next + 1]);
+                advanced = 2;
+                ++accepted_total;
+            }
+            // Accepted: both rows stay and the bonus token is next. Rejected: the wrong draft's row is removed.
+            next += advanced;
+            past += advanced;
+            last = replay[next - 1];
+            if (!llama_memory_seq_rm(llama_get_memory(s.context.get()), 0, past, -1)) {
+                throw std::runtime_error("The context cannot roll back a rejected draft; load with rollback_slots");
+            }
+            if (!more) {
+                break;
+            }
+        }
+        if (ready && reason != "cancelled" && static_cast<int>(generated.size()) < limit && next + 1 >= replay.size()) {
+            reason = "replay_end";
+        }
+    } else if (!speculative) {
         if (ready && capture) {
             const float *logits = llama_get_logits_ith(s.context.get(), -1);
             first_logits = std::vector<float>(logits, logits + llama_vocab_n_tokens(vocab));
@@ -2082,6 +2203,17 @@ Json Engine::generate(const Json &request, const Emit &emit) {
                                            {"draft_ms", draft_ms},
                                            {"mtp_process_ms", mtp_ms}}
                                     : Json(nullptr)},
+        // No draft head ran: its cost is not in decode_ms.
+        {"verify_replay", replaying ? Json{{"verification_steps", steps},
+                                          {"acceptance_requested", replay_acceptance},
+                                          {"accepted_drafts", accepted_total},
+                                          {"acceptance_rate", steps ? Json(double(accepted_total) / steps) : Json(nullptr)},
+                                          {"tokens_per_step", steps ? Json(double(generated.size()) / steps) : Json(nullptr)},
+                                          {"step_ms", steps ? Json(decode_ms / steps) : Json(nullptr)},
+                                          {"target_agreement", replay_compared ? Json(double(replay_agreements) / replay_compared)
+                                                                               : Json(nullptr)},
+                                          {"draft_head_ms", nullptr}}
+                                   : Json(nullptr)},
         {"energy_joules", nullptr},
         {"text", text},
         {"token_ids", generated},
