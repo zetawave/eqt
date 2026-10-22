@@ -46,7 +46,6 @@ fun SliderField(
     accept: (Float) -> Boolean = { true },
     hint: String? = null,
 ) {
-    val strings = LocalContext.current.resources
     var text by remember { mutableStateOf(format(value)) }
     val typed = text.trim().replace(',', '.').toFloatOrNull()
     val valid = typed != null && typed in range && accept(typed) && (!integer || typed == typed.roundToInt().toFloat())

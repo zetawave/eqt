@@ -88,8 +88,8 @@ data class StreamProfile(
 data class CatalogModel(
     val id: String,
     val name: String,
-    val tagline: String,
-    val description: String,
+    @androidx.annotation.StringRes val taglineRes: Int,
+    @androidx.annotation.StringRes val descriptionRes: Int,
     val repository: String,
     val revision: String,
     val file: String,
@@ -149,8 +149,8 @@ object Catalog {
 
     val models = listOf(
         CatalogModel(
-            id = "qwen3-0.6b-q8", name = "Qwen3 0.6B", tagline = "Small · fully in memory · fast",
-            description = "Official 8-bit build. Lightweight and quick; good for testing and short answers.",
+            id = "qwen3-0.6b-q8", name = "Qwen3 0.6B", taglineRes = R.string.small_fully_in_memory_fast,
+            descriptionRes = R.string.official_8_bit_build_lightweight_and_quick_good_for_testing_and_short_answe,
             repository = "Qwen/Qwen3-0.6B-GGUF", revision = "23749fefcc72300e3a2ad315e1317431b06b590a",
             file = "Qwen3-0.6B-Q8_0.gguf", sizeBytes = 639_446_688L,
             sha256 = "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
@@ -159,10 +159,8 @@ object Catalog {
         ),
         CatalogModel(
             id = "qwen3.6-35b-a3b-iq2m", name = "Qwen3.6 35B-A3B · 2.7-bit",
-            tagline = "Large · twice the phone's RAM · fastest · experimental",
-            description = "The same 35B mixture-of-experts model in Unsloth's dynamic 2.7-bit build (12 GB). On Equity's " +
-                "27-prompt quality set it scored like the 4-bit build and ran about a third faster: around 5 tokens/s " +
-                "on a cool phone, about 3.5 sustained once it warms up. Experts are read from storage on demand.",
+            taglineRes = R.string.large_twice_the_phone_s_ram_fastest_experimental,
+            descriptionRes = R.string.the_same_35b_mixture_of_experts_model_in_unsloth_s_dynamic_2_7_bit_build_12,
             repository = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF", revision = "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
             file = "Qwen3.6-35B-A3B-UD-IQ2_M.gguf", sizeBytes = 11_882_969_376L,
             sha256 = "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
@@ -172,10 +170,8 @@ object Catalog {
         ),
         CatalogModel(
             id = "qwen3.6-35b-a3b-q4km", name = "Qwen3.6 35B-A3B · 4-bit",
-            tagline = "Large · twice the phone's RAM · quality reference · experimental",
-            description = "The same 35B mixture-of-experts model in Unsloth's dynamic 4-bit build (22.7 GB), Equity's " +
-                "quality reference. Shared weights stay in memory and experts are read from storage on demand. " +
-                "Expect roughly 3 tokens/s; the phone warms up during long answers.",
+            taglineRes = R.string.large_twice_the_phone_s_ram_quality_reference_experimental,
+            descriptionRes = R.string.the_same_35b_mixture_of_experts_model_in_unsloth_s_dynamic_4_bit_build_22_7,
             repository = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF", revision = "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
             file = "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", sizeBytes = 22_663_387_424L,
             sha256 = "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
@@ -187,12 +183,8 @@ object Catalog {
         // writes their merge, byte-identical to llama-gguf-split --merge of the same shards.
         CatalogModel(
             id = "qwen3.8-flash-next-ud-q2kxl", name = "Qwen3.8 Flash Next · Q2_K_XL",
-            tagline = "Huge · seven times the phone's RAM · experimental",
-            description = "Qwen's 125B mixture-of-experts preview of the Qwen4 architecture (512 experts, 10 per token, " +
-                "plus a 51B n-gram memory) in Unsloth's dynamic UD-Q2_K_XL build, experts at about 3 bits (78.9 GB). " +
-                "Only 3.4 GB stays in memory; " +
-                "experts and n-gram rows are read from storage as each token needs them, so answers start slowly " +
-                "and run at a few tokens per second. Needs about 80 GB of free storage.",
+            taglineRes = R.string.huge_seven_times_the_phone_s_ram_experimental,
+            descriptionRes = R.string.qwen_s_125b_mixture_of_experts_preview_of_the_qwen4_architecture_512_expert,
             repository = "unsloth/Qwen3.8-Flash-Next-GGUF", revision = "766911a6b7369840a91dbcd95f9f997acaab6cd6",
             file = "Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf", sizeBytes = 78_869_128_640L,
             sha256 = "f26a5e679710fb4cd048f481ff082d9af9c79fbd640d1867ef58c425518659d7",
@@ -309,10 +301,10 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
     override suspend fun doWork(): Result {
         val artifact = Catalog.artifact(inputData.getString(Downloads.KEY_ID))
-            ?: return Result.failure(workDataOf(Downloads.KEY_ERROR to "Unknown file"))
+            ?: return Result.failure(workDataOf(Downloads.KEY_ERROR to applicationContext.getString(R.string.unknown_file)))
         if (ModelFiles.installed(applicationContext, artifact)) return Result.success()
         // A foreground start can be refused when a retry runs in the background; the transfer still proceeds.
-        runCatching { setForeground(foregroundInfo(artifact, 0, artifact.sizeBytes, "Starting")) }
+        runCatching { setForeground(foregroundInfo(artifact, 0, artifact.sizeBytes, applicationContext.getString(R.string.starting))) }
         return withContext(Dispatchers.IO) {
             try {
                 download(artifact)
@@ -323,7 +315,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 Result.failure(workDataOf(Downloads.KEY_ERROR to error.message))
             } catch (error: IOException) {
                 if (runAttemptCount < 8) Result.retry()
-                else Result.failure(workDataOf(Downloads.KEY_ERROR to (error.message ?: "Network error")))
+                else Result.failure(workDataOf(Downloads.KEY_ERROR to (error.message ?: applicationContext.getString(R.string.network_error))))
             }
         }
     }
@@ -352,7 +344,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                     digest.reset()
                     done = 0
                 } else if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {
-                    throw IOException("Server returned HTTP $code")
+                    throw IOException(applicationContext.getString(R.string.server_returned_http_1_d, code))
                 }
                 var lastBytes = done
                 var lastTime = System.nanoTime()
@@ -365,7 +357,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                             output.write(buffer, 0, count)
                             digest.update(buffer, 0, count)
                             done += count
-                            if (done > artifact.sizeBytes) throw IntegrityException("Download exceeds the expected size")
+                            if (done > artifact.sizeBytes) throw IntegrityException(applicationContext.getString(R.string.download_exceeds_the_expected_size))
                             val now = System.nanoTime()
                             if (now - lastTime >= 700_000_000L) {
                                 speed = (done - lastBytes) * 1_000_000_000L / (now - lastTime)
@@ -381,7 +373,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 connection.disconnect()
             }
         }
-        if (done != artifact.sizeBytes) throw IOException("Connection closed early")
+        if (done != artifact.sizeBytes) throw IOException(applicationContext.getString(R.string.connection_closed_early))
         finish(artifact, part, digest)
     }
 
@@ -399,14 +391,14 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 if (isStopped) return false
             }
         }
-        if (hashed != done) throw IOException("The partial download changed while it was checked")
+        if (hashed != done) throw IOException(applicationContext.getString(R.string.the_partial_download_changed_while_it_was_checked))
         return true
     }
 
     private fun requireStorage(artifact: Artifact, done: Long) {
         val needed = artifact.sizeBytes - done + (1L shl 30)
         if (ModelFiles.freeBytes(applicationContext) < needed) {
-            throw IntegrityException("Not enough free storage: %.1f GB needed".format(needed / 1e9))
+            throw IntegrityException(applicationContext.getString(R.string.not_enough_free_storage_1_1f_gb_needed, needed / 1e9))
         }
     }
 
@@ -415,9 +407,9 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val hash = digest.digest().joinToString("") { "%02x".format(it) }
         if (hash != artifact.sha256) {
             part.delete()
-            throw IntegrityException("Checksum mismatch; the download was discarded")
+            throw IntegrityException(applicationContext.getString(R.string.checksum_mismatch_the_download_was_discarded))
         }
-        if (!part.renameTo(ModelFiles.final(context, artifact))) throw IOException("Cannot finalize the downloaded file")
+        if (!part.renameTo(ModelFiles.final(context, artifact))) throw IOException(applicationContext.getString(R.string.cannot_finalize_the_downloaded_file))
         ModelFiles.markVerified(context, artifact)
     }
 
@@ -436,7 +428,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val headerHash = MessageDigest.getInstance("SHA-256").digest(header).joinToString("") { "%02x".format(it) }
         if (header.size.toLong() != artifact.headerBytes || headerHash != artifact.headerSha256 ||
             header.size + shards.sumOf { it.dataBytes } != artifact.sizeBytes) {
-            throw IntegrityException("The repository's shards do not match the pinned model")
+            throw IntegrityException(applicationContext.getString(R.string.the_repository_s_shards_do_not_match_the_pinned_model))
         }
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(1 shl 20)
@@ -465,7 +457,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 start = end
             }
         }
-        if (done != artifact.sizeBytes) throw IOException("Connection closed early")
+        if (done != artifact.sizeBytes) throw IOException(applicationContext.getString(R.string.connection_closed_early))
         finish(artifact, part, digest)
     }
 
@@ -492,17 +484,17 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val bytes = try {
                 if (connection.responseCode != HttpURLConnection.HTTP_PARTIAL ||
                     connection.getHeaderField("Content-Range") != "bytes 0-${probe - 1}/${shard.sizeBytes}") {
-                    throw IntegrityException("The server did not return the requested range of a shard")
+                    throw IntegrityException(applicationContext.getString(R.string.the_server_did_not_return_the_requested_range_of_a_shard))
                 }
                 connection.inputStream.use { it.readBytes() }
             } finally {
                 connection.disconnect()
             }
-            if (bytes.size.toLong() != probe) throw IOException("Connection closed early")
+            if (bytes.size.toLong() != probe) throw IOException(applicationContext.getString(R.string.connection_closed_early))
             try {
                 return GgufMerge.parse(bytes, shard.sizeBytes)
             } catch (_: GgufMerge.Truncated) {
-                if (probe == shard.sizeBytes) throw IntegrityException("A shard header is incomplete")
+                if (probe == shard.sizeBytes) throw IntegrityException(applicationContext.getString(R.string.a_shard_header_is_incomplete))
                 probe = minOf(shard.sizeBytes, probe * 4)
             }
         }
@@ -518,7 +510,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val connection = open(url, from)
         try {
             val code = connection.responseCode
-            if (code != HttpURLConnection.HTTP_PARTIAL) throw IOException("Server returned HTTP $code for a shard range")
+            if (code != HttpURLConnection.HTTP_PARTIAL) throw IOException(applicationContext.getString(R.string.server_returned_http_1_d_for_a_shard_range, code))
             var lastBytes = done
             var lastTime = System.nanoTime()
             connection.inputStream.use { input ->
@@ -541,7 +533,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         } finally {
             connection.disconnect()
         }
-        if (done != end) throw IOException("Connection closed early")
+        if (done != end) throw IOException(applicationContext.getString(R.string.connection_closed_early))
         return done
     }
 
@@ -558,40 +550,40 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
             val code = connection.responseCode
             if (code in 300..399) {
-                val next = connection.getHeaderField("Location") ?: throw IOException("Redirect without location")
+                val next = connection.getHeaderField("Location") ?: throw IOException(applicationContext.getString(R.string.redirect_without_location))
                 connection.disconnect()
                 location = URL(URL(location), next).toString()
-                if (!location.startsWith("https://")) throw IOException("Refusing a non-HTTPS redirect")
+                if (!location.startsWith("https://")) throw IOException(applicationContext.getString(R.string.refusing_a_non_https_redirect))
             } else {
                 return connection
             }
         }
-        throw IOException("Too many redirects")
+        throw IOException(applicationContext.getString(R.string.too_many_redirects))
     }
 
     private suspend fun report(artifact: Artifact, phase: String, done: Long, total: Long, speed: Long) {
         setProgress(workDataOf(Downloads.KEY_PHASE to phase, Downloads.KEY_DONE to done,
             Downloads.KEY_TOTAL to total, Downloads.KEY_SPEED to speed))
-        val label = if (phase == Downloads.PHASE_VERIFYING) "Checking the partial download"
-            else "%s of %s".format(formatBytes(done), formatBytes(total))
+        val label = if (phase == Downloads.PHASE_VERIFYING) applicationContext.getString(R.string.checking_the_partial_download)
+            else applicationContext.getString(R.string.value_1_s_of_2_s, formatBytes(done), formatBytes(total))
         runCatching { setForeground(foregroundInfo(artifact, done, total, label)) }
     }
 
     private fun foregroundInfo(artifact: Artifact, done: Long, total: Long, label: String): ForegroundInfo {
         val manager = applicationContext.getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL) == null) {
-            manager.createNotificationChannel(NotificationChannel(CHANNEL, "Model downloads", NotificationManager.IMPORTANCE_LOW))
+        run {
+            manager.createNotificationChannel(NotificationChannel(CHANNEL, applicationContext.getString(R.string.model_downloads), NotificationManager.IMPORTANCE_LOW))
         }
         val percent = if (total > 0) (done * 100 / total).toInt() else 0
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Downloading ${artifact.name}")
+            .setContentTitle(applicationContext.getString(R.string.downloading_1_s, artifact.name))
             .setContentText(label)
             .setProgress(100, percent, total <= 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .addAction(0, "Pause", WorkManager.getInstance(applicationContext).createCancelPendingIntent(id))
+            .addAction(0, applicationContext.getString(R.string.pause), WorkManager.getInstance(applicationContext).createCancelPendingIntent(id))
             .build()
         val notificationId = NOTIFICATION_BASE + Catalog.artifacts.indexOf(artifact)
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

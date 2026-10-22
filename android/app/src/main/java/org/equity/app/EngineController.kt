@@ -86,7 +86,7 @@ data class EngineState(
     val phase: Phase = Phase.Empty,
     val modelId: String? = null,
     val modelName: String? = null,
-    val status: String = "No model loaded",
+    val status: String = "",
     val loadPercent: Int? = null,
     val configuration: String? = null,
     /** The loaded model was given its vision projector and accepts images. */
@@ -119,6 +119,13 @@ data class EngineState(
 
 /** Owns the single native engine. Native calls run on one worker thread; only cancellation crosses threads. */
 object EngineController {
+    private lateinit var strings: android.content.res.Resources
+
+    fun init(context: Context) {
+        strings = context.applicationContext.resources
+        flow.value = flow.value.copy(status = strings.getString(R.string.no_model_loaded))
+    }
+
     private val worker = Executors.newSingleThreadExecutor()
     private val flow = MutableStateFlow(EngineState())
     val state: StateFlow<EngineState> = flow.asStateFlow()
@@ -196,18 +203,18 @@ object EngineController {
         val hash = modelHash
         if (hash == null) {
             update { it.copy(modelSha256 = null, steeringProfile = null,
-                steeringNote = if (loadedSource == null) "Load the matching model to use its vector." else "Verify this model to find compatible vectors.") }
+                steeringNote = if (loadedSource == null) strings.getString(R.string.load_the_matching_model_to_use_its_vector) else strings.getString(R.string.verify_this_model_to_find_compatible_vectors)) }
             return
         }
         try {
             val profile = SteeringFiles.read(context, hash)
             val engine = flow.value
             require(profile == null || (profile.architecture == engine.architecture && profile.embedding == engine.embeddingSize &&
-                profile.layer < (engine.decoderBlocks ?: 0))) { "Imported steering dimensions do not match this model" }
+                profile.layer < (engine.decoderBlocks ?: 0))) { strings.getString(R.string.imported_steering_dimensions_do_not_match_this_model) }
             update { it.copy(modelSha256 = hash, steeringProfile = profile,
-                steeringNote = if (profile == null) "No vector imported for this model." else null) }
+                steeringNote = if (profile == null) strings.getString(R.string.no_vector_imported_for_this_model) else null) }
         } catch (error: Exception) {
-            update { it.copy(modelSha256 = hash, steeringProfile = null, steeringNote = "Steering unavailable: ${error.message}") }
+            update { it.copy(modelSha256 = hash, steeringProfile = null, steeringNote = strings.getString(R.string.steering_unavailable_1_s, error.message)) }
         }
     }
 
@@ -216,7 +223,7 @@ object EngineController {
         val previous = flow.value
         if (previous.busy) return
         val app = context.applicationContext
-        update { it.copy(phase = Phase.Loading, loadPercent = null, status = "Importing steering vector…", error = null,
+        update { it.copy(phase = Phase.Loading, loadPercent = null, status = strings.getString(R.string.importing_steering_vector), error = null,
             steeringImportMessage = null, steeringMessageModel = modelHash, steeringOperation = true) }
         task {
             try {
@@ -224,10 +231,10 @@ object EngineController {
                 refreshSteering(app)
                 val loaded = imported.modelHash == flow.value.modelSha256
                 update { it.copy(steeringMessageModel = imported.modelHash,
-                    steeringImportMessage = if (loaded) "Vector imported. Steering is available in this model's chats."
-                        else "Vector imported. Steering appears in chats while this model is loaded.") }
+                    steeringImportMessage = if (loaded) strings.getString(R.string.vector_imported_steering_is_available_in_this_model_s_chats)
+                        else strings.getString(R.string.vector_imported_steering_appears_in_chats_while_this_model_is_loaded)) }
             } catch (error: Exception) {
-                if (!cancelled) update { it.copy(error = error.message ?: "Steering import failed") }
+                if (!cancelled) update { it.copy(error = error.message ?: strings.getString(R.string.steering_import_failed)) }
             } finally {
                 update { it.copy(steeringRevision = it.steeringRevision + 1) }
                 finishSteeringOperation(previous)
@@ -238,7 +245,7 @@ object EngineController {
     fun removeSteering(context: Context, modelHash: String) {
         val previous = flow.value
         if (previous.busy) return
-        update { it.copy(phase = Phase.Loading, steeringOperation = true, status = "Removing steering vector…",
+        update { it.copy(phase = Phase.Loading, steeringOperation = true, status = strings.getString(R.string.removing_steering_vector),
             steeringImportMessage = null) }
         task {
             try {
@@ -260,7 +267,7 @@ object EngineController {
     fun verifySteeringModel(context: Context) {
         if (flow.value.phase != Phase.Ready) return
         val source = loadedSource ?: return
-        update { it.copy(phase = Phase.Loading, loadPercent = null, status = "Verifying model for steering…", error = null,
+        update { it.copy(phase = Phase.Loading, loadPercent = null, status = strings.getString(R.string.verifying_model_for_steering), error = null,
             steeringOperation = true) }
         task {
             try {
@@ -270,30 +277,30 @@ object EngineController {
                     val buffer = ByteArray(1024 * 1024)
                     var total = 0L
                     while (true) {
-                        check(!cancelled) { "Model verification cancelled" }
+                        check(!cancelled) { strings.getString(R.string.model_verification_cancelled) }
                         val count = input.read(buffer)
                         if (count < 0) break
                         digest.update(buffer, 0, count)
                         total += count
                     }
-                    require(total == source.fileBytes) { "Model size changed" }
+                    require(total == source.fileBytes) { strings.getString(R.string.model_size_changed) }
                 }
                 val after = Os.stat(source.path)
-                require(before.st_size == after.st_size && before.st_mtime == after.st_mtime) { "Model changed during verification" }
+                require(before.st_size == after.st_size && before.st_mtime == after.st_mtime) { strings.getString(R.string.model_changed_during_verification) }
                 val hash = digest.digest().joinToString("") { "%02x".format(it) }
                 // Reload shared/resident tensors too, so the fingerprint describes the weights actually in use.
                 guardLoad {
                     loadSource(context.applicationContext, source.copy(hash = hash))
                     val loaded = Os.stat(source.path)
                     require(loaded.st_size == before.st_size && loaded.st_mtime == before.st_mtime) {
-                        "Model changed while reloading verified weights"
+                        strings.getString(R.string.model_changed_while_reloading_verified_weights)
                     }
                 }
             } catch (error: Exception) {
-                if (!cancelled) update { it.copy(error = error.message ?: "Model verification failed") }
+                if (!cancelled) update { it.copy(error = error.message ?: strings.getString(R.string.model_verification_failed)) }
             } finally {
                 update { it.copy(phase = if (loadedSource == null) Phase.Empty else Phase.Ready, loadPercent = null,
-                    status = if (loadedSource == null) "No model loaded" else "Ready", steeringOperation = false) }
+                    status = if (loadedSource == null) strings.getString(R.string.no_model_loaded) else strings.getString(R.string.ready), steeringOperation = false) }
             }
         }
     }
@@ -308,7 +315,7 @@ object EngineController {
                 NativeBridge.unload()
                 closeDescriptor()
                 val path = ModelFiles.final(app, model.artifact)
-                require(ModelFiles.installed(app, model.artifact)) { "${model.name} is not downloaded" }
+                require(ModelFiles.installed(app, model.artifact)) { strings.getString(R.string.value_1_s_is_not_downloaded, model.name) }
                 val projector = model.projector?.takeIf { ModelFiles.installed(app, it) }
                 val visionMiB = projector?.let { (it.sizeBytes shr 20).toInt() + VISION_WORK_MIB } ?: 0
                 loadSource(app, ModelSource(path.absolutePath, model.sha256, model.streamed, model.residentMiB,
@@ -323,34 +330,34 @@ object EngineController {
     fun load(context: Context, uri: Uri) {
         val app = context.applicationContext
         val settings = SettingsStore.state.value
-        startLoad(app, null, "Local model")
+        startLoad(app, null, strings.getString(R.string.local_model))
         task {
             guardLoad {
                 NativeBridge.unload()
                 closeDescriptor()
-                val pfd = requireNotNull(app.contentResolver.openFileDescriptor(uri, "r")) { "Cannot open the file" }
+                val pfd = requireNotNull(app.contentResolver.openFileDescriptor(uri, "r")) { strings.getString(R.string.cannot_open_the_file) }
                 descriptor = pfd
                 val stat = Os.fstat(pfd.fileDescriptor)
                 require(OsConstants.S_ISREG(stat.st_mode) && stat.st_size > 0) {
-                    "Choose a local, seekable file. Cloud providers and pipes are unsupported."
+                    strings.getString(R.string.choose_a_local_seekable_file_cloud_providers_and_pipes_are_unsupported)
                 }
                 val magic = ByteArray(4)
                 require(Os.pread(pfd.fileDescriptor, magic, 0, 4, 0) == 4 && magic.decodeToString() == "GGUF") {
-                    "The selected file is not a GGUF model"
+                    strings.getString(R.string.the_selected_file_is_not_a_gguf_model)
                 }
                 val sizeMiB = (stat.st_size shr 20).toInt()
                 val streamed = sizeMiB + 1536 > availableMiB(app)
                 // Small files are hashed for provenance; large streamed artifacts are not re-read on every load.
                 var hash: String? = null
                 if (!streamed) {
-                    update { it.copy(status = "Checking file integrity…") }
+                    update { it.copy(status = strings.getString(R.string.checking_file_integrity)) }
                     val digest = MessageDigest.getInstance("SHA-256")
                     val buffer = ByteArray(1 shl 20)
                     var offset = 0L
                     while (offset < stat.st_size) {
-                        check(!cancelled) { "Loading cancelled" }
+                        check(!cancelled) { strings.getString(R.string.loading_cancelled) }
                         val count = Os.pread(pfd.fileDescriptor, buffer, 0, minOf(buffer.size.toLong(), stat.st_size - offset).toInt(), offset)
-                        require(count > 0) { "Incomplete model read" }
+                        require(count > 0) { strings.getString(R.string.incomplete_model_read) }
                         digest.update(buffer, 0, count)
                         offset += count
                     }
@@ -371,7 +378,7 @@ object EngineController {
     private fun startLoad(context: Context, id: String?, name: String) {
         update {
             it.copy(phase = Phase.Loading, modelId = id, modelName = name, loadPercent = null, error = null,
-                status = "Preparing $name…", configuration = null, vision = false, lastModelId = id ?: it.lastModelId,
+                status = strings.getString(R.string.preparing_1_s, name), configuration = null, vision = false, lastModelId = id ?: it.lastModelId,
                 modelSha256 = null, steeringProfile = null, steeringNote = null)
         }
         InferenceService.start(context)
@@ -385,7 +392,7 @@ object EngineController {
             runCatching { NativeBridge.unload() }
             closeDescriptor()
             update {
-                EngineState(status = "No model loaded", lastModelId = it.lastModelId,
+                EngineState(status = strings.getString(R.string.no_model_loaded), lastModelId = it.lastModelId,
                     error = if (cancelled) null else (error.message ?: error.javaClass.simpleName))
             }
         }
@@ -501,8 +508,7 @@ object EngineController {
             val fileMiB = (fileBytes shr 20).toInt()
             val requiredMiB = fileMiB + workMiB + 512 + maxOf(visionMiB, gpuStagingMiB)
             require(requiredMiB <= available) {
-                "This model needs about $requiredMiB MiB of free memory and $available MiB are available. " +
-                    "Close some apps or choose a smaller context in Settings."
+                strings.getString(R.string.this_model_needs_about_1_d_mib_of_free_memory_and_2_d_mib_are_available_clo, requiredMiB, available)
             }
             return options.put("mmap", true).put("memory_budget_mib", maxOf(2048, requiredMiB))
         }
@@ -529,8 +535,7 @@ object EngineController {
                     gpuWorkMiB + gpuStagingMiB + kvMiB)
                 .apply { stream.tuning.forEach { (key, value) -> put(key, value) } }
         }
-        throw IllegalArgumentException("This model needs about $required MiB of free memory and $available MiB are " +
-            "available. Close some apps or choose a smaller context in Settings, then try again.")
+        throw IllegalArgumentException(strings.getString(R.string.this_model_needs_about_1_d_mib_of_free_memory_and_2_d_mib_are_available_clo_299, required, available))
     }
 
     private fun loadSource(context: Context, source: ModelSource, growing: Boolean = false) {
@@ -553,7 +558,7 @@ object EngineController {
         if (source.streamed) {
             File(source.path.removeSuffix(".gguf") + ".eqtpack").takeIf { it.isFile }?.let { options.put("expert_pack", it.path) }
         }
-        val note = if (source.projectorPath != null && withVision == null) "images off: not enough free memory" else null
+        val note = if (source.projectorPath != null && withVision == null) strings.getString(R.string.images_off_not_enough_free_memory) else null
         loadNative(source.path, options, source.hash, note, growing)
         loadedSource = source.copy(settings = source.settings.copy(gpu = options.optBoolean("gpu")),
             projectorPath = source.projectorPath.takeIf { withVision != null })
@@ -563,7 +568,7 @@ object EngineController {
     private fun loadNative(path: String, options: JSONObject, hash: String?, note: String?, growing: Boolean) {
         val progress = ByteSink { bytes ->
             val percent = bytes.decodeToString().toIntOrNull()
-            update { it.copy(loadPercent = percent, status = "Loading ${percent ?: 0}%") }
+            update { it.copy(loadPercent = percent, status = strings.getString(R.string.loading_1_d, percent ?: 0)) }
         }
         var gpuNote: String? = null
         val info = try {
@@ -577,7 +582,7 @@ object EngineController {
                     options.remove("gpu")
                     // A batch the memory fit already lowered stays lowered.
                     options.put("batch", minOf(512, options.getInt("batch")))
-                    gpuNote = "GPU unavailable"
+                    gpuNote = strings.getString(R.string.gpu_unavailable)
                 }
                 else -> throw error
             }
@@ -590,11 +595,11 @@ object EngineController {
         val configuration = buildString {
             append("CPU ").append(info.optString("cpu_variant").removePrefix("android_"))
             info.optJSONObject("gpu")?.let { append(" + GPU ").append(it.optString("device")) }
-            append(" · ${info.getInt("threads")} threads · ${info.getInt("context")} context")
-            if (info.getInt("batch") < 512) append(" · ${info.getInt("batch")}-token prompt batches")
+            append(strings.getString(R.string.value_1_d_threads_2_d_context, info.getInt("threads"), info.getInt("context")))
+            if (info.getInt("batch") < 512) append(strings.getString(R.string.value_1_d_token_prompt_batches, info.getInt("batch")))
             if (streaming != null) {
-                append(" · ${streaming.getLong("effective_budget_bytes") shr 20} MiB expert cache")
-                if (!options.optBoolean("direct_io")) append(" · buffered reads")
+                append(strings.getString(R.string.value_1_d_mib_expert_cache, streaming.getLong("effective_budget_bytes") shr 20))
+                if (!options.optBoolean("direct_io")) append(strings.getString(R.string.buffered_reads))
             }
             if (vision) append(" · images")
             note?.let { append(" · ").append(it) }
@@ -603,7 +608,7 @@ object EngineController {
         update {
             it.copy(phase = if (growing) Phase.Generating else Phase.Ready, loadPercent = null,
                 lastResult = null, lastSpeed = null, configuration = configuration,
-                status = if (growing) "Reading your message…" else "Ready", vision = vision)
+                status = if (growing) strings.getString(R.string.reading_your_message) else strings.getString(R.string.ready), vision = vision)
                 .copy(modelSha256 = hash, architecture = info.getString("architecture"),
                     embeddingSize = info.getInt("embedding_size"), decoderBlocks = info.getInt("decoder_blocks"),
                     thinkingSupported = info.optBoolean("thinking_supported"), contextSize = info.getInt("context"))
@@ -619,21 +624,19 @@ object EngineController {
             val required = overflow.promptTokens + overflow.outputTokens
             val limit = trainedContext ?: (1 shl 20)
             require(required <= limit) {
-                "This message and its answer need $required tokens, exceeding the model's $limit-token context. " +
-                    "Use a smaller attachment or start a new chat."
+                strings.getString(R.string.this_message_and_its_answer_need_1_d_tokens_exceeding_the_model_s_2_d_token, required, limit)
             }
             val expanded = (((required + 2047) / 2048) * 2048).coerceAtMost(limit)
-            check(!cancelled) { "Generation cancelled" }
-            update { it.copy(status = "Expanding context to $expanded tokens…") }
+            check(!cancelled) { strings.getString(R.string.generation_cancelled) }
+            update { it.copy(status = strings.getString(R.string.expanding_context_to_1_d_tokens, expanded)) }
             try {
                 loadSource(context, source.copy(settings = source.settings.copy(context = expanded)), growing = true)
             } catch (error: Exception) {
                 runCatching { NativeBridge.unload() }
                 closeDescriptor()
-                throw IllegalStateException("This message needs $required context tokens. " +
-                    "Could not allocate a larger context: ${error.message}", error)
+                throw IllegalStateException(strings.getString(R.string.this_message_needs_1_d_context_tokens_could_not_allocate_a_larger_context_2, required, error.message), error)
             }
-            check(!cancelled) { "Generation cancelled" }
+            check(!cancelled) { strings.getString(R.string.generation_cancelled) }
             // Overflow is reported before evaluation, so retrying preserves the full prompt and sampling request.
             return NativeBridge.generate(bytes, sink)
         }
@@ -650,11 +653,11 @@ object EngineController {
     fun unload() {
         if (flow.value.phase == Phase.Empty) return
         stop()
-        update { it.copy(phase = Phase.Unloading, status = "Unloading…") }
+        update { it.copy(phase = Phase.Unloading, status = strings.getString(R.string.unloading)) }
         task(prepare = false) {
             NativeBridge.unload()
             closeDescriptor()
-            update { EngineState(status = "Model unloaded", lastModelId = it.lastModelId) }
+            update { EngineState(status = strings.getString(R.string.model_unloaded), lastModelId = it.lastModelId) }
         }
     }
 
@@ -671,7 +674,7 @@ object EngineController {
         task(prepare = false) {
             NativeBridge.unload()
             closeDescriptor()
-            update { EngineState(status = "No model loaded", lastModelId = it.lastModelId, error = message) }
+            update { EngineState(status = strings.getString(R.string.no_model_loaded), lastModelId = it.lastModelId, error = message) }
         }
     }
 
@@ -693,7 +696,7 @@ object EngineController {
         val thinking = settings.thinking && engine.thinkingSupported
         val (chat, answerId) = ChatStore.startTurn(chatId, text, attachments)
         update {
-            it.copy(phase = Phase.Generating, status = "Reading your message…", error = null,
+            it.copy(phase = Phase.Generating, status = strings.getString(R.string.reading_your_message), error = null,
                 generation = Generation(chat.id, answerId, SystemClock.elapsedRealtime(), thinking = thinking))
         }
         InferenceService.start(app)
@@ -747,9 +750,9 @@ object EngineController {
                             it.copy(text = split.answer, reasoning = split.reasoning.takeIf { thinking }, reasoningMs = reasoningMs)
                         }
                         update { s -> s.copy(status = when {
-                                !split.closed -> "Thinking…"
-                                visible -> "Writing…"
-                                else -> "Generating tokens; no visible text yet"
+                                !split.closed -> strings.getString(R.string.thinking)
+                                visible -> strings.getString(R.string.writing)
+                                else -> strings.getString(R.string.generating_tokens_no_visible_text_yet)
                             }, generation = s.generation?.copy(tokens = tokens, hasVisibleText = visible, thinking = !split.closed)) }
                     }
                 })
@@ -758,13 +761,13 @@ object EngineController {
                 val partial = decodeComplete(output.toByteArray())
                 val split = if (thinking) splitThinking(partial) else ThinkingSplit("", partial, true)
                 ChatStore.updateMessage(chat.id, answerId, true) {
-                    it.copy(streaming = false, failed = true, text = split.answer.ifEmpty { "Generation failed.\n\n$failure" },
+                    it.copy(streaming = false, failed = true, text = split.answer.ifEmpty { strings.getString(R.string.generation_failed_n_n_1_s, failure) },
                         reasoning = split.reasoning.takeIf { thinking && it.isNotEmpty() }, reasoningMs = reasoningMs,
                         stats = failure.takeIf { output.size() > 0 })
                 }
                 update { s ->
                     if (loadedSource == null) EngineState(lastModelId = s.lastModelId, error = failure)
-                    else s.copy(phase = Phase.Ready, status = "Ready", error = failure, generation = null)
+                    else s.copy(phase = Phase.Ready, status = strings.getString(R.string.ready), error = failure, generation = null)
                 }
                 if (!AppVisibility.visible) Notifications.answerFinished(app, chat.id, chat.title, failure, failed = true)
                 return@task
@@ -777,22 +780,22 @@ object EngineController {
                 .put("finished_in_background", !AppVisibility.visible)
             val split = if (thinking) splitThinking(json.getString("text")) else null
             // Reasoning that used every token leaves no answer; the message explains that instead of a placeholder.
-            val answer = split?.answer ?: json.getString("text").ifEmpty { "(no answer)" }
+            val answer = split?.answer ?: json.getString("text").ifEmpty { strings.getString(R.string.no_answer) }
             val thoughtMs = if (thinking) json.getDouble("reasoning_ms").toLong() else null
             val termination = json.getString("termination")
             val speed = json.getDouble("decode_tokens_per_second")
             val stats = buildString {
                 append("%.1f tok/s".format(Locale.US, speed))
                 append(" · ${json.getInt("generated_tokens")} tokens")
-                if (!json.isNull("ttft_ms")) append(" · first token %.1f s".format(Locale.US, json.getDouble("ttft_ms") / 1000))
-                if (thoughtMs != null) append(" · thought %.1f s".format(Locale.US, thoughtMs / 1000.0))
+                if (!json.isNull("ttft_ms")) append(strings.getString(R.string.first_token_1_1f_s, json.getDouble("ttft_ms") / 1000))
+                if (thoughtMs != null) append(strings.getString(R.string.thought_1_1f_s, thoughtMs / 1000.0))
                 if (termination == "cancelled") append(" · stopped")
-                if (termination == "length") append(" · length limit")
-                if (termination == "context") append(" · context full")
+                if (termination == "length") append(strings.getString(R.string.length_limit))
+                if (termination == "context") append(strings.getString(R.string.context_full))
                 json.optJSONObject("session")?.takeIf { it.optString("status") == "restored" }?.let {
-                    append(" · resumed ${it.optInt("restored_tokens")} saved tokens")
+                    append(strings.getString(R.string.resumed_1_d_saved_tokens, it.optInt("restored_tokens")))
                 }
-                if (!json.isNull("steering")) append(" · steering %+.2f".format(Locale.US, steering.strength))
+                if (!json.isNull("steering")) append(strings.getString(R.string.steering_1_2f, steering.strength))
             }
             val stopped = termination == "cancelled"
             val contextTokens = json.getInt("prompt_tokens") + json.getInt("generated_tokens")
@@ -800,10 +803,10 @@ object EngineController {
                 steering = json.optJSONObject("steering")?.toString(), reasoning = split?.reasoning, reasoningMs = thoughtMs,
                 contextTokens = contextTokens) }
             update { s ->
-                s.copy(phase = Phase.Ready, status = "Ready", lastResult = json.toString(2), lastSpeed = speed, generation = null)
+                s.copy(phase = Phase.Ready, status = strings.getString(R.string.ready), lastResult = json.toString(2), lastSpeed = speed, generation = null)
             }
             if (!AppVisibility.visible) Notifications.answerFinished(app, chat.id, chat.title,
-                answer.ifEmpty { "The model stopped while reasoning, before writing an answer." }, failed = false, stopped = stopped)
+                answer.ifEmpty { strings.getString(R.string.the_model_stopped_while_reasoning_before_writing_an_answer) }, failed = false, stopped = stopped)
         }
         return true
     }
@@ -843,7 +846,7 @@ object EngineController {
                         val body = try {
                             ChatStore.file(chat.id, attachment).readText()
                         } catch (error: Exception) {
-                            throw AttachmentException("Cannot read attachment \"${attachment.name}\": ${error.message}")
+                            throw AttachmentException(strings.getString(R.string.cannot_read_attachment_1_s_2_s, attachment.name, error.message))
                         }
                         text.append("[File: ${attachment.name}]\n").append(body).append("\n[End of file]\n\n")
                     }

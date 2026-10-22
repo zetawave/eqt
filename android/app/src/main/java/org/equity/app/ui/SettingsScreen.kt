@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.equity.app.R
 import org.equity.app.ANSWER_UNLIMITED
 import org.equity.app.BuildConfigInfo
 import org.equity.app.CONTEXT_AUTO
@@ -65,7 +66,6 @@ import org.equity.app.CONTEXT_MAX
 import org.equity.app.ChatStore
 import org.equity.app.EngineController
 import org.equity.app.EngineState
-import org.equity.app.R
 import org.equity.app.SettingsStore
 import org.json.JSONObject
 import java.util.Locale
@@ -147,7 +147,7 @@ fun SettingsScreen(engine: EngineState) {
                 range = 0f..MAX_TEMPERATURE,
                 step = 0.1f,
                 format = { formatDecimal(it, 2) },
-                hint = if (settings.temperature == 0f) strings.getString(R.string.0_most_predictable) else strings.getString(R.string.higher_values_vary_answers_more),
+                hint = if (settings.temperature == 0f) strings.getString(R.string.value_0_most_predictable) else strings.getString(R.string.higher_values_vary_answers_more),
             )
         }
 
@@ -188,8 +188,8 @@ fun SettingsScreen(engine: EngineState) {
             val result = engine.lastResult?.let { runCatching { JSONObject(it) }.getOrNull() }
             if (result != null) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Labeled(strings.getString(R.string.generation), strings.getString(R.string.1_2f_tokens_s, result.optDouble("decode_tokens_per_second")))
-                Labeled(strings.getString(R.string.prompt), strings.getString(R.string.1_d_tokens_in_2_1f_s, result.optInt("prompt_tokens"), result.optDouble("prefill_ms") / 1000))
+                Labeled(strings.getString(R.string.generation), strings.getString(R.string.value_1_2f_tokens_s, result.optDouble("decode_tokens_per_second")))
+                Labeled(strings.getString(R.string.prompt), strings.getString(R.string.value_1_d_tokens_in_2_1f_s, result.optInt("prompt_tokens"), result.optDouble("prefill_ms") / 1000))
                 result.optJSONObject("expert_cache")?.let { cache ->
                     val hits = cache.optLong("hits")
                     val total = hits + cache.optLong("misses")
@@ -257,9 +257,7 @@ fun SettingsScreen(engine: EngineState) {
             title = { Text(strings.getString(R.string.delete_all_chats_90)) },
             text = {
                 Text(
-                    (if (count == 1) strings.getString(R.string.the_chat_with_its_attachments_and_saved_state_is)
-                    else strings.getString(R.string.all_1_d_chats_with_their_attachments_and_saved_states_are, count)) +
-                        strings.getString(R.string.removed_from_this_phone_this_cannot_be_undone) +
+                    strings.getQuantityString(R.plurals.delete_all_chats_message, count, count) +
                         if (engine.generation != null) strings.getString(R.string.the_answer_being_written_is_stopped) else "",
                 )
             },
@@ -320,7 +318,6 @@ private fun openLink(context: Context, url: String) {
 
 @Composable
 private fun Section(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    val strings = LocalContext.current.resources
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Column {
@@ -337,7 +334,6 @@ private fun Section(title: String, subtitle: String? = null, content: @Composabl
 
 @Composable
 private fun Labeled(label: String, value: String) {
-    val strings = LocalContext.current.resources
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -347,7 +343,6 @@ private fun Labeled(label: String, value: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun <T> Choice(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
-    val strings = LocalContext.current.resources
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         options.forEachIndexed { index, option ->
             SegmentedButton(

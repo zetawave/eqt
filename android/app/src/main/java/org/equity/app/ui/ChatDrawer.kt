@@ -1,6 +1,5 @@
 package org.equity.app.ui
 
-import org.equity.app.R
 import androidx.compose.ui.platform.LocalContext
 import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
@@ -41,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.equity.app.R
 import org.equity.app.ChatStore
 import org.equity.app.ChatSummary
 import org.equity.app.ChatsState
@@ -91,7 +91,7 @@ fun ChatDrawer(chats: ChatsState, engine: EngineState, onSelect: (String) -> Uni
         AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text(strings.getString(R.string.delete_this_chat)) },
-            text = { Text(strings.getString(R.string.1_s_and_its_attachments_will_be_removed_from_this_phone, chat.title)) },
+            text = { Text(strings.getString(R.string.value_1_s_and_its_attachments_will_be_removed_from_this_phone, chat.title)) },
             confirmButton = {
                 TextButton(onClick = {
                     deleting = null

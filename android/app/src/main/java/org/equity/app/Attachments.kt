@@ -47,7 +47,7 @@ object Attachments {
         ChatStore.staging.mkdirs()
         return when {
             mime.startsWith("image/") -> {
-                if (!vision) throw AttachmentException("The loaded model cannot read images")
+                if (!vision) throw AttachmentException(context.getString(R.string.the_loaded_model_cannot_read_images))
                 listOf(image(context, uri, name))
             }
             mime == "application/pdf" || name.endsWith(".pdf", ignoreCase = true) -> pdf(context, uri, name, vision)
@@ -94,7 +94,7 @@ object Attachments {
                         (info.size.height * scale).roundToInt().coerceAtLeast(1))
                 }
             }
-        }.getOrElse { throw AttachmentException("Cannot read this image") }
+        }.getOrElse { throw AttachmentException(context.getString(R.string.cannot_read_this_image)) }
         return stageJpeg(bitmap, name)
     }
 
@@ -116,9 +116,9 @@ object Attachments {
     @SuppressLint("NewApi")
     private fun pdf(context: Context, uri: Uri, name: String, vision: Boolean): List<Attachment> {
         val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
-            ?: throw AttachmentException("Cannot open this PDF")
+            ?: throw AttachmentException(context.getString(R.string.cannot_open_this_pdf))
         return descriptor.use { pfd ->
-            val renderer = runCatching { PdfRenderer(pfd) }.getOrElse { throw AttachmentException("Cannot read this PDF") }
+            val renderer = runCatching { PdfRenderer(pfd) }.getOrElse { throw AttachmentException(context.getString(R.string.cannot_read_this_pdf)) }
             renderer.use {
                 // Page text extraction exists from Android 15 (S extension 13).
                 val textual = Build.VERSION.SDK_INT >= 35 && SdkExtensions.getExtensionVersion(Build.VERSION_CODES.S) >= 13
@@ -130,7 +130,7 @@ object Attachments {
                 }
                 if (text.isNotBlank()) return listOf(stageText(name, "application/pdf", text))
                 // Scanned or image-only PDFs: the first pages become images for a vision model.
-                if (!vision) throw AttachmentException("This PDF has no readable text, and the loaded model cannot read images")
+                if (!vision) throw AttachmentException(context.getString(R.string.this_pdf_has_no_readable_text_and_the_loaded_model_cannot_read_images))
                 (0 until minOf(renderer.pageCount, MAX_PDF_PAGES_AS_IMAGES)).map { index ->
                     renderer.openPage(index).use { page ->
                         val scale = MAX_IMAGE_SIDE.toFloat() / max(page.width, page.height)
@@ -138,7 +138,7 @@ object Attachments {
                             (page.height * scale).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
                         bitmap.eraseColor(Color.WHITE)
                         page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        stageJpeg(bitmap, "$name · page ${index + 1}")
+                        stageJpeg(bitmap, context.getString(R.string.value_1_s_page_2_d, name, index + 1))
                     }
                 }
             }
@@ -146,7 +146,7 @@ object Attachments {
     }
 
     private fun text(context: Context, uri: Uri, name: String, mime: String, size: Long): Attachment {
-        if (size > MAX_TEXT_FILE_BYTES) throw AttachmentException("Text files up to ${formatBytes(MAX_TEXT_FILE_BYTES)} can be attached")
+        if (size > MAX_TEXT_FILE_BYTES) throw AttachmentException(context.getString(R.string.text_files_up_to_1_s_can_be_attached, formatBytes(MAX_TEXT_FILE_BYTES)))
         val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
             val output = ByteArrayOutputStream()
             val buffer = ByteArray(64 shl 10)
@@ -156,8 +156,8 @@ object Attachments {
                 output.write(buffer, 0, count)
             }
             output.toByteArray()
-        } ?: throw AttachmentException("Cannot open this file")
-        if (bytes.size > MAX_TEXT_FILE_BYTES) throw AttachmentException("Text files up to ${formatBytes(MAX_TEXT_FILE_BYTES)} can be attached")
+        } ?: throw AttachmentException(context.getString(R.string.cannot_open_this_file))
+        if (bytes.size > MAX_TEXT_FILE_BYTES) throw AttachmentException(context.getString(R.string.text_files_up_to_1_s_can_be_attached, formatBytes(MAX_TEXT_FILE_BYTES)))
         val text = try {
             Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
@@ -165,7 +165,7 @@ object Attachments {
             null
         }
         if (text == null || text.contains('\u0000')) {
-            throw AttachmentException("Only images, PDFs and text files can be attached")
+            throw AttachmentException(context.getString(R.string.only_images_pdfs_and_text_files_can_be_attached))
         }
         return stageText(name, mime.ifEmpty { "text/plain" }, text)
     }

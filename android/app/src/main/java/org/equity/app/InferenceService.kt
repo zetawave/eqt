@@ -105,13 +105,13 @@ object Notifications {
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL_PROGRESS) == null) {
-            manager.createNotificationChannel(NotificationChannel(CHANNEL_PROGRESS, "Answers in progress",
-                NotificationManager.IMPORTANCE_LOW).apply { description = "Shown while Equity loads a model or writes an answer" })
+        run {
+            manager.createNotificationChannel(NotificationChannel(CHANNEL_PROGRESS, context.getString(R.string.answers_in_progress),
+                NotificationManager.IMPORTANCE_LOW).apply { description = context.getString(R.string.shown_while_equity_loads_a_model_or_writes_an_answer) })
         }
-        if (manager.getNotificationChannel(CHANNEL_FINISHED) == null) {
-            manager.createNotificationChannel(NotificationChannel(CHANNEL_FINISHED, "Finished answers",
-                NotificationManager.IMPORTANCE_DEFAULT).apply { description = "An answer finished while Equity was in the background" })
+        run {
+            manager.createNotificationChannel(NotificationChannel(CHANNEL_FINISHED, context.getString(R.string.finished_answers),
+                NotificationManager.IMPORTANCE_DEFAULT).apply { description = context.getString(R.string.an_answer_finished_while_equity_was_in_the_background) })
         }
     }
 
@@ -125,26 +125,25 @@ object Notifications {
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openApp(context, generation?.chatId))
-            .addAction(0, "Stop", PendingIntent.getService(context, 1,
+            .addAction(0, context.getString(R.string.stop), PendingIntent.getService(context, 1,
                 Intent(context, InferenceService::class.java).setAction(InferenceService.ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
         when {
-            state.phase == Phase.Loading -> builder.setContentTitle("Loading ${state.modelName ?: "model"}")
+            state.phase == Phase.Loading -> builder.setContentTitle(context.getString(R.string.loading_1_s, state.modelName ?: context.getString(R.string.model)))
                 .setContentText(state.status)
                 .setProgress(100, state.loadPercent ?: 0, state.loadPercent == null)
             generation != null && generation.tokens > 0 && generation.thinking -> {
                 val seconds = (SystemClock.elapsedRealtime() - generation.startedAt) / 1000.0
-                builder.setContentTitle("Equity is thinking")
-                    .setContentText("%d tokens · %s".format(Locale.US, generation.tokens, elapsed(seconds)))
+                builder.setContentTitle(context.getString(R.string.equity_is_thinking))
+                    .setContentText(context.getString(R.string.value_1_d_tokens_2_s, generation.tokens, elapsed(seconds)))
                     .setProgress(0, 0, true)
             }
             generation != null && generation.tokens > 0 -> {
                 val seconds = (SystemClock.elapsedRealtime() - generation.startedAt) / 1000.0
-                builder.setContentTitle(if (generation.hasVisibleText) "Equity is writing an answer" else "Equity is generating tokens")
-                    .setContentText("%d tokens · %s%s".format(Locale.US, generation.tokens,
-                        if (generation.hasVisibleText) "" else "no visible text yet · ", elapsed(seconds)))
+                builder.setContentTitle(if (generation.hasVisibleText) context.getString(R.string.equity_is_writing_an_answer) else context.getString(R.string.equity_is_generating_tokens))
+                    .setContentText(context.getString(R.string.value_1_d_tokens_2_s_3_s, generation.tokens, if (generation.hasVisibleText) "" else context.getString(R.string.no_visible_text_yet), elapsed(seconds)))
                     .setProgress(0, 0, true)
             }
-            else -> builder.setContentTitle("Equity is reading your message").setContentText(state.status).setProgress(0, 0, true)
+            else -> builder.setContentTitle(context.getString(R.string.equity_is_reading_your_message)).setContentText(state.status).setProgress(0, 0, true)
         }
         return builder.build()
     }
@@ -152,12 +151,12 @@ object Notifications {
     /** Posts a notification for an answer that finished while Equity was not on screen. */
     fun answerFinished(context: Context, chatId: String, title: String, text: String, failed: Boolean, stopped: Boolean = false) {
         val heading = when {
-            failed -> "Answer failed"
-            stopped -> "Answer stopped"
-            !text.hasVisibleContent() -> "No visible answer"
-            else -> "Answer ready"
+            failed -> context.getString(R.string.answer_failed)
+            stopped -> context.getString(R.string.answer_stopped)
+            !text.hasVisibleContent() -> context.getString(R.string.no_visible_answer)
+            else -> context.getString(R.string.answer_ready)
         }
-        val preview = if (text.hasVisibleContent()) text else "The model finished without producing visible text."
+        val preview = if (text.hasVisibleContent()) text else context.getString(R.string.the_model_finished_without_producing_visible_text)
         val notification = NotificationCompat.Builder(context, CHANNEL_FINISHED)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("$heading · $title")

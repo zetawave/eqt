@@ -105,7 +105,6 @@ private sealed interface Segment {
 /** Renders a model answer: CommonMark with GFM tables and strikethrough, plus LaTeX formulas. */
 @Composable
 fun MarkdownText(markdown: String, color: Color, modifier: Modifier = Modifier) {
-    val strings = LocalContext.current.resources
     val prepared = remember(markdown) { prepareMarkdown(markdown) }
     val document = remember(prepared) { parser.parse(prepared.markdown) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -115,7 +114,6 @@ fun MarkdownText(markdown: String, color: Color, modifier: Modifier = Modifier) 
 
 @Composable
 private fun Blocks(parent: Node, math: List<MathSpan>, color: Color) {
-    val strings = LocalContext.current.resources
     var node = parent.firstChild
     while (node != null) {
         Block(node, math, color)
@@ -125,7 +123,6 @@ private fun Blocks(parent: Node, math: List<MathSpan>, color: Color) {
 
 @Composable
 private fun Block(node: Node, math: List<MathSpan>, color: Color) {
-    val strings = LocalContext.current.resources
     val typography = MaterialTheme.typography
     when (node) {
         is Paragraph -> Inlines(node, math, typography.bodyLarge, color)
@@ -152,7 +149,6 @@ private fun Block(node: Node, math: List<MathSpan>, color: Color) {
 
 @Composable
 private fun ListBlockView(list: ListBlock, math: List<MathSpan>, color: Color) {
-    val strings = LocalContext.current.resources
     val nested = generateSequence(list.parent) { it.parent }.count { it is ListBlock }
     var number = (list as? OrderedList)?.markerStartNumber ?: 1
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -174,7 +170,6 @@ private fun ListBlockView(list: ListBlock, math: List<MathSpan>, color: Color) {
 /** Inline content of a paragraph, heading or table cell; display formulas inside it become centred blocks. */
 @Composable
 private fun Inlines(parent: Node, math: List<MathSpan>, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
-    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -207,7 +202,6 @@ private fun Inlines(parent: Node, math: List<MathSpan>, style: TextStyle, color:
 
 @Composable
 private fun DisplayMath(span: MathSpan, sizePx: Float, color: Color) {
-    val strings = LocalContext.current.resources
     val bitmap = MathRenderer.render(LocalContext.current, span.latex, true, sizePx, color.toArgb())
     if (bitmap == null) {
         CodeBlock(span.latex, "latex")
@@ -302,7 +296,6 @@ private fun CodeBlock(code: String, language: String) {
 
 @Composable
 private fun TableView(table: TableBlock, math: List<MathSpan>, color: Color) {
-    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val style = MaterialTheme.typography.bodyMedium
     val rows = remember(table) {

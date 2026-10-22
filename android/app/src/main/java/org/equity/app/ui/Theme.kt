@@ -2,6 +2,7 @@
 
 package org.equity.app.ui
 
+import org.equity.app.R
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,7 +28,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.equity.app.R
 
 private fun inter(weight: Int) = Font(
     R.font.inter,
@@ -98,14 +98,12 @@ private val Type = Typography(
 
 @Composable
 fun EquityTheme(content: @Composable () -> Unit) {
-    val strings = LocalContext.current.resources
     MaterialTheme(colorScheme = Colors, typography = Type, content = content)
 }
 
 /** The Equity mark (equals sign on the brand gradient) with an optional wordmark. */
 @Composable
 fun Logo(size: Dp, wordmark: Boolean = true, modifier: Modifier = Modifier) {
-    val strings = LocalContext.current.resources
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Image(painterResource(R.drawable.ic_equity_mark), contentDescription = "Equity", modifier = Modifier.size(size))
         if (wordmark) {

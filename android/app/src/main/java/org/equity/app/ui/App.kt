@@ -1,6 +1,5 @@
 package org.equity.app.ui
 
-import org.equity.app.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -34,6 +33,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import org.equity.app.R
 import org.equity.app.AppNavigation
 import org.equity.app.ChatStore
 import org.equity.app.EngineController

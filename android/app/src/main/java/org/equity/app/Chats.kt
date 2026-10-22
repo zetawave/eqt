@@ -106,8 +106,10 @@ object ChatStore {
     val state: StateFlow<ChatsState> = flow.asStateFlow()
     private val io = Executors.newSingleThreadExecutor()
     private lateinit var root: File
+    private lateinit var strings: android.content.res.Resources
 
     fun init(context: Context) {
+        strings = context.applicationContext.resources
         root = File(context.filesDir, "chats").apply { mkdirs() }
         // Attachments picked but never sent.
         staging.deleteRecursively()
@@ -168,7 +170,7 @@ object ChatStore {
     }
 
     fun setSteering(options: SteeringOptions) {
-        require(SteeringOptions.valid(options.strength)) { "Strength must be nonzero within [-1, 2]" }
+        require(SteeringOptions.valid(options.strength)) { strings.getString(R.string.strength_must_be_nonzero_within_1_2) }
         val current = flow.value.current
         if (current == null) flow.update { it.copy(draftSteering = options) }
         else if (!busy(current.id)) put(current.copy(steering = options), persist = true)
@@ -253,7 +255,7 @@ object ChatStore {
 
     private fun title(text: String, attachments: List<Attachment>): String {
         val line = text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }
-        val title = line ?: attachments.firstOrNull()?.name ?: "New chat"
+        val title = line ?: attachments.firstOrNull()?.name ?: strings.getString(R.string.new_chat)
         return if (title.length <= 60) title else title.take(57).trimEnd() + "…"
     }
 
@@ -262,7 +264,7 @@ object ChatStore {
         val chat = runCatching { decode(JSONObject(file.readText())) }.getOrNull() ?: return null
         // A streaming answer on disk means the process ended while writing it.
         return chat.copy(messages = chat.messages.map {
-            if (it.streaming) it.copy(streaming = false, failed = true, text = it.text.ifEmpty { "Interrupted." }) else it
+            if (it.streaming) it.copy(streaming = false, failed = true, text = it.text.ifEmpty { strings.getString(R.string.interrupted) }) else it
         })
     }
 

@@ -22,6 +22,7 @@ class EquityApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        EngineController.init(this)
         SettingsStore.init(this)
         ChatStore.init(this)
         Notifications.ensureChannels(this)
@@ -50,10 +51,10 @@ class EquityApplication : Application() {
         @Suppress("DEPRECATION")
         val critical = level >= ComponentCallbacks2.TRIM_MEMORY_MODERATE || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
         when {
-            critical -> EngineController.memoryPressure("Android was out of memory, so the model was unloaded.")
+            critical -> EngineController.memoryPressure(this.getString(R.string.android_was_out_of_memory_so_the_model_was_unloaded))
             engine.busy -> Unit
             large && level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND ->
-                EngineController.memoryPressure("The model was unloaded while Equity was in the background, to keep the phone responsive.")
+                EngineController.memoryPressure(this.getString(R.string.the_model_was_unloaded_while_equity_was_in_the_background_to_keep_the_phone))
         }
     }
 }

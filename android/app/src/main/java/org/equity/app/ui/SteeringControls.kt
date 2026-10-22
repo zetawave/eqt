@@ -1,6 +1,5 @@
 package org.equity.app.ui
 
-import org.equity.app.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -27,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.equity.app.R
 import org.equity.app.ChatStore
 import org.equity.app.ChatsState
 import org.equity.app.EngineState

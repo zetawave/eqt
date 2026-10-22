@@ -1,6 +1,5 @@
 package org.equity.app.ui
 
-import org.equity.app.R
 import android.Manifest
 import android.app.ActivityManager
 import android.content.Context
@@ -86,6 +85,7 @@ import androidx.work.WorkInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.equity.app.R
 import org.equity.app.Artifact
 import org.equity.app.Catalog
 import org.equity.app.CatalogModel
@@ -150,7 +150,6 @@ fun ModelsScreen(engine: EngineState, onOpenChat: () -> Unit) {
 private fun rememberAvailableMemory(): Long {
     val context = LocalContext.current
     val available by produceState(0L) {
-    val strings = LocalContext.current.resources
         val manager = context.getSystemService(ActivityManager::class.java)
         while (true) {
             value = ActivityManager.MemoryInfo().also { manager.getMemoryInfo(it) }.availMem
@@ -179,8 +178,8 @@ private fun MemoryNeed(model: CatalogModel, shortfallOnly: Boolean = false) {
     Spacer(Modifier.height(8.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            if (enough) strings.getString(R.string.1_s_free_full_speed_needs_2_s, formatBytes(available), formatBytes(needed))
-            else strings.getString(R.string.1_s_free_of_the_2_s_full_speed_needs_it_will_load_with_slower_prompts_or_no, formatBytes(available), formatBytes(needed)),
+            if (enough) strings.getString(R.string.value_1_s_free_full_speed_needs_2_s, formatBytes(available), formatBytes(needed))
+            else strings.getString(R.string.value_1_s_free_of_the_2_s_full_speed_needs_it_will_load_with_slower_prompts_or_no, formatBytes(available), formatBytes(needed)),
             style = MaterialTheme.typography.bodySmall,
             color = if (enough) colors.onSurfaceVariant else colors.error,
             modifier = Modifier.weight(1f),
@@ -232,16 +231,15 @@ private fun DeviceCard() {
     val (available, total, storage) = snapshot
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(20.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Metric(Icons.Outlined.Memory, if (total > 0) strings.getString(R.string.1_s_of_2_s_free, formatBytes(available), formatBytes(total)) else "…",
+            Metric(Icons.Outlined.Memory, if (total > 0) strings.getString(R.string.value_1_s_of_2_s_free, formatBytes(available), formatBytes(total)) else "…",
                 strings.getString(R.string.memory), Modifier.weight(1f))
-            Metric(Icons.Outlined.SdStorage, if (storage > 0) strings.getString(R.string.1_s_free, formatBytes(storage)) else "…", strings.getString(R.string.storage), Modifier.weight(1f))
+            Metric(Icons.Outlined.SdStorage, if (storage > 0) strings.getString(R.string.value_1_s_free, formatBytes(storage)) else "…", strings.getString(R.string.storage), Modifier.weight(1f))
         }
     }
 }
 
 @Composable
 private fun Metric(icon: ImageVector, value: String, label: String, modifier: Modifier) {
-    val strings = LocalContext.current.resources
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
@@ -348,7 +346,7 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                         Button(onClick = startDownload) {
                             Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(if (partial > 0) strings.getString(R.string.resume) else "Download · ${formatBytes(model.sizeBytes)}")
+                            Text(if (partial > 0) strings.getString(R.string.resume) else strings.getString(R.string.download_1_s, formatBytes(model.sizeBytes)))
                         }
                     }
                 }
@@ -358,14 +356,14 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                 Modifier.fillMaxWidth().clickable { details = !details }.padding(top = 4.dp, bottom = 4.dp, end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(model.tagline, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
+                Text(strings.getString(model.taglineRes), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Icon(if (details) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                    contentDescription = if (details) "Hide details" else "Show details", tint = colors.onSurfaceVariant)
+                    contentDescription = if (details) strings.getString(R.string.hide_details) else strings.getString(R.string.show_details), tint = colors.onSurfaceVariant)
             }
             AnimatedVisibility(details) {
                 Column(Modifier.padding(end = 8.dp, bottom = 8.dp)) {
-                    Text(model.description, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    Text(strings.getString(model.descriptionRes), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Pill(if (model.streamed) strings.getString(R.string.expert_streaming) else strings.getString(R.string.in_memory_134), colors.surfaceContainerHighest, colors.onSurface)
@@ -425,7 +423,6 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModelOptionsSheet(title: String, subtitle: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    val strings = LocalContext.current.resources
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -652,11 +649,11 @@ private fun DownloadProgress(model: Artifact, work: WorkInfo?) {
         waiting -> if (model.unmeteredOnly) strings.getString(R.string.waiting_for_wi_fi) else strings.getString(R.string.waiting_for_a_connection)
         verifying -> strings.getString(R.string.checking_the_partial_download_1_s, formatBytes(done))
         else -> buildString {
-            append(strings.getString(R.string.1_s_of_2_s, formatBytes(done), formatBytes(total)))
+            append(strings.getString(R.string.value_1_s_of_2_s, formatBytes(done), formatBytes(total)))
             if (speed > 0) {
                 append(" · ${formatBytes(speed)}/s")
                 val minutes = (total - done) / speed / 60
-                append(if (minutes >= 1) strings.getString(R.string.1_d_min_left, minutes) else strings.getString(R.string.under_a_minute_left))
+                append(if (minutes >= 1) strings.getString(R.string.value_1_d_min_left, minutes) else strings.getString(R.string.under_a_minute_left))
             }
         }
     }
@@ -665,7 +662,6 @@ private fun DownloadProgress(model: Artifact, work: WorkInfo?) {
 
 @Composable
 fun ThinProgress(progress: Float?) {
-    val strings = LocalContext.current.resources
     val modifier = Modifier.fillMaxWidth().height(6.dp)
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
     if (progress == null) LinearProgressIndicator(modifier, trackColor = track)
@@ -674,7 +670,6 @@ fun ThinProgress(progress: Float?) {
 
 @Composable
 fun Pill(text: String, container: androidx.compose.ui.graphics.Color, content: androidx.compose.ui.graphics.Color) {
-    val strings = LocalContext.current.resources
     Surface(color = container, shape = RoundedCornerShape(50)) {
         Text(text, style = MaterialTheme.typography.labelSmall, color = content,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))

@@ -1,6 +1,5 @@
 package org.equity.app.ui
 
-import org.equity.app.R
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -114,6 +113,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.equity.app.R
 import org.equity.app.Attachment
 import org.equity.app.AttachmentException
 import org.equity.app.AttachmentKind
@@ -327,7 +327,6 @@ private fun ChatHeader(engine: EngineState, title: String?, onOpenChats: () -> U
 
 @Composable
 fun StatusDot(phase: Phase) {
-    val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     val color = when (phase) {
         Phase.Ready -> colors.primary
@@ -388,7 +387,6 @@ private fun EmptyChat(engine: EngineState, onOpenModels: () -> Unit, onSuggestio
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UserMessage(chatId: String, message: Message, onView: (File) -> Unit) {
-    val strings = LocalContext.current.resources
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         if (message.attachments.isNotEmpty()) {
             FlowRow(
@@ -443,7 +441,7 @@ internal fun AssistantMessage(message: Message, generatedTokens: Int? = null) {
             }, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp))
             if (message.streaming && generatedTokens != null && generatedTokens > 0) {
-                Text(strings.getString(R.string.1_d_tokens, generatedTokens), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                Text(strings.getString(R.string.value_1_d_tokens, generatedTokens), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             }
         } else {
             SelectionContainer {
@@ -486,7 +484,7 @@ private fun ReasoningBlock(reasoning: String, inProgress: Boolean, reasoningMs: 
             Icon(Icons.Outlined.Psychology, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(when {
-                inProgress -> strings.getString(R.string.thinking) + (generatedTokens?.takeIf { it > 0 }?.let { strings.getString(R.string.1_d_tokens_190, it) } ?: "")
+                inProgress -> strings.getString(R.string.thinking) + (generatedTokens?.takeIf { it > 0 }?.let { strings.getString(R.string.value_1_d_tokens_190, it) } ?: "")
                 reasoningMs != null -> strings.getString(R.string.thought_for_1_1f_s, reasoningMs / 1000.0)
                 else -> strings.getString(R.string.reasoning)
             }, style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
@@ -510,7 +508,6 @@ private fun ReasoningBlock(reasoning: String, inProgress: Boolean, reasoningMs: 
 /** The newest reasoning lines, bottom-aligned and fading upward, so the line being written stays readable. */
 @Composable
 private fun ReasoningPreview(reasoning: String) {
-    val strings = LocalContext.current.resources
     // Only the tail is laid out: enough characters to fill the preview at any phone width.
     val tail = reasoning.takeLast(480)
     Box(
@@ -690,7 +687,7 @@ private fun ContextGauge(used: Int, size: Int) {
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = colors.surfaceContainerHighest) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(strings.getString(R.string.context), style = MaterialTheme.typography.labelLarge)
-                Text(strings.getString(R.string.1_d_of_2_d_tokens_3_d, used, size, (share * 100).roundToInt()),
+                Text(strings.getString(R.string.value_1_d_of_2_d_tokens_3_d, used, size, (share * 100).roundToInt()),
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 Text(if (share >= 0.9f) strings.getString(R.string.nearly_full_a_new_chat_starts_fresh) else strings.getString(R.string.grows_with_the_conversation),
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
@@ -701,7 +698,6 @@ private fun ContextGauge(used: Int, size: Int) {
 
 @Composable
 private fun MenuLabel(title: String, hint: String?) {
-    val strings = LocalContext.current.resources
     Column {
         Text(title)
         hint?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }

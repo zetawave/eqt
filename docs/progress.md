@@ -1,6 +1,12 @@
 # Progress — 2026-10-06
 
 
+## App localization: 2026-10-22
+
+- English is the default Android resource language; Italian follows the device language automatically. Both are declared for Android's per-app language settings.
+- Screen copy, accessibility labels, starter prompts, catalog descriptions, notifications and app-owned error/status messages use localized resources. Model prompts, generated answers, saved conversations and native diagnostic output keep their original content.
+- Built the debug APK and installed it as an update on the connected phone. No tests or lint were run after the owner requested skipping verification.
+
 ## Resume here (state on 2026-10-08; Flash-Next on 2026-10-20)
 
 **Goal:** the fastest exact engine for Qwen3.5/3.6 MoE models larger than the phone's RAM, on a stock Galaxy S24+ (Exynos 2400). Quality, context length and speed advance together; nothing is traded for tokens/s.
