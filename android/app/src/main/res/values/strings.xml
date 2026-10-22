@@ -224,14 +224,6 @@
     <string name="download_1_s">"Download · %1$s"</string>
     <string name="hide_details">"Hide details"</string>
     <string name="show_details">"Show details"</string>
-    <string name="qwen_s_125b_mixture_of_experts_preview_of_the_qwen4_architecture_512_expert">"Qwen\'s 125B mixture-of-experts preview of the Qwen4 architecture (512 experts, 10 per token, plus a 51B n-gram memory) in Unsloth\'s dynamic UD-Q2_K_XL build, experts at about 3 bits (78.9 GB). Only 3.4 GB stays in memory; experts and n-gram rows are read from storage as each token needs them, so answers start slowly and run at a few tokens per second. Needs about 80 GB of free storage."</string>
-    <string name="huge_seven_times_the_phone_s_ram_experimental">"Huge · seven times the phone\'s RAM · experimental"</string>
-    <string name="the_same_35b_mixture_of_experts_model_in_unsloth_s_dynamic_4_bit_build_22_7">"The same 35B mixture-of-experts model in Unsloth\'s dynamic 4-bit build (22.7 GB), Equity\'s quality reference. Shared weights stay in memory and experts are read from storage on demand. Expect roughly 3 tokens/s; the phone warms up during long answers."</string>
-    <string name="large_twice_the_phone_s_ram_quality_reference_experimental">"Large · twice the phone\'s RAM · quality reference · experimental"</string>
-    <string name="the_same_35b_mixture_of_experts_model_in_unsloth_s_dynamic_2_7_bit_build_12">"The same 35B mixture-of-experts model in Unsloth\'s dynamic 2.7-bit build (12 GB). On Equity\'s 27-prompt quality set it scored like the 4-bit build and ran about a third faster: around 5 tokens/s on a cool phone, about 3.5 sustained once it warms up. Experts are read from storage on demand."</string>
-    <string name="large_twice_the_phone_s_ram_fastest_experimental">"Large · twice the phone\'s RAM · fastest · experimental"</string>
-    <string name="official_8_bit_build_lightweight_and_quick_good_for_testing_and_short_answe">"Official 8-bit build. Lightweight and quick; good for testing and short answers."</string>
-    <string name="small_fully_in_memory_fast">"Small · fully in memory · fast"</string>
     <string name="load_the_matching_model_to_use_its_vector">"Load the matching model to use its vector."</string>
     <string name="verify_this_model_to_find_compatible_vectors">"Verify this model to find compatible vectors."</string>
     <string name="imported_steering_dimensions_do_not_match_this_model">"Imported steering dimensions do not match this model"</string>
@@ -338,4 +330,16 @@
         <item quantity="one">The chat, with its attachments and saved state, is removed from this phone. This cannot be undone.</item>
         <item quantity="other">All %1$d chats, with their attachments and saved states, are removed from this phone. This cannot be undone.</item>
     </plurals>
+    <string name="model_tagline_qwen3_0_6b">"Small · fully in memory"</string>
+    <string name="model_description_qwen3_0_6b">"Qwen3 0.6B in the official 8-bit build (639 MB). Lightweight; good for trying the app and for short answers."</string>
+    <string name="model_tagline_qwen35_9b_q4">"Medium · fully in memory · images"</string>
+    <string name="model_description_qwen35_9b_q4">"Qwen3.5 9B, a dense model of the same family as Equity\'s larger models, in Unsloth\'s 4-bit build (5.7 GB). It stays fully in memory, so it needs more free RAM than the streamed models; image input is an optional download."</string>
+    <string name="model_tagline_qwen35_9b_iq3">"Medium · fully in memory · less RAM · images"</string>
+    <string name="model_description_qwen35_9b_iq3">"The same Qwen3.5 9B in Unsloth\'s dynamic 3-bit build (4.0 GB), for when less memory is free. It stays fully in memory; image input is an optional download. It has not yet been compared with the 4-bit build on Equity\'s quality set."</string>
+    <string name="model_tagline_qwen36_35b_iq2m">"Large · twice the phone\'s RAM · experimental"</string>
+    <string name="model_description_qwen36_35b_iq2m">"Qwen3.6 35B-A3B, a mixture-of-experts model with 3B parameters active per token, in Unsloth\'s dynamic 2.7-bit build (11.9 GB). The shared weights stay in memory and the experts are read from storage as each token needs them. On Equity\'s quality set it scored like the 4-bit build."</string>
+    <string name="model_tagline_qwen36_35b_q4km">"Large · twice the phone\'s RAM · quality reference · experimental"</string>
+    <string name="model_description_qwen36_35b_q4km">"The same Qwen3.6 35B-A3B in Unsloth\'s dynamic 4-bit build (22.7 GB), Equity\'s quality reference. The shared weights stay in memory and the experts are read from storage as each token needs them."</string>
+    <string name="model_tagline_qwen38_flash_next">"Huge · seven times the phone\'s RAM · experimental"</string>
+    <string name="model_description_qwen38_flash_next">"Qwen3.8 Flash Next: a 125B mixture-of-experts model (512 experts, 10 per token) with a 51B n-gram memory, in Unsloth\'s dynamic UD-Q2_K_XL build (78.9 GB). Only about 3.4 GB stays in memory; experts and n-gram rows are read from storage as each token needs them. Needs about 80 GB of free storage."</string>
 </resources>

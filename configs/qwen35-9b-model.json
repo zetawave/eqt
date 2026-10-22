@@ -1,0 +1,23 @@
+{
+  "repository": "unsloth/Qwen3.5-9B-GGUF",
+  "revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+  "license": "Apache-2.0",
+  "purpose": "Qwen3.5 9B (qwen35: dense, 32 layers, Gated DeltaNet with full attention every fourth layer, 262,144-token trained context) in the app catalog: Q4_K_M and Unsloth's dynamic UD-IQ3_XXS, both resident, and the F16 vision projector (qwen3vl_merger, 456M parameters, projecting to 4096) shared by both. Not yet run on the Galaxy; the 3-bit build has no quality comparison yet.",
+  "files": [
+    {
+      "name": "Qwen3.5-9B-Q4_K_M.gguf",
+      "size_bytes": 5680522464,
+      "sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8"
+    },
+    {
+      "name": "Qwen3.5-9B-UD-IQ3_XXS.gguf",
+      "size_bytes": 4016235744,
+      "sha256": "40d0f32cd3030b04f0784139a589fb63e876cfbf8667d56311b79783c74fd149"
+    },
+    {
+      "name": "mmproj-F16.gguf",
+      "size_bytes": 918166080,
+      "sha256": "f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f"
+    }
+  ]
+}

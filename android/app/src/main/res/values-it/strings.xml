@@ -224,14 +224,6 @@
     <string name="download_1_s">"Scarica · %1$s"</string>
     <string name="hide_details">"Nascondi dettagli"</string>
     <string name="show_details">"Mostra dettagli"</string>
-    <string name="qwen_s_125b_mixture_of_experts_preview_of_the_qwen4_architecture_512_expert">"Anteprima mixture-of-experts da 125B di Qwen dell’architettura Qwen4 (512 esperti, 10 per token, più una memoria n-gram da 51B) nella versione dinamica UD-Q2_K_XL di Unsloth, con esperti a circa 3 bit (78,9 GB). Solo 3,4 GB restano in memoria; esperti e righe n-gram vengono letti dall’archiviazione quando servono a ogni token, quindi le risposte iniziano lentamente e procedono a pochi token al secondo. Richiede circa 80 GB di spazio libero."</string>
-    <string name="huge_seven_times_the_phone_s_ram_experimental">"Enorme · sette volte la RAM del telefono · sperimentale"</string>
-    <string name="the_same_35b_mixture_of_experts_model_in_unsloth_s_dynamic_4_bit_build_22_7">"Lo stesso modello mixture-of-experts da 35B nella versione dinamica a 4 bit di Unsloth (22,7 GB), il riferimento di qualità di Equity. I pesi condivisi restano in memoria e gli esperti vengono letti dall’archiviazione su richiesta. Circa 3 token/s; il telefono si scalda durante le risposte lunghe."</string>
-    <string name="large_twice_the_phone_s_ram_quality_reference_experimental">"Grande · due volte la RAM del telefono · riferimento di qualità · sperimentale"</string>
-    <string name="the_same_35b_mixture_of_experts_model_in_unsloth_s_dynamic_2_7_bit_build_12">"Lo stesso modello mixture-of-experts da 35B nella versione dinamica a 2,7 bit di Unsloth (12 GB). Sui 27 prompt di valutazione di Equity ha ottenuto lo stesso punteggio della versione a 4 bit ed è stato circa un terzo più veloce: circa 5 token/s a telefono fresco, circa 3,5 continuativi quando si scalda. Gli esperti vengono letti dall’archiviazione su richiesta."</string>
-    <string name="large_twice_the_phone_s_ram_fastest_experimental">"Grande · due volte la RAM del telefono · il più veloce · sperimentale"</string>
-    <string name="official_8_bit_build_lightweight_and_quick_good_for_testing_and_short_answe">"Versione ufficiale a 8 bit. Leggera e veloce; adatta a prove e risposte brevi."</string>
-    <string name="small_fully_in_memory_fast">"Piccolo · interamente in memoria · veloce"</string>
     <string name="load_the_matching_model_to_use_its_vector">"Carica il modello corrispondente per usare il suo vettore."</string>
     <string name="verify_this_model_to_find_compatible_vectors">"Verifica questo modello per trovare vettori compatibili."</string>
     <string name="imported_steering_dimensions_do_not_match_this_model">"Le dimensioni del vettore importato non corrispondono al modello"</string>
@@ -338,4 +330,16 @@
         <item quantity="one">La chat, con gli allegati e lo stato salvato, verrà eliminata da questo telefono. L’operazione è irreversibile.</item>
         <item quantity="other">Tutte le %1$d chat, con gli allegati e gli stati salvati, verranno eliminate da questo telefono. L’operazione è irreversibile.</item>
     </plurals>
+    <string name="model_tagline_qwen3_0_6b">"Piccolo · interamente in memoria"</string>
+    <string name="model_description_qwen3_0_6b">"Qwen3 0.6B nella versione ufficiale a 8 bit (639 MB). Leggero; adatto per provare l’app e per risposte brevi."</string>
+    <string name="model_tagline_qwen35_9b_q4">"Medio · interamente in memoria · immagini"</string>
+    <string name="model_description_qwen35_9b_q4">"Qwen3.5 9B, un modello denso della stessa famiglia dei modelli più grandi di Equity, nella versione a 4 bit di Unsloth (5,7 GB). Resta interamente in memoria, quindi richiede più RAM libera dei modelli in streaming; il supporto per le immagini è un download facoltativo."</string>
+    <string name="model_tagline_qwen35_9b_iq3">"Medio · interamente in memoria · meno RAM · immagini"</string>
+    <string name="model_description_qwen35_9b_iq3">"Lo stesso Qwen3.5 9B nella versione dinamica a 3 bit di Unsloth (4,0 GB), per quando c’è meno memoria libera. Resta interamente in memoria; il supporto per le immagini è un download facoltativo. Non è ancora stato confrontato con la versione a 4 bit sul set di valutazione di Equity."</string>
+    <string name="model_tagline_qwen36_35b_iq2m">"Grande · due volte la RAM del telefono · sperimentale"</string>
+    <string name="model_description_qwen36_35b_iq2m">"Qwen3.6 35B-A3B, un modello mixture-of-experts con 3B parametri attivi per token, nella versione dinamica a 2,7 bit di Unsloth (11,9 GB). I pesi condivisi restano in memoria e gli esperti vengono letti dall’archiviazione quando servono a ogni token. Sul set di valutazione di Equity ha ottenuto lo stesso punteggio della versione a 4 bit."</string>
+    <string name="model_tagline_qwen36_35b_q4km">"Grande · due volte la RAM del telefono · riferimento di qualità · sperimentale"</string>
+    <string name="model_description_qwen36_35b_q4km">"Lo stesso Qwen3.6 35B-A3B nella versione dinamica a 4 bit di Unsloth (22,7 GB), il riferimento di qualità di Equity. I pesi condivisi restano in memoria e gli esperti vengono letti dall’archiviazione quando servono a ogni token."</string>
+    <string name="model_tagline_qwen38_flash_next">"Enorme · sette volte la RAM del telefono · sperimentale"</string>
+    <string name="model_description_qwen38_flash_next">"Qwen3.8 Flash Next: un modello mixture-of-experts da 125B (512 esperti, 10 per token) con una memoria n-gram da 51B, nella versione dinamica UD-Q2_K_XL di Unsloth (78,9 GB). Solo circa 3,4 GB restano in memoria; esperti e righe n-gram vengono letti dall’archiviazione quando servono a ogni token. Richiede circa 80 GB di spazio libero."</string>
 </resources>

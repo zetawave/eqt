@@ -147,20 +147,51 @@ object Catalog {
         unmeteredOnly = true,
     )
 
+    // Unsloth's F16 conversion of the Qwen3.5 9B vision encoder (qwen3vl_merger, 456M parameters, projecting to 4096),
+    // shared by both 9B builds (same repository and revision as the language weights).
+    private val qwen35_9bProjector = Artifact(
+        id = "qwen3.5-9b-mmproj-f16", name = "Qwen3.5 9B image support",
+        repository = "unsloth/Qwen3.5-9B-GGUF", revision = "3885219b6810b007914f3a7950a8d1b469d598a5",
+        file = "mmproj-F16.gguf", sizeBytes = 918_166_080L,
+        sha256 = "f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f",
+        unmeteredOnly = true,
+    )
+
     val models = listOf(
         CatalogModel(
-            id = "qwen3-0.6b-q8", name = "Qwen3 0.6B", taglineRes = R.string.small_fully_in_memory_fast,
-            descriptionRes = R.string.official_8_bit_build_lightweight_and_quick_good_for_testing_and_short_answe,
+            id = "qwen3-0.6b-q8", name = "Qwen3 0.6B", taglineRes = R.string.model_tagline_qwen3_0_6b,
+            descriptionRes = R.string.model_description_qwen3_0_6b,
             repository = "Qwen/Qwen3-0.6B-GGUF", revision = "23749fefcc72300e3a2ad315e1317431b06b590a",
             file = "Qwen3-0.6B-Q8_0.gguf", sizeBytes = 639_446_688L,
             sha256 = "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
             license = "Apache-2.0", streamed = false, residentMiB = 610, contextMiBPer1k = 112, trainedContext = 40_960,
             badge = "0.6B",
         ),
+        // Qwen3.5 9B (qwen35, dense, Gated DeltaNet with full attention every fourth of 32 layers): 8 attention layers
+        // x 4 KV heads x 256 x K and V in F16 = 32 KiB per token, plus about 48 MiB of recurrent state. Resident, so
+        // admission counts the whole file; the 3-bit build is for phones with less free memory.
+        CatalogModel(
+            id = "qwen3.5-9b-q4km", name = "Qwen3.5 9B · 4-bit",
+            taglineRes = R.string.model_tagline_qwen35_9b_q4, descriptionRes = R.string.model_description_qwen35_9b_q4,
+            repository = "unsloth/Qwen3.5-9B-GGUF", revision = "3885219b6810b007914f3a7950a8d1b469d598a5",
+            file = "Qwen3.5-9B-Q4_K_M.gguf", sizeBytes = 5_680_522_464L,
+            sha256 = "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+            license = "Apache-2.0", streamed = false, residentMiB = 5420, contextMiBPer1k = 48, trainedContext = 262_144,
+            projector = qwen35_9bProjector, badge = "9B",
+        ),
+        CatalogModel(
+            id = "qwen3.5-9b-ud-iq3xxs", name = "Qwen3.5 9B · 3-bit",
+            taglineRes = R.string.model_tagline_qwen35_9b_iq3, descriptionRes = R.string.model_description_qwen35_9b_iq3,
+            repository = "unsloth/Qwen3.5-9B-GGUF", revision = "3885219b6810b007914f3a7950a8d1b469d598a5",
+            file = "Qwen3.5-9B-UD-IQ3_XXS.gguf", sizeBytes = 4_016_235_744L,
+            sha256 = "40d0f32cd3030b04f0784139a589fb63e876cfbf8667d56311b79783c74fd149",
+            license = "Apache-2.0", streamed = false, residentMiB = 3830, contextMiBPer1k = 48, trainedContext = 262_144,
+            projector = qwen35_9bProjector, badge = "9B",
+        ),
         CatalogModel(
             id = "qwen3.6-35b-a3b-iq2m", name = "Qwen3.6 35B-A3B · 2.7-bit",
-            taglineRes = R.string.large_twice_the_phone_s_ram_fastest_experimental,
-            descriptionRes = R.string.the_same_35b_mixture_of_experts_model_in_unsloth_s_dynamic_2_7_bit_build_12,
+            taglineRes = R.string.model_tagline_qwen36_35b_iq2m,
+            descriptionRes = R.string.model_description_qwen36_35b_iq2m,
             repository = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF", revision = "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
             file = "Qwen3.6-35B-A3B-UD-IQ2_M.gguf", sizeBytes = 11_882_969_376L,
             sha256 = "b989da14b63b29bd469cb1fab5bd16b422ab921787569b4b2bb4fd61e26129b8",
@@ -170,8 +201,8 @@ object Catalog {
         ),
         CatalogModel(
             id = "qwen3.6-35b-a3b-q4km", name = "Qwen3.6 35B-A3B · 4-bit",
-            taglineRes = R.string.large_twice_the_phone_s_ram_quality_reference_experimental,
-            descriptionRes = R.string.the_same_35b_mixture_of_experts_model_in_unsloth_s_dynamic_4_bit_build_22_7,
+            taglineRes = R.string.model_tagline_qwen36_35b_q4km,
+            descriptionRes = R.string.model_description_qwen36_35b_q4km,
             repository = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF", revision = "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
             file = "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", sizeBytes = 22_663_387_424L,
             sha256 = "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
@@ -183,8 +214,8 @@ object Catalog {
         // writes their merge, byte-identical to llama-gguf-split --merge of the same shards.
         CatalogModel(
             id = "qwen3.8-flash-next-ud-q2kxl", name = "Qwen3.8 Flash Next · Q2_K_XL",
-            taglineRes = R.string.huge_seven_times_the_phone_s_ram_experimental,
-            descriptionRes = R.string.qwen_s_125b_mixture_of_experts_preview_of_the_qwen4_architecture_512_expert,
+            taglineRes = R.string.model_tagline_qwen38_flash_next,
+            descriptionRes = R.string.model_description_qwen38_flash_next,
             repository = "unsloth/Qwen3.8-Flash-Next-GGUF", revision = "766911a6b7369840a91dbcd95f9f997acaab6cd6",
             file = "Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf", sizeBytes = 78_869_128_640L,
             sha256 = "f26a5e679710fb4cd048f481ff082d9af9c79fbd640d1867ef58c425518659d7",

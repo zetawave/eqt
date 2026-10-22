@@ -51,6 +51,12 @@ The owner's app observations are 1.8 tokens/s (252 tokens) and, after D029, 2.1 
 - On the Galaxy (CLI as the app user) Flash-Next read a synthetic image correctly: first token after 85 s, 4.63 GiB RSS while encoding.
 - The debug APK with it is installed, and the projector is already in the app's storage. The in-app flow still needs a look on the phone.
 
+**Catalog, 2026-10-22:** Qwen3.5 9B joins the app in two resident builds, both with the same optional image support:
+- Q4_K_M, 5.7 GB;
+- UD-IQ3_XXS, 4.0 GB, for less free memory.
+
+`configs/qwen35-9b-model.json` pins them. Model descriptions no longer quote speeds or times (they change with each measurement) and are localized. The 9B has not run on the Galaxy yet.
+
 **Next performance goals, in order:**
 
 1. **Energy per token,** which sets sustained speed:

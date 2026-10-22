@@ -54,7 +54,7 @@ All numbers are measured on the Galaxy and recorded in [`results/`](results/).
 
 The interface follows the device language: English by default, with Italian available. Android 13 and later also expose both languages in the system's per-app language settings.
 
-Chats are saved on the phone, with photos, camera captures, text files and PDFs as attachments (image input uses the model's vision projector, an optional download for the Qwen3.6 and Qwen3.8 Flash Next models). Answers render Markdown and LaTeX, and keep being written with Equity in the background, with a notification when they are done.
+Chats are saved on the phone, with photos, camera captures, text files and PDFs as attachments (image input uses the model's vision projector, an optional download for the Qwen3.5 9B, Qwen3.6 and Qwen3.8 Flash Next models). Answers render Markdown and LaTeX, and keep being written with Equity in the background, with a notification when they are done.
 
 - **Chat settings** (the tune button in a chat): *Remember this chat* keeps the model's state on the phone so the chat resumes at once; it is deleted with the chat. Directional steering, an experimental per-chat control, lives in the same dialog.
 - **Answer length and context** are limited only by the model: answers have no length cap by default, and the context window sizes itself from free memory (Auto) or takes the model's full length (Max), with a small gauge beside Send showing how much a chat uses.
