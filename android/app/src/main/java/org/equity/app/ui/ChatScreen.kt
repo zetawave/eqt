@@ -12,10 +12,13 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -46,11 +49,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Psychology
@@ -61,7 +64,6 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -70,7 +72,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
@@ -108,6 +109,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
@@ -320,8 +322,13 @@ private fun ChatHeader(engine: EngineState, title: String?, onOpenChats: () -> U
     }
     if (engine.phase == Phase.Loading) {
         val percent = engine.loadPercent
-        if (percent != null) LinearProgressIndicator(progress = { percent / 100f }, modifier = Modifier.fillMaxWidth().height(2.dp))
-        else LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+        GradientProgress(percent?.let { it / 100f })
+    } else {
+        // Hairline under the header; keeps the chat surface visually anchored while scrolling.
+        Box(
+            Modifier.fillMaxWidth().height(1.dp)
+                .background(Brush.horizontalGradient(listOf(Color.Transparent, colors.outlineVariant, Color.Transparent))),
+        )
     }
 }
 
@@ -347,23 +354,26 @@ fun StatusDot(phase: Phase) {
 private fun EmptyChat(engine: EngineState, onOpenModels: () -> Unit, onSuggestion: (String) -> Unit) {
     val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
+    // A single fade-and-rise on entry; nothing animates after that, so streaming answers keep the big cores.
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, tween(500), label = "emptyAlpha")
+    val rise by animateFloatAsState(if (shown) 0f else 28f, tween(500), label = "emptyRise")
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 28.dp),
+        Modifier.fillMaxSize().padding(horizontal = 28.dp).graphicsLayer(alpha = alpha, translationY = rise),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Logo(48.dp)
-        Spacer(Modifier.height(16.dp))
-        Text(
-            strings.getString(R.string.private_ai_that_runs_on_your_phone_nyour_conversations_never_leave_this_dev),
-            style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant, textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(28.dp))
+        Logo(52.dp)
+        Spacer(Modifier.height(36.dp))
         when (engine.phase) {
-            Phase.Empty -> Button(onClick = onOpenModels) { Text(strings.getString(R.string.choose_a_model)) }
-            Phase.Loading, Phase.Unloading -> Text(engine.status, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-            Phase.Generating -> Text(strings.getString(R.string.equity_is_answering_in_another_chat), style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant)
+            Phase.Empty -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                GradientButton(onClick = onOpenModels, icon = Icons.AutoMirrored.Filled.ArrowForward) {
+                    Text(strings.getString(R.string.choose_a_model), style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            Phase.Loading, Phase.Unloading -> EmptyStatus(engine.status)
+            Phase.Generating -> EmptyStatus(strings.getString(R.string.equity_is_answering_in_another_chat))
             Phase.Ready -> FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -374,14 +384,20 @@ private fun EmptyChat(engine: EngineState, onOpenModels: () -> Unit, onSuggestio
                         onClick = { onSuggestion(prompt) },
                         label = { Text(prompt, maxLines = 2, style = MaterialTheme.typography.bodySmall) },
                         shape = RoundedCornerShape(16.dp),
-                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = colors.surfaceContainer),
-                        border = null,
+                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = colors.surfaceContainer.copy(alpha = 0.6f)),
+                        border = BorderStroke(1.dp, colors.outlineVariant),
                         modifier = Modifier.widthIn(max = 300.dp),
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun EmptyStatus(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -402,10 +418,12 @@ private fun UserMessage(chatId: String, message: Message, onView: (File) -> Unit
             }
         }
         if (message.text.isNotEmpty()) {
+            val bubbleShape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)
             Surface(
                 color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp),
-                modifier = Modifier.widthIn(max = 320.dp),
+                shape = bubbleShape,
+                modifier = Modifier.widthIn(max = 320.dp)
+                    .border(BorderStroke(1.dp, Brush.linearGradient(listOf(Teal.copy(alpha = 0.45f), Violet.copy(alpha = 0.45f)))), bubbleShape),
             ) {
                 SelectionContainer {
                     Text(message.text, style = MaterialTheme.typography.bodyLarge,
@@ -477,10 +495,15 @@ private fun ReasoningBlock(reasoning: String, inProgress: Boolean, reasoningMs: 
     val colors = MaterialTheme.colorScheme
     var expanded by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-        Row(
-            Modifier.clip(RoundedCornerShape(12.dp)).clickable { expanded = !expanded }.padding(vertical = 6.dp, horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Surface(
+            color = colors.surfaceContainerLow.copy(alpha = 0.6f),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, colors.outlineVariant),
         ) {
+            Row(
+                Modifier.clip(RoundedCornerShape(14.dp)).clickable { expanded = !expanded }.padding(vertical = 6.dp, horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             Icon(Icons.Outlined.Psychology, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(when {
@@ -491,10 +514,12 @@ private fun ReasoningBlock(reasoning: String, inProgress: Boolean, reasoningMs: 
             Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                 contentDescription = if (expanded) strings.getString(R.string.hide_reasoning) else strings.getString(R.string.show_reasoning),
                 tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            }
         }
         when {
-            expanded -> Row(Modifier.height(IntrinsicSize.Min).padding(start = 12.dp, top = 2.dp)) {
-                Box(Modifier.width(2.dp).fillMaxHeight().background(colors.outlineVariant))
+            expanded -> Row(Modifier.height(IntrinsicSize.Min).padding(start = 12.dp, top = 6.dp)) {
+                Box(Modifier.width(2.dp).fillMaxHeight()
+                    .background(Brush.verticalGradient(listOf(Teal.copy(alpha = 0.7f), Violet.copy(alpha = 0.7f)))))
                 SelectionContainer {
                     Text(reasoning.ifEmpty { "…" }, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                         modifier = Modifier.padding(start = 10.dp))
@@ -551,7 +576,11 @@ private fun Composer(
     val generating = engine.phase == Phase.Generating
     var menu by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)) {
-        Surface(color = colors.surfaceContainerHigh, shape = RoundedCornerShape(28.dp)) {
+        Surface(
+            color = colors.surfaceContainer.copy(alpha = 0.85f),
+            shape = RoundedCornerShape(28.dp),
+            border = BorderStroke(1.dp, colors.outlineVariant),
+        ) {
             Column {
                 if (pending.isNotEmpty() || importing) {
                     Row(
@@ -649,19 +678,20 @@ private fun Composer(
                             colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.onSurface, contentColor = colors.surface),
                         ) { Icon(Icons.Rounded.Stop, contentDescription = strings.getString(R.string.stop)) }
                     } else {
-                        FilledIconButton(onClick = onSend, enabled = ready && !importing && (value.isNotBlank() || pending.isNotEmpty())) {
-                            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = strings.getString(R.string.send))
+                        val sendEnabled = ready && !importing && (value.isNotBlank() || pending.isNotEmpty())
+                        Box(
+                            Modifier.size(44.dp).clip(CircleShape)
+                                .alpha(if (sendEnabled) 1f else 0.4f)
+                                .background(BrandGradient)
+                                .clickable(enabled = sendEnabled, onClick = onSend),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = strings.getString(R.string.send),
+                                tint = colors.onPrimary, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
             }
-        }
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Lock, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(12.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(strings.getString(R.string.runs_on_this_device_nothing_is_sent_online), style = MaterialTheme.typography.labelSmall,
-                color = colors.onSurfaceVariant)
         }
     }
 }
@@ -675,18 +705,10 @@ private fun ContextGauge(used: Int, size: Int) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.size(40.dp)) {
-            CircularProgressIndicator(
-                progress = { share },
-                modifier = Modifier.size(20.dp),
-                color = if (share >= 0.9f) colors.error else colors.primary,
-                trackColor = colors.surfaceContainerHighest,
-                strokeWidth = 2.5.dp,
-                gapSize = 0.dp,
-            )
+            GradientGauge(share = share, warn = share >= 0.9f)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = colors.surfaceContainerHighest) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(strings.getString(R.string.context), style = MaterialTheme.typography.labelLarge)
+        if (open) {
+            HelpDialog(strings.getString(R.string.context), { open = false }) {
                 Text(strings.getString(R.string.value_1_d_of_2_d_tokens_3_d, used, size, (share * 100).roundToInt()),
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 Text(if (share >= 0.9f) strings.getString(R.string.nearly_full_a_new_chat_starts_fresh) else strings.getString(R.string.grows_with_the_conversation),

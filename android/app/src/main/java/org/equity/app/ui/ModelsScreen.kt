@@ -35,6 +35,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -48,14 +50,12 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -114,7 +114,8 @@ fun ModelsScreen(engine: EngineState, onOpenChat: () -> Unit) {
         item {
             Column(Modifier.statusBarsPadding().padding(top = 20.dp, start = 4.dp, bottom = 2.dp)) {
                 Text(strings.getString(R.string.models), style = MaterialTheme.typography.headlineMedium)
-                Text(strings.getString(R.string.download_once_then_run_offline_files_are_checked_against_pinned_fingerprint),
+                Text(
+                    strings.getString(R.string.download_once_then_run_offline_files_are_checked_against_pinned_fingerprint),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -127,9 +128,9 @@ fun ModelsScreen(engine: EngineState, onOpenChat: () -> Unit) {
         }
         item {
             val enabled = engine.phase == Phase.Empty || engine.phase == Phase.Ready
-            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(20.dp),
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.78f), shape = RoundedCornerShape(20.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
@@ -138,7 +139,9 @@ fun ModelsScreen(engine: EngineState, onOpenChat: () -> Unit) {
                         Text(strings.getString(R.string.qwen3_qwen3_5_3_6_or_qwen3_8_files_on_this_phone),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = enabled) { Text(strings.getString(R.string.open)) }
+                    PremiumOutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = enabled, compact = true) {
+                        Text(strings.getString(R.string.open), style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
@@ -229,8 +232,12 @@ private fun DeviceCard() {
         }
     }
     val (available, total, storage) = snapshot
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(20.dp)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Metric(Icons.Outlined.Memory, if (total > 0) strings.getString(R.string.value_1_s_of_2_s_free, formatBytes(available), formatBytes(total)) else "…",
                 strings.getString(R.string.memory), Modifier.weight(1f))
             Metric(Icons.Outlined.SdStorage, if (storage > 0) strings.getString(R.string.value_1_s_free, formatBytes(storage)) else "…", strings.getString(R.string.storage), Modifier.weight(1f))
@@ -274,11 +281,11 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
     LaunchedEffect(state) { if (state?.isFinished == true) refresh++ }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainer),
-        border = if (loaded) BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)) else null,
-        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow.copy(alpha = 0.8f)),
+        border = if (loaded) BorderStroke(1.dp, BrandGradient) else BorderStroke(1.dp, colors.outlineVariant),
+        shape = RoundedCornerShape(24.dp),
     ) {
-        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 6.dp)) {
+        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(36.dp).background(BrandGradient, CircleShape), contentAlignment = Alignment.Center) {
                     Text(model.badge, color = colors.surface, fontWeight = FontWeight.Bold, fontSize = 10.sp, fontFamily = Inter)
@@ -299,7 +306,7 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                     Icon(Icons.Outlined.MoreVert, contentDescription = strings.getString(R.string.options_for_1_s, model.name), tint = colors.onSurfaceVariant)
                 } else Spacer(Modifier.width(12.dp))
             }
-            Column(Modifier.padding(end = 8.dp, top = 8.dp)) {
+            Column(Modifier.fillMaxWidth().padding(end = 8.dp, top = 8.dp)) {
                 when {
                     loading -> {
                         val percent = engine.loadPercent
@@ -311,7 +318,7 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                     }
                     transferring -> {
                         DownloadProgress(model.artifact, work)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                             TextButton(onClick = { Downloads.pause(context, model.artifact) }) {
                                 Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
@@ -320,13 +327,21 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                             TextButton(onClick = { confirmDelete = true }) { Text(strings.getString(R.string.cancel_download)) }
                         }
                     }
-                    installed && loaded -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = onOpenChat) { Text(strings.getString(R.string.open_chat)) }
-                        OutlinedButton(onClick = { EngineController.unload() }, enabled = engine.phase == Phase.Ready) { Text(strings.getString(R.string.unload)) }
+                    installed && loaded -> FlowRow(Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                        PremiumOutlinedButton(onClick = { EngineController.unload() }, enabled = engine.phase == Phase.Ready, compact = true) {
+                            Text(strings.getString(R.string.unload), style = MaterialTheme.typography.labelLarge)
+                        }
+                        GradientButton(onClick = onOpenChat, icon = Icons.AutoMirrored.Filled.ArrowForward, compact = true) {
+                            Text(strings.getString(R.string.open_chat), style = MaterialTheme.typography.labelLarge)
+                        }
                     }
                     installed -> {
-                        Button(onClick = { EngineController.load(context, model) }, enabled = engineIdle) {
-                            Text(if (engine.phase == Phase.Ready) strings.getString(R.string.switch_to_this_model) else strings.getString(R.string.load))
+                        GradientButton(onClick = { EngineController.load(context, model) }, enabled = engineIdle,
+                            modifier = Modifier.align(Alignment.End), compact = true,
+                            icon = Icons.AutoMirrored.Filled.ArrowForward) {
+                            Text(if (engine.phase == Phase.Ready) strings.getString(R.string.switch_to_this_model) else strings.getString(R.string.load),
+                                style = MaterialTheme.typography.labelLarge)
                         }
                         if (model.streamed) MemoryNeed(model, shortfallOnly = true)
                     }
@@ -343,26 +358,26 @@ private fun ModelCard(model: CatalogModel, engine: EngineState, onOpenChat: () -
                                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                             Spacer(Modifier.height(6.dp))
                         }
-                        Button(onClick = startDownload) {
-                            Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(if (partial > 0) strings.getString(R.string.resume) else strings.getString(R.string.download_1_s, formatBytes(model.sizeBytes)))
+                        GradientButton(onClick = startDownload, icon = Icons.Filled.Download,
+                            modifier = Modifier.align(Alignment.End), compact = true) {
+                            Text(if (partial > 0) strings.getString(R.string.resume) else strings.getString(R.string.download_1_s, formatBytes(model.sizeBytes)),
+                                style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
             }
-            // Details that are not needed to load or download: collapsed until asked for.
             Row(
-                Modifier.fillMaxWidth().clickable { details = !details }.padding(top = 4.dp, bottom = 4.dp, end = 8.dp),
+                Modifier.fillMaxWidth().clickable { details = !details }.padding(top = 8.dp, bottom = 4.dp, end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(strings.getString(model.taglineRes), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    modifier = Modifier.weight(1f))
                 Icon(if (details) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                    contentDescription = if (details) strings.getString(R.string.hide_details) else strings.getString(R.string.show_details), tint = colors.onSurfaceVariant)
+                    contentDescription = if (details) strings.getString(R.string.hide_details) else strings.getString(R.string.show_details),
+                    tint = colors.onSurfaceVariant)
             }
             AnimatedVisibility(details) {
-                Column(Modifier.padding(end = 8.dp, bottom = 8.dp)) {
+                Column(Modifier.padding(end = 8.dp, top = 8.dp, bottom = 8.dp)) {
                     Text(strings.getString(model.descriptionRes), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -439,9 +454,9 @@ private fun LocalModelCard(engine: EngineState) {
     val colors = MaterialTheme.colorScheme
     var options by remember { mutableStateOf(false) }
     Card(
-        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainer),
-        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)),
-        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow.copy(alpha = 0.8f)),
+        border = BorderStroke(1.dp, BrandGradient),
+        shape = RoundedCornerShape(24.dp),
     ) {
         Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -483,18 +498,23 @@ private fun SteeringSection(modelHash: String?, engine: EngineState, loaded: Boo
         Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(strings.getString(R.string.directional_steering), style = MaterialTheme.typography.titleSmall)
-            Text(
-                when {
-                    modelHash == null -> strings.getString(R.string.verify_this_file_s_fingerprint_to_import_a_vector_for_it)
-                    current == null -> strings.getString(R.string.import_a_vector_made_for_this_exact_file_to_steer_its_answers_chats_offer_i)
-                    loaded && engine.steeringProfile == null && engine.steeringNote != null -> engine.steeringNote
-                    else -> strings.getString(R.string.vector_imported_layer_1_d, current.layer) +
-                        (current.direction.takeIf { it.isNotEmpty() }?.let { " · ${it.replace("_minus_", " − ").replace('_', ' ')}" } ?: "") +
-                        if (loaded) strings.getString(R.string.turn_it_on_per_chat_with_the_configuration_button) else strings.getString(R.string.available_in_chats_once_this_model_is_loaded)
-                },
-                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+            HelpLabel(
+                strings.getString(R.string.directional_steering),
+                strings.getString(R.string.import_a_vector_made_for_this_exact_file_to_steer_its_answers_chats_offer_i) + "\n\n" +
+                    strings.getString(R.string.select_the_vector_gguf_and_its_matching_gguf_json_together) + "\n\n" +
+                    if (loaded) strings.getString(R.string.turn_it_on_per_chat_with_the_configuration_button)
+                    else strings.getString(R.string.available_in_chats_once_this_model_is_loaded),
+                summary = strings.getString(R.string.steering_summary),
+                style = MaterialTheme.typography.titleSmall,
             )
+            if (modelHash == null) Text(strings.getString(R.string.verify_this_file_s_fingerprint_to_import_a_vector_for_it),
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            else if (loaded && engine.steeringProfile == null && engine.steeringNote != null) Text(engine.steeringNote,
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            else if (current != null) Text(
+                strings.getString(R.string.vector_imported_layer_1_d, current.layer) +
+                    (current.direction.takeIf { it.isNotEmpty() }?.let { " · ${it.replace("_minus_", " − ").replace('_', ' ')}" } ?: ""),
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
     }
     if (engine.steeringMessageModel == modelHash) engine.steeringImportMessage?.let {
@@ -508,11 +528,12 @@ private fun SteeringSection(modelHash: String?, engine: EngineState, loaded: Boo
             TextButton(onClick = { EngineController.stop() }) { Text(strings.getString(R.string.cancel)) }
         }
         modelHash == null -> Column {
+            HelpLabel(strings.getString(R.string.verify_local_model),
+                strings.getString(R.string.reads_and_reloads_the_model_once_to_check_its_exact_fingerprint),
+                summary = strings.getString(R.string.verify_model_summary))
             OutlinedButton(onClick = { EngineController.verifySteeringModel(context) }, enabled = engine.phase == Phase.Ready) {
                 Text(strings.getString(R.string.verify_local_model))
             }
-            Text(strings.getString(R.string.reads_and_reloads_the_model_once_to_check_its_exact_fingerprint),
-                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
         else -> Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -524,8 +545,6 @@ private fun SteeringSection(modelHash: String?, engine: EngineState, loaded: Boo
                     TextButton(onClick = { confirmRemove = true }, enabled = !engine.busy) { Text(strings.getString(R.string.remove)) }
                 }
             }
-            Text(strings.getString(R.string.select_the_vector_gguf_and_its_matching_gguf_json_together),
-                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
     }
     if (confirmRemove && modelHash != null) {
@@ -567,16 +586,19 @@ private fun ProjectorSection(model: CatalogModel, projector: Artifact, engine: E
         Icon(Icons.Outlined.Image, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(strings.getString(R.string.image_input), style = MaterialTheme.typography.titleSmall)
-            Text(
-                when {
-                    installed && loaded && !engine.vision -> strings.getString(R.string.downloaded_reload_the_model_to_read_images)
-                    installed -> strings.getString(R.string.ready_photos_and_scanned_pdfs_can_be_attached)
-                    model.streamed -> strings.getString(R.string.lets_this_model_read_photos_screenshots_and_scanned_documents_while_it_read, formatBytes(projector.sizeBytes + (128L shl 20)))
-                    else ->strings.getString(R.string.lets_this_model_read_photos_screenshots_and_scanned_documents_while_it_read_219, formatBytes(projector.sizeBytes + (512L shl 20)))
-                },
-                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+            HelpLabel(
+                strings.getString(R.string.image_input),
+                if (model.streamed) strings.getString(R.string.lets_this_model_read_photos_screenshots_and_scanned_documents_while_it_read,
+                    formatBytes(projector.sizeBytes + (128L shl 20)))
+                else strings.getString(R.string.lets_this_model_read_photos_screenshots_and_scanned_documents_while_it_read_219,
+                    formatBytes(projector.sizeBytes + (512L shl 20))),
+                summary = strings.getString(R.string.image_input_summary),
+                style = MaterialTheme.typography.titleSmall,
             )
+            if (installed) Text(
+                if (loaded && !engine.vision) strings.getString(R.string.downloaded_reload_the_model_to_read_images)
+                else strings.getString(R.string.ready_photos_and_scanned_pdfs_can_be_attached),
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
     }
     Spacer(Modifier.height(10.dp))
@@ -600,13 +622,14 @@ private fun ProjectorSection(model: CatalogModel, projector: Artifact, engine: E
                 Text(strings.getString(R.string.remove_image_support))
             }
         }
-        else -> Column {
+        else -> Column(Modifier.fillMaxWidth()) {
             if (state == WorkInfo.State.FAILED) {
                 Text(work?.outputData?.getString(Downloads.KEY_ERROR) ?: strings.getString(R.string.download_failed),
                     style = MaterialTheme.typography.bodySmall, color = colors.error)
                 Spacer(Modifier.height(6.dp))
             }
-            OutlinedButton(onClick = { Downloads.start(context, projector) }) {
+            PremiumOutlinedButton(onClick = { Downloads.start(context, projector) },
+                modifier = Modifier.align(Alignment.End), compact = true) {
                 Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(if (partial > 0) strings.getString(R.string.resume_1_s_of_2_s, formatBytes(partial), formatBytes(projector.sizeBytes))
@@ -661,12 +684,7 @@ private fun DownloadProgress(model: Artifact, work: WorkInfo?) {
 }
 
 @Composable
-fun ThinProgress(progress: Float?) {
-    val modifier = Modifier.fillMaxWidth().height(6.dp)
-    val track = MaterialTheme.colorScheme.surfaceContainerHighest
-    if (progress == null) LinearProgressIndicator(modifier, trackColor = track)
-    else LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = modifier, trackColor = track, gapSize = 0.dp, drawStopIndicator = {})
-}
+fun ThinProgress(progress: Float?) = GradientProgress(progress)
 
 @Composable
 fun Pill(text: String, container: androidx.compose.ui.graphics.Color, content: androidx.compose.ui.graphics.Color) {

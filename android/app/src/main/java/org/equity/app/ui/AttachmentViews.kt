@@ -4,6 +4,7 @@ import androidx.compose.ui.platform.LocalContext
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -84,7 +85,11 @@ fun ImageThumbnail(file: File, size: Dp, onClick: (() -> Unit)? = null) {
 @Composable
 fun DocumentChip(attachment: Attachment, trailing: @Composable (() -> Unit)? = null) {
     val colors = MaterialTheme.colorScheme
-    Surface(color = colors.surfaceContainerHighest, shape = RoundedCornerShape(14.dp)) {
+    Surface(
+        color = colors.surfaceContainerLow.copy(alpha = 0.8f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, colors.outlineVariant),
+    ) {
         Row(Modifier.padding(start = 10.dp, end = if (trailing == null) 12.dp else 2.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Description, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
@@ -100,7 +105,7 @@ fun DocumentChip(attachment: Attachment, trailing: @Composable (() -> Unit)? = n
 fun ImageViewer(file: File, onDismiss: () -> Unit) {
     val strings = LocalContext.current.resources
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.92f)).clickable(onClick = onDismiss),
+        Box(Modifier.fillMaxSize().background(Color.Black).clickable(onClick = onDismiss),
             contentAlignment = Alignment.Center) {
             rememberPreview(file, 2048)?.let {
                 Image(it, contentDescription = strings.getString(R.string.attached_image), contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(12.dp))

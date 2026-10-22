@@ -119,7 +119,7 @@ fun EquityApp() {
                 }
             },
         ) { padding ->
-            Box(Modifier.padding(padding).consumeWindowInsets(padding)) {
+            Box(Modifier.padding(padding).consumeWindowInsets(padding).screenBackground()) {
                 when (tab) {
                     Tab.Chat -> ChatScreen(engine, chats, onOpenModels = { tab = Tab.Models },
                         onOpenChats = { scope.launch { drawer.open() } })

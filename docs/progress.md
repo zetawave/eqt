@@ -1,6 +1,21 @@
 # Progress — 2026-10-06
 
 
+## App UI refinements: 2026-10-22
+
+- Help dialogs now use opaque surfaces; the image viewer has an opaque black background. Chat configuration explicitly uses the opaque dialog surface.
+- Settings and chat/model options show short, localized descriptions without opening help. Smaller, muted question marks retain the detailed explanations; simple headings and slider hints no longer add redundant help buttons.
+- Model cards restore inline expandable details. Load, download, resume and chat actions sit on the right, with compact gradient/outlined buttons and minimum touch-target spacing; grouped actions wrap on narrow screens.
+- Removed the Privacy footer below the composer and the empty-chat motto; the Equity icon and wordmark remain.
+- Debug APK built successfully with Vulkan support; Kotlin compilation and Android lint passed (0 errors, 30 warnings). No device installation or visual verification has been performed during this change.
+
+## App contextual help: 2026-10-22
+
+- Explanations in Settings, model details, image support, vector import and chat configuration now open from contextual question-mark buttons. Privacy and context usage use the same custom Compose help dialog.
+- The shared help dialog follows the existing dark theme, with gradient accents, a bounded scroll area and a dedicated Close action. Help buttons have localized accessibility labels; existing English and Italian explanations are preserved.
+- Operational status, memory shortfalls and invalid numeric input remain visible beside their controls. Inference and settings behavior are unchanged.
+- Debug APK built successfully. Kotlin compilation and Android lint passed; lint reports 0 errors and 29 warnings. Visual verification is left to the owner; the APK has not been installed during this change.
+
 ## App localization: 2026-10-22
 
 - English is the default Android resource language; Italian follows the device language automatically. Both are declared for Android's per-app language settings.

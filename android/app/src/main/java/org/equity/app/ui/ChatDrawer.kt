@@ -3,7 +3,11 @@ package org.equity.app.ui
 import androidx.compose.ui.platform.LocalContext
 import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,17 +22,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,14 +56,14 @@ fun ChatDrawer(chats: ChatsState, engine: EngineState, onSelect: (String) -> Uni
     val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
     var deleting by remember { mutableStateOf<ChatSummary?>(null) }
-    ModalDrawerSheet(drawerContainerColor = colors.surfaceContainerLow, drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)) {
+    ModalDrawerSheet(modifier = Modifier.screenBackground(), drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)) {
         Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = 16.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(strings.getString(R.string.chats), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                FilledTonalButton(onClick = onNewChat, enabled = chats.currentId != null) {
+                PremiumOutlinedButton(onClick = onNewChat, enabled = chats.currentId != null) {
                     Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(strings.getString(R.string.new_chat))
+                    Text(strings.getString(R.string.new_chat), style = MaterialTheme.typography.labelLarge)
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -109,12 +113,23 @@ fun ChatDrawer(chats: ChatsState, engine: EngineState, onSelect: (String) -> Uni
 private fun ChatRow(chat: ChatSummary, selected: Boolean, answering: Boolean, onClick: () -> Unit, onDelete: () -> Unit) {
     val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
-    Surface(
-        color = if (selected) colors.secondaryContainer else colors.surfaceContainerLow,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+    val shape = RoundedCornerShape(16.dp)
+    Box(
+        Modifier.fillMaxWidth()
+            .clip(shape)
+            .then(
+                if (selected) Modifier
+                    .background(Brush.linearGradient(listOf(Teal.copy(alpha = 0.14f), Violet.copy(alpha = 0.10f))))
+                    .border(BorderStroke(1.dp, Brush.linearGradient(listOf(Teal.copy(alpha = 0.55f), Violet.copy(alpha = 0.55f)))), shape)
+                else Modifier,
+            )
+            .clickable(onClick = onClick),
     ) {
-        Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = if (selected) 12.dp else 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (selected) {
+                Box(Modifier.width(3.dp).height(28.dp).clip(RoundedCornerShape(50)).background(BrandGradient))
+                Spacer(Modifier.width(10.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(chat.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (selected) colors.onSecondaryContainer else colors.onSurface)
@@ -131,7 +146,8 @@ private fun ChatRow(chat: ChatSummary, selected: Boolean, answering: Boolean, on
                 }
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Outlined.Delete, contentDescription = strings.getString(R.string.delete_chat), tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.Delete, contentDescription = strings.getString(R.string.delete_chat),
+                    tint = if (selected) colors.onSurfaceVariant else colors.outline, modifier = Modifier.size(20.dp))
             }
         }
     }

@@ -45,6 +45,8 @@ fun SliderField(
     integer: Boolean = false,
     accept: (Float) -> Boolean = { true },
     hint: String? = null,
+    summary: String? = hint,
+    validationHint: String? = hint,
 ) {
     var text by remember { mutableStateOf(format(value)) }
     val typed = text.trim().replace(',', '.').toFloatOrNull()
@@ -52,7 +54,14 @@ fun SliderField(
     // The slider and the caller can change the value; the field follows unless it already shows that value.
     LaunchedEffect(value) { if (typed != value) text = format(value) }
     Column(modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+        if (hint != null && summary != hint) {
+            HelpLabel(label, hint, summary = summary ?: hint, style = MaterialTheme.typography.bodyMedium)
+        } else {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            summary?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Slider(
                 value = value.coerceIn(range.start, range.endInclusive),
@@ -86,9 +95,8 @@ fun SliderField(
                 modifier = Modifier.width(96.dp),
             )
         }
-        hint?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall,
-                color = if (valid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
+        if (!valid && validationHint != null) {
+            Text(validationHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
     }
 }

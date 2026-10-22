@@ -55,14 +55,20 @@ fun ChatConfigurationDialog(engine: EngineState, chats: ChatsState, thinking: Bo
     val valid = !available || SteeringOptions.valid(strength)
     val small = MaterialTheme.typography.bodySmall
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(strings.getString(R.string.chat_settings)) }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = {
+        Text(strings.getString(R.string.chat_settings), style = MaterialTheme.typography.titleLarge)
+    }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(strings.getString(R.string.saved_for_this_chat_changes_apply_to_the_next_answer), style = small, color = muted)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(strings.getString(R.string.remember_this_chat), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                HelpLabel(
+                    strings.getString(R.string.remember_this_chat),
+                    strings.getString(R.string.after_each_answer_the_model_s_state_of_this_conversation_is_saved_on_this_p),
+                    summary = strings.getString(R.string.remember_chat_summary),
+                    modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall,
+                )
                 Switch(checked = session, onCheckedChange = { session = it }, enabled = !engine.busy)
             }
-            Text(strings.getString(R.string.after_each_answer_the_model_s_state_of_this_conversation_is_saved_on_this_p),
-                style = small, color = muted)
             Text(
                 when {
                     saved != null -> strings.getString(R.string.saved_1_s_2_d_tokens, formatBytes(saved!!.bytes), saved!!.tokens)
@@ -90,12 +96,13 @@ fun ChatConfigurationDialog(engine: EngineState, chats: ChatsState, thinking: Bo
                     format = { "%.2f".format(Locale.US, it) },
                     enabled = !engine.busy,
                     accept = { it != 0f },
-                    hint = strings.getString(R.string.nonzero_from_1_to_2),
+                    hint = strings.getString(R.string.nonzero_from_1_to_2) + "\n\n" +
+                        strings.getString(R.string.negative_values_remove_the_vector_s_direction_from_every_layer_1_removes_it),
+                    summary = strings.getString(R.string.steering_strength_summary),
+                    validationHint = strings.getString(R.string.nonzero_from_1_to_2),
                 )
-                Text(strings.getString(R.string.negative_values_remove_the_vector_s_direction_from_every_layer_1_removes_it), style = small, color = muted)
             }
-            Text(if (engine.busy) strings.getString(R.string.wait_for_the_current_operation_to_finish_before_changing_these_settings)
-                else strings.getString(R.string.saved_for_this_chat_changes_apply_to_the_next_answer), style = small)
+            if (engine.busy) Text(strings.getString(R.string.wait_for_the_current_operation_to_finish_before_changing_these_settings), style = small)
         }
     }, confirmButton = {
         TextButton(enabled = !engine.busy && valid, onClick = {
@@ -103,5 +110,6 @@ fun ChatConfigurationDialog(engine: EngineState, chats: ChatsState, thinking: Bo
             if (available) ChatStore.setSteering(SteeringOptions(enabled, strength))
             onDismiss()
         }) { Text(strings.getString(R.string.save)) }
-    }, dismissButton = { TextButton(onClick = onDismiss) { Text(strings.getString(R.string.cancel)) } })
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text(strings.getString(R.string.cancel)) } },
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
 }

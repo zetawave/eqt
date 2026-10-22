@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="help_for">"Informazioni su %1$s"</string>
+    <string name="built_on_llama_cpp_and_ggml_model_weights_belong_to_their_publishers_under">"Basato su llama.cpp e GGML. I pesi dei modelli appartengono ai rispettivi autori e sono soggetti alle loro licenze."</string>
     <string name="chat">"Chat"</string>
     <string name="models">"Modelli"</string>
     <string name="settings">"Impostazioni"</string>
@@ -8,7 +10,6 @@
     <string name="no_model_loaded">"Nessun modello caricato"</string>
     <string name="ready">"Pronto"</string>
     <string name="load_model">"Carica modello"</string>
-    <string name="private_ai_that_runs_on_your_phone_nyour_conversations_never_leave_this_dev">"IA privata sul tuo telefono.\nLe tue conversazioni restano su questo dispositivo."</string>
     <string name="choose_a_model">"Scegli un modello"</string>
     <string name="equity_is_answering_in_another_chat">"Equity sta rispondendo in un\'altra chat."</string>
     <string name="the_model_stopped_while_reasoning_before_writing_an_answer">"Il modello si è fermato durante il ragionamento, prima di scrivere una risposta."</string>
@@ -35,7 +36,6 @@
     <string name="think">"Ragiona"</string>
     <string name="stop">"Interrompi"</string>
     <string name="send">"Invia"</string>
-    <string name="runs_on_this_device_nothing_is_sent_online">"Funziona su questo dispositivo. Nulla viene inviato online."</string>
     <string name="context">"Contesto"</string>
     <string name="nearly_full_a_new_chat_starts_fresh">"Quasi pieno: avvia una nuova chat per ricominciare."</string>
     <string name="grows_with_the_conversation">"Cresce con la conversazione."</string>
@@ -87,7 +87,6 @@
     <string name="about">"Informazioni"</string>
     <string name="developed_by_zetawave">"Sviluppato da Zetawave."</string>
     <string name="website">"Sito web"</string>
-    <string name="built_on_llama_cpp_and_ggml_model_weights_belong_to_their_publishers_under">"Basato su llama.cpp e GGML. I pesi dei modelli appartengono ai rispettivi autori e sono soggetti alle loro licenze."</string>
     <string name="open_source_licenses">"Licenze open source"</string>
     <string name="delete_all_chats_90">"Eliminare tutte le chat?"</string>
     <string name="the_answer_being_written_is_stopped">" La risposta in corso viene interrotta."</string>
@@ -342,4 +341,13 @@
     <string name="model_description_qwen36_35b_q4km">"Lo stesso Qwen3.6 35B-A3B nella versione dinamica a 4 bit di Unsloth (22,7 GB), il riferimento di qualità di Equity. I pesi condivisi restano in memoria e gli esperti vengono letti dall’archiviazione quando servono a ogni token."</string>
     <string name="model_tagline_qwen38_flash_next">"Enorme · sette volte la RAM del telefono · sperimentale"</string>
     <string name="model_description_qwen38_flash_next">"Qwen3.8 Flash Next: un modello mixture-of-experts da 125B (512 esperti, 10 per token) con una memoria n-gram da 51B, nella versione dinamica UD-Q2_K_XL di Unsloth (78,9 GB). Solo circa 3,4 GB restano in memoria; esperti e righe n-gram vengono letti dall’archiviazione quando servono a ogni token. Richiede circa 80 GB di spazio libero."</string>
+    <string name="answer_length_summary">"Lascia terminare le risposte o imposta un limite di token."</string>
+    <string name="processor_summary">"Scegli come il telefono elabora il modello."</string>
+    <string name="context_window_summary">"Quanta conversazione il modello può considerare insieme."</string>
+    <string name="expert_cache_summary">"Conserva più esperti in RAM per ridurre le letture dallo spazio di archiviazione."</string>
+    <string name="remember_chat_summary">"Salva uno stato riutilizzabile per riprendere la chat più velocemente, quando supportato."</string>
+    <string name="steering_strength_summary">"Regola quanto il vettore importato influenza le risposte."</string>
+    <string name="steering_summary">"Importa un vettore per orientare le risposte del modello."</string>
+    <string name="verify_model_summary">"Verifica il file del modello prima di importare un vettore compatibile."</string>
+    <string name="image_input_summary">"Aggiungi il supporto per foto, schermate e documenti scansionati."</string>
 </resources>

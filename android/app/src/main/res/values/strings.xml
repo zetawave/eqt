@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="help_for">"Help for %1$s"</string>
+    <string name="built_on_llama_cpp_and_ggml_model_weights_belong_to_their_publishers_under">"Built on llama.cpp and GGML. Model weights belong to their publishers under their own licenses."</string>
     <string name="chat">"Chat"</string>
     <string name="models">"Models"</string>
     <string name="settings">"Settings"</string>
@@ -8,7 +10,6 @@
     <string name="no_model_loaded">"No model loaded"</string>
     <string name="ready">"Ready"</string>
     <string name="load_model">"Load model"</string>
-    <string name="private_ai_that_runs_on_your_phone_nyour_conversations_never_leave_this_dev">"Private AI that runs on your phone.\nYour conversations never leave this device."</string>
     <string name="choose_a_model">"Choose a model"</string>
     <string name="equity_is_answering_in_another_chat">"Equity is answering in another chat."</string>
     <string name="the_model_stopped_while_reasoning_before_writing_an_answer">"The model stopped while reasoning, before writing an answer."</string>
@@ -35,7 +36,6 @@
     <string name="think">"Think"</string>
     <string name="stop">"Stop"</string>
     <string name="send">"Send"</string>
-    <string name="runs_on_this_device_nothing_is_sent_online">"Runs on this device. Nothing is sent online."</string>
     <string name="context">"Context"</string>
     <string name="nearly_full_a_new_chat_starts_fresh">"Nearly full: a new chat starts fresh."</string>
     <string name="grows_with_the_conversation">"Grows with the conversation."</string>
@@ -87,7 +87,6 @@
     <string name="about">"About"</string>
     <string name="developed_by_zetawave">"Developed by Zetawave."</string>
     <string name="website">"Website"</string>
-    <string name="built_on_llama_cpp_and_ggml_model_weights_belong_to_their_publishers_under">"Built on llama.cpp and GGML. Model weights belong to their publishers under their own licenses."</string>
     <string name="open_source_licenses">"Open-source licenses"</string>
     <string name="delete_all_chats_90">"Delete all chats?"</string>
     <string name="the_answer_being_written_is_stopped">" The answer being written is stopped."</string>
@@ -342,4 +341,13 @@
     <string name="model_description_qwen36_35b_q4km">"The same Qwen3.6 35B-A3B in Unsloth\'s dynamic 4-bit build (22.7 GB), Equity\'s quality reference. The shared weights stay in memory and the experts are read from storage as each token needs them."</string>
     <string name="model_tagline_qwen38_flash_next">"Huge · seven times the phone\'s RAM · experimental"</string>
     <string name="model_description_qwen38_flash_next">"Qwen3.8 Flash Next: a 125B mixture-of-experts model (512 experts, 10 per token) with a 51B n-gram memory, in Unsloth\'s dynamic UD-Q2_K_XL build (78.9 GB). Only about 3.4 GB stays in memory; experts and n-gram rows are read from storage as each token needs them. Needs about 80 GB of free storage."</string>
+    <string name="answer_length_summary">"Let answers finish naturally, or set a token limit."</string>
+    <string name="processor_summary">"Choose how the phone processes the model."</string>
+    <string name="context_window_summary">"How much conversation the model can consider at once."</string>
+    <string name="expert_cache_summary">"Keep more experts in RAM to reduce storage reads."</string>
+    <string name="remember_chat_summary">"Save a reusable model state to resume this chat faster, when supported."</string>
+    <string name="steering_strength_summary">"Adjust how strongly the imported vector affects answers."</string>
+    <string name="steering_summary">"Import a vector to adjust this model’s answers."</string>
+    <string name="verify_model_summary">"Check the model file before importing a matching vector."</string>
+    <string name="image_input_summary">"Add support for photos, screenshots and scanned documents."</string>
 </resources>

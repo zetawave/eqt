@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
@@ -36,7 +35,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -118,14 +116,13 @@ fun SettingsScreen(engine: EngineState) {
             )
             val unlimited = settings.maxTokens == ANSWER_UNLIMITED
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(strings.getString(R.string.answer_length_without_limit), style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        if (unlimited) strings.getString(R.string.answers_run_until_the_model_ends_them_or_the_context_window_is_full)
-                        else strings.getString(R.string.answers_stop_at_the_length_below),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                HelpLabel(
+                    strings.getString(R.string.answer_length_without_limit),
+                    if (unlimited) strings.getString(R.string.answers_run_until_the_model_ends_them_or_the_context_window_is_full)
+                    else strings.getString(R.string.answers_stop_at_the_length_below),
+                    summary = strings.getString(R.string.answer_length_summary),
+                    modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                )
                 Switch(checked = unlimited, onCheckedChange = { on ->
                     SettingsStore.update(context) { it.copy(maxTokens = if (on) ANSWER_UNLIMITED else 2048) }
                 })
@@ -152,15 +149,23 @@ fun SettingsScreen(engine: EngineState) {
         }
 
         Section(strings.getString(R.string.performance), strings.getString(R.string.applies_the_next_time_a_model_is_loaded)) {
-            Text(strings.getString(R.string.processor), style = MaterialTheme.typography.labelLarge)
+            HelpLabel(strings.getString(R.string.processor),
+                strings.getString(R.string.cpu_gpu_reads_long_prompts_chat_history_and_images_faster_on_the_gpu_and_us),
+                summary = strings.getString(R.string.processor_summary))
             Choice(listOf(false, true), settings.gpu, { if (it) "CPU + GPU" else "CPU" }) { value ->
                 SettingsStore.update(context) { it.copy(gpu = value) }
             }
-            Text(strings.getString(R.string.cpu_gpu_reads_long_prompts_chat_history_and_images_faster_on_the_gpu_and_us),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(strings.getString(R.string.cpu_threads), style = MaterialTheme.typography.labelLarge)
             Choice(listOf(2, 4, 6), settings.threads, { "$it" }) { value -> SettingsStore.update(context) { it.copy(threads = value) } }
-            Text(strings.getString(R.string.context_window), style = MaterialTheme.typography.labelLarge)
+            HelpLabel(
+                strings.getString(R.string.context_window),
+                when (settings.context) {
+                    CONTEXT_AUTO -> strings.getString(R.string.auto_sizes_the_window_from_free_memory_at_load_without_taking_the_expert_ca)
+                    CONTEXT_MAX -> strings.getString(R.string.max_loads_the_model_s_full_trained_length_or_as_much_as_free_memory_allows)
+                    else -> strings.getString(R.string.starting_size)
+                } + strings.getString(R.string.the_window_grows_for_longer_messages_and_attachments_when_memory_allows_the),
+                summary = strings.getString(R.string.context_window_summary),
+            )
             Choice(listOf(CONTEXT_AUTO, 2048, 4096, 8192, CONTEXT_MAX), settings.context, { value ->
                 when (value) {
                     CONTEXT_AUTO -> strings.getString(R.string.auto)
@@ -168,19 +173,12 @@ fun SettingsScreen(engine: EngineState) {
                     else -> "${value / 1024}K"
                 }
             }) { value -> SettingsStore.update(context) { it.copy(context = value) } }
-            Text(
-                when (settings.context) {
-                    CONTEXT_AUTO -> strings.getString(R.string.auto_sizes_the_window_from_free_memory_at_load_without_taking_the_expert_ca)
-                    CONTEXT_MAX -> strings.getString(R.string.max_loads_the_model_s_full_trained_length_or_as_much_as_free_memory_allows)
-                    else -> strings.getString(R.string.starting_size)
-                } + strings.getString(R.string.the_window_grows_for_longer_messages_and_attachments_when_memory_allows_the),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(strings.getString(R.string.expert_cache_large_model), style = MaterialTheme.typography.labelLarge)
+            HelpLabel(strings.getString(R.string.expert_cache_large_model),
+                strings.getString(R.string.auto_sizes_the_cache_from_free_memory_a_larger_cache_reads_storage_less_oft),
+                summary = strings.getString(R.string.expert_cache_summary))
             Choice(listOf(0, 1024, 2048, 3072), settings.expertCacheMiB, { if (it == 0) strings.getString(R.string.auto) else "${it / 1024} GB" }) { value ->
                 SettingsStore.update(context) { it.copy(expertCacheMiB = value) }
             }
-            Text(strings.getString(R.string.auto_sizes_the_cache_from_free_memory_a_larger_cache_reads_storage_less_oft),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         Section(strings.getString(R.string.diagnostics)) {
@@ -206,11 +204,8 @@ fun SettingsScreen(engine: EngineState) {
             }
         }
 
-        Section(strings.getString(R.string.privacy)) {
-            Text(
-                strings.getString(R.string.equity_runs_models_entirely_on_this_phone_prompts_answers_and_conversations),
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Section(strings.getString(R.string.privacy),
+            strings.getString(R.string.equity_runs_models_entirely_on_this_phone_prompts_answers_and_conversations)) {
             OutlinedButton(
                 onClick = { confirmDeleteAll = true },
                 enabled = chats.summaries.isNotEmpty(),
@@ -229,7 +224,6 @@ fun SettingsScreen(engine: EngineState) {
                 Text(strings.getString(R.string.version_1_s, BuildConfigInfo.VERSION), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(strings.getString(R.string.developed_by_zetawave), style = MaterialTheme.typography.bodyMedium)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { openLink(context, WEBSITE_URL) }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Outlined.Language, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -242,8 +236,6 @@ fun SettingsScreen(engine: EngineState) {
                     Text("GitHub")
                 }
             }
-            Text(strings.getString(R.string.built_on_llama_cpp_and_ggml_model_weights_belong_to_their_publishers_under),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = {
                 licenses = context.assets.list("")?.filter { it.endsWith(".txt") }?.sorted().orEmpty()
             }) { Text(strings.getString(R.string.open_source_licenses)) }
@@ -318,14 +310,11 @@ private fun openLink(context: Context, url: String) {
 
 @Composable
 private fun Section(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(24.dp)) {
-        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                subtitle?.let {
-                    Spacer(Modifier.height(2.dp))
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+    PremiumCard(tint = true) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             content()
         }
