@@ -173,6 +173,12 @@ def main():
                 request = json.loads(json.dumps(base))
                 request["load"].update(batch=case["batch"], expert_streaming=True, **case["load"])
                 result = runner.run("eqt-bench", model, request, workdir)[1]
+                counters = result["expert_cache"]
+                bank_bytes = sum(value for group in counters["decode_io_bytes_by_bank"].values() for value in group.values())
+                if bank_bytes != counters["decode_io_bytes"] or counters["decode_io_failed_jobs"]:
+                    raise AssertionError("Drained bank I/O counters disagree with total completed read ranges")
+                if counters["decode_hits"] + counters["decode_inflight_hits"] + counters["decode_misses"] != counters["decode_demanded_experts"]:
+                    raise AssertionError("Decode cache outcomes do not cover every demanded expert")
                 delta = max(abs(a - b) for a, b in zip(reference["first_logits"], result["first_logits"]))
                 outcome = dict(case=case["name"], load=case["load"], batch=case["batch"],
                                bitwise_logits=reference["first_logits"] == result["first_logits"],

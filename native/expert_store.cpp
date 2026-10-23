@@ -770,6 +770,8 @@ void ExpertStore::add_bank(ggml_tensor *tensor, uint64_t file_offset) {
     // A slot bank holds the page-rounded file range of one expert, whose start may sit up to a page before it.
     const size_t span = options_.slots ? round_up(stride, page) + page : round_up(stride, page);
     layer->banks.push_back({static_cast<uint8_t *>(tensor->data), stride, file_offset, tensor, layer->slot_bytes});
+    layer->banks.back().component = std::strstr(name, "ffn_gate_exps") ? 0 : std::strstr(name, "ffn_up_exps") ? 1
+        : std::strstr(name, "ffn_down_exps") ? 2 : 3;
     layer->slot_bytes += span;
     layer->entry_bytes += span;
     routed_bytes_ += ggml_nbytes(tensor);
@@ -1592,8 +1594,13 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
         if (entry.state == State::resident) {
             ++stats_.hits;
             stats_.prefetch_hits += entry.prefetched;
+            if (decode_phase_) {
+                ++stats_.decode_hits;
+                stats_.decode_prefetch_hits += entry.prefetched;
+            }
         } else if (entry.state == State::loading) {
             ++stats_.inflight_hits;
+            stats_.decode_inflight_hits += decode_phase_;
             queued_reads = true;
         } else {
             ++stats_.misses;
@@ -2160,7 +2167,7 @@ void ExpertStore::queue_reads(Layer &layer, int first, int count, uint64_t membe
     {
         std::lock_guard lock(mutex_);
         for (int j = 0; j < jobs; ++j) {
-            queues_[queue].push_back({&layer, starts[j], first, count, members, Clock::now(), widths[j]});
+            queues_[queue].push_back({&layer, starts[j], first, count, members, Clock::now(), widths[j], decode_phase_});
         }
     }
     if (queue == queue_demand) {
@@ -2386,7 +2393,7 @@ void ExpertStore::worker(bool demand_only, bool awake) {
         const auto read_start = Clock::now();
         {
             std::lock_guard lock(mutex_);
-            if (active_reads_++ == 0) {
+            if (job.decode && active_reads_++ == 0) {
                 busy_since_ = read_start;
             }
         }
@@ -2414,14 +2421,24 @@ void ExpertStore::worker(bool demand_only, bool awake) {
                 entry.pending.fetch_sub(job.banks);
             }
         }
-        inflight_jobs_.fetch_sub(1);
         {
             std::lock_guard lock(mutex_);
-            const bool decoding = awake_decode_.load(std::memory_order_relaxed);
+            const bool decoding = job.decode;
             if (decoding) {
                 stats_.decode_io_bytes += job_bytes(job);
+                stats_.decode_failed_jobs += failed;
+                for (int b = job.bank; b < job.bank + job.banks; ++b) {
+                    const auto &part = job.layer->banks[b];
+                    uint64_t bytes = part.stride * static_cast<uint64_t>(job.count);
+                    if (packed_) {
+                        const uint64_t end = b + 1 < job.bank + job.banks ? job.layer->banks[b + 1].slot_offset
+                            : job.count > 1 ? job.layer->slot_bytes : part.slot_offset + round_up(part.stride, page);
+                        bytes = (end - part.slot_offset) * static_cast<uint64_t>(job.count);
+                    }
+                    stats_.decode_bank_bytes[demand ? 0 : 1][part.component] += bytes;
+                }
             }
-            if (--active_reads_ == 0 && decoding) {
+            if (decoding && --active_reads_ == 0) {
                 stats_.decode_io_busy_ms += since(busy_since_);
             }
             if (demand) {
@@ -2436,6 +2453,8 @@ void ExpertStore::worker(bool demand_only, bool awake) {
             } else {
                 --speculative_inflight_;
             }
+            // end_request waits under this mutex: publish the counters before exposing completion.
+            inflight_jobs_.fetch_sub(1);
         }
         if (!demand && options_.prefetch_inflight > 0) {
             queue_ready_.notify_all(); // a capped speculative read may start now (demand-only workers ignore it)
@@ -2532,6 +2551,9 @@ Json ExpertStore::statistics() const {
             {"io_wait_ms", stats_.io_wait_ms},
             {"decode_demanded_experts", stats_.decode_demanded},
             {"decode_misses", stats_.decode_misses},
+            {"decode_hits", stats_.decode_hits},
+            {"decode_prefetch_hits", stats_.decode_prefetch_hits},
+            {"decode_inflight_hits", stats_.decode_inflight_hits},
             {"decode_read_bytes", stats_.decode_read_bytes},
             {"decode_io_wait_ms", stats_.decode_io_wait_ms},
             {"overlapped_layers", stats_.overlapped_layers},
@@ -2551,6 +2573,14 @@ Json ExpertStore::statistics() const {
             {"late_predicted_correct_by_rank", std::vector<uint64_t>(std::begin(stats_.late_rank_correct), std::end(stats_.late_rank_correct))},
             {"late_predict_ms", stats_.late_ms},
             {"decode_io_bytes", stats_.decode_io_bytes},
+            {"decode_io_accounting", packed_ ? "packed aligned ranges, including drain; demand/speculative at dispatch"
+                                            : "logical bank payload ranges, including drain; demand/speculative at dispatch"},
+            {"decode_io_failed_jobs", stats_.decode_failed_jobs},
+            {"decode_io_bytes_by_bank", {
+                {"demand", {{"gate", stats_.decode_bank_bytes[0][0]}, {"up", stats_.decode_bank_bytes[0][1]},
+                            {"down", stats_.decode_bank_bytes[0][2]}, {"other", stats_.decode_bank_bytes[0][3]}}},
+                {"speculative", {{"gate", stats_.decode_bank_bytes[1][0]}, {"up", stats_.decode_bank_bytes[1][1]},
+                                 {"down", stats_.decode_bank_bytes[1][2]}, {"other", stats_.decode_bank_bytes[1][3]}}}}},
             {"decode_io_busy_ms", stats_.decode_io_busy_ms},
             {"decode_budget_bytes", decode_budget_},
             {"decode_demand_jobs", stats_.decode_demand_jobs},

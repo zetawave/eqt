@@ -2275,8 +2275,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     const Json decode_cpu = counter_delta(decode_cpu_start, process_cpu());
     const double total_ms = milliseconds(start);
     Json expert_stats = nullptr;
+    const auto drain_start = Clock::now();
+    double drain_ms = 0;
     if (s.store) {
         s.store->end_request();
+        drain_ms = milliseconds(drain_start);
         expert_stats = s.store->statistics();
     }
     Json result = {
@@ -2329,6 +2332,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"expert_cache_misses", expert_stats.is_null() ? Json(nullptr) : expert_stats["misses"]},
         {"expert_io_wait_ms", expert_stats.is_null() ? Json(nullptr) : expert_stats["io_wait_ms"]},
         {"expert_cache", expert_stats},
+        {"expert_io_drain_ms", s.store ? Json(drain_ms) : Json(nullptr)},
         {"op_profile", op_rows},
         {"decode_compute_lent", compute_lent},
         {"gpu_offload", s.gpu ? s.gpu->statistics() : Json(nullptr)},

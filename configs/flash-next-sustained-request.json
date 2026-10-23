@@ -1,0 +1,29 @@
+{
+  "load": {
+    "context": 8192, "batch": 512, "threads": 6, "memory_budget_mib": 8192,
+    "mmap": false, "expert_streaming": true, "expert_cache_mib": 1792,
+    "io_threads": 16, "direct_io": true, "prefetch": true,
+    "speculative_pool": true, "lookahead_layers": 2, "lookahead2_count": 5,
+    "read_priority": true, "prefetch_inflight": 2, "lookahead_router_q8": true,
+    "expert_pack_split": 2, "coalesce_kib": 2048, "coalesce_gap": 1,
+    "prefill_prefetch_mib": 0, "prefill_prefetch_min_coverage": 0.9
+  },
+  "sequence": [
+    {
+      "messages": [{"role": "user", "content": "Scrivi in italiano una guida tecnica dettagliata di circa 1500 parole su come Android gestisce la memoria virtuale. Spiega tabelle delle pagine, fault, file mappati, memoria anonima, zRAM e pressione di memoria. Usa esempi concreti e termina con un confronto ragionato tra le diverse strategie."}],
+      "max_tokens": 3072, "temperature": 0, "seed": 42, "thinking": false, "ignore_eos": false
+    },
+    {
+      "messages": [{"role": "user", "content": "Write a detailed tutorial of about 1500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."}],
+      "max_tokens": 3072, "temperature": 0, "seed": 42, "thinking": false, "ignore_eos": false
+    },
+    {
+      "messages": [{"role": "user", "content": "Design and explain a C++20 bounded producer-consumer queue for an offline inference engine. Include complete code, ownership rules, cancellation, shutdown, worker failures and a worked execution trace. Discuss deadlocks and memory ordering in detail. Aim for a substantial tutorial with at least eight concrete failure scenarios."}],
+      "max_tokens": 3072, "temperature": 0, "seed": 42, "thinking": false, "ignore_eos": false
+    },
+    {
+      "messages": [{"role": "user", "content": "Analyze a hypothetical warehouse with three machines and two workers. Each order needs 4 minutes on machine A, 7 on B and 3 on C, in that order. Workers attend only the first and last minute of each operation; machines run unattended otherwise. Design a feasible schedule for six orders, show start and finish times, verify resource conflicts, derive lower bounds and explain whether your schedule is optimal. State assumptions and examine two alternative schedules."}],
+      "max_tokens": 3072, "temperature": 0, "seed": 42, "thinking": false, "ignore_eos": false
+    }
+  ]
+}

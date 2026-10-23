@@ -172,6 +172,7 @@ class ExpertStore {
         uint64_t file_offset;
         const ggml_tensor *tensor;
         size_t slot_offset = 0; // this bank's region inside an expert slot
+        int component = 3; // gate, up, down, other
     };
     struct Entry {
         State state = State::absent;
@@ -233,17 +234,21 @@ class ExpertStore {
         uint64_t members;
         std::chrono::steady_clock::time_point queued;
         int banks = 1;
+        bool decode = false; // submission phase, retained through promotion and final draining
     };
     struct Stats {
         uint64_t ensure_calls = 0, demanded = 0, hits = 0, prefetch_hits = 0, inflight_hits = 0, misses = 0;
         uint64_t demand_read_bytes = 0, prefetch_read_bytes = 0, prefetch_issued = 0, prefetch_wasted = 0;
         uint64_t evictions = 0, overflow_events = 0, borrowed_evictions = 0, predicted = 0, predicted_correct = 0;
         uint64_t decode_demanded = 0, decode_misses = 0, decode_read_bytes = 0;
+        uint64_t decode_hits = 0, decode_prefetch_hits = 0, decode_inflight_hits = 0;
         uint64_t read_jobs = 0, coalesced_reads = 0, bridged_experts = 0, slot_cold_reuses = 0;
         double io_wait_ms = 0, decode_io_wait_ms = 0, predict_ms = 0, predict_wait_ms = 0, evict_ms = 0;
         uint64_t overlapped_layers = 0; // decode layers whose misses compute threads waited for per bank
         uint64_t demand_jobs = 0;
         uint64_t decode_prefetch_issued = 0, decode_io_bytes = 0;
+        uint64_t decode_bank_bytes[2][4] = {}; // dispatch class (demand/speculative), then component
+        uint64_t decode_failed_jobs = 0;
         double decode_io_busy_ms = 0; // decoding wall time with at least one expert read in flight
         uint64_t rank_predicted[16] = {}, rank_correct[16] = {};
         uint64_t early_rank_predicted[16] = {}, early_rank_correct[16] = {}, early_prefetch_issued = 0;
@@ -394,7 +399,7 @@ private:
     uint64_t clock_ = 0, resident_bytes_ = 0, routed_bytes_ = 0, effective_budget_ = 0;
     uint64_t prompt_budget_ = 0, decode_budget_ = 0, decode_extra_ = 0;
     void plan_decode_quotas();
-    int active_reads_ = 0;                    // guarded by mutex_
+    int active_reads_ = 0;                    // decode reads only; guarded by mutex_
     std::chrono::steady_clock::time_point busy_since_;
     uint32_t epoch_ = 0;
     uint64_t requests_ = 0;

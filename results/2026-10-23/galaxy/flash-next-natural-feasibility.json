@@ -1,0 +1,2246 @@
+{
+  "date": "2026-10-23",
+  "kind": "local_galaxy_natural_eos_feasibility_measurement",
+  "device": "Galaxy S24+ / Exynos 2400 / stock Android",
+  "surface": "CLI as app user; USB powered; display dozing during sustained run",
+  "model_manifest": "configs/flash-next-model.json",
+  "model_hash_rechecked": false,
+  "context": 8192,
+  "batch": 128,
+  "threads": 6,
+  "short_screen": {
+    "tokens": 128,
+    "termination": "length",
+    "decode_tokens_per_second": 2.7546254785790056,
+    "expert_read_bytes_per_token": 562539584.0
+  },
+  "sustained": {
+    "tokens": 3140,
+    "requests": [
+      {
+        "workload_index": 0,
+        "tokens": 799,
+        "termination": "eos",
+        "decode_tokens_per_second": 2.6951526824511163,
+        "decode_ms": 296458.158086,
+        "prefill_ms": 13185.764453,
+        "expert_read_bytes_per_token": 577769882.1126409,
+        "expert_io_busy_gb_s": 1.9523121932937715,
+        "memory_after": {
+          "rss_bytes": 5692416000,
+          "peak_rss_bytes": 6322577408,
+          "pss_bytes": 5693096960,
+          "minor_faults": 1652179,
+          "major_faults": 4691,
+          "storage_read_bytes": 479786115072
+        },
+        "decode_process_cpu": {
+          "user_ms": 1865043.142,
+          "system_ms": 215538.34499999997,
+          "minor_faults": 88309.0,
+          "major_faults": 4522.0,
+          "voluntary_switches": 4576545.0,
+          "involuntary_switches": 562785.0
+        },
+        "token_ids_sha256": "f9a24b6efba4eede37f53942c3e0e471f9db5ee7a3b6a210a377f712d10c0987"
+      },
+      {
+        "workload_index": 1,
+        "tokens": 805,
+        "termination": "eos",
+        "decode_tokens_per_second": 2.601744889114139,
+        "decode_ms": 309407.737618,
+        "prefill_ms": 15680.319766,
+        "expert_read_bytes_per_token": 612333855.4832298,
+        "expert_io_busy_gb_s": 1.9741542684885387,
+        "memory_after": {
+          "rss_bytes": 5734367232,
+          "peak_rss_bytes": 6322577408,
+          "pss_bytes": 5734960128,
+          "minor_faults": 1838204,
+          "major_faults": 68617,
+          "storage_read_bytes": 985365655552
+        },
+        "decode_process_cpu": {
+          "user_ms": 1939307.77,
+          "system_ms": 226539.775,
+          "minor_faults": 105887.0,
+          "major_faults": 5280.0,
+          "voluntary_switches": 4846356.0,
+          "involuntary_switches": 521855.0
+        },
+        "token_ids_sha256": "7dba9ac8cebb23a6623a0518a5c7c3362870d1d288c7fe6a7d94bec5ce26397e"
+      },
+      {
+        "workload_index": 2,
+        "tokens": 1536,
+        "termination": "length",
+        "decode_tokens_per_second": 2.116407675949862,
+        "decode_ms": 725758.093516,
+        "prefill_ms": 16426.952226,
+        "expert_read_bytes_per_token": 662150461.3333334,
+        "expert_io_busy_gb_s": 1.8538832138743022,
+        "memory_after": {
+          "rss_bytes": 5736984576,
+          "peak_rss_bytes": 6322577408,
+          "pss_bytes": 5737540608,
+          "minor_faults": 2037539,
+          "major_faults": 170253,
+          "storage_read_bytes": 2015292420096
+        },
+        "decode_process_cpu": {
+          "user_ms": 4493555.545,
+          "system_ms": 537615.98,
+          "minor_faults": 119544.0,
+          "major_faults": 42854.0,
+          "voluntary_switches": 9778433.0,
+          "involuntary_switches": 1310763.0
+        },
+        "token_ids_sha256": "1f83005ef1c19b9d1a9eade6191a9c72e709158f95818ccaf36f723b4f77b9f1"
+      }
+    ],
+    "decode_tokens_per_second": 2.3580230045564576,
+    "tokens_per_second_by_minute": [
+      2.95,
+      2.7,
+      2.716666666666667,
+      2.6666666666666665,
+      2.45,
+      2.6,
+      2.683333333333333,
+      2.566666666666667,
+      2.6,
+      2.5833333333333335,
+      2.6,
+      2.45,
+      1.9166666666666667,
+      1.9666666666666666,
+      2.1,
+      2.0166666666666666,
+      2.1166666666666667,
+      2.15,
+      2.1166666666666667,
+      1.95,
+      2.0166666666666666,
+      2.0166666666666666
+    ],
+    "minute_scope": "concatenated decode time; excludes prefill and request gaps",
+    "last_ten_full_decode_windows_mean": 2.0366666666666666,
+    "sequence_wall_seconds": 1378.435657343,
+    "decode_ms": 1331623.9892199999,
+    "prefill_ms": 45293.036445000005,
+    "end_to_end_tokens_per_second": 2.27794455495478,
+    "terminations": {
+      "eos": 2,
+      "length": 1
+    },
+    "expert_read_bytes_per_token": 627907642.700637,
+    "expert_io_busy_gb_s": 1.9053974001105278,
+    "thermal_before": "0",
+    "thermal_after": "4",
+    "celsius_before": {
+      "AP": 37.9,
+      "BAT": 33.2,
+      "CP": 38.0,
+      "PA": 37.8,
+      "SKIN": 35.6,
+      "SUBBAT": 0.0,
+      "USB": 27.8
+    },
+    "celsius_after": {
+      "AP": 65.0,
+      "BAT": 50.5,
+      "CP": 62.2,
+      "PA": 60.2,
+      "SKIN": 49.9,
+      "SUBBAT": 0.0,
+      "USB": 38.6
+    },
+    "artifacts": {
+      "eqt-bench": "2ea58c1cf36a7280861b85a7adf479cf722df67d9215f485fd08ffeab97afefe",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "input_request": {
+      "load": {
+        "context": 8192,
+        "batch": 128,
+        "threads": 6,
+        "memory_budget_mib": 8192,
+        "mmap": false,
+        "expert_streaming": true,
+        "expert_cache_mib": 1792,
+        "io_threads": 16,
+        "direct_io": true,
+        "prefetch": true,
+        "speculative_pool": true,
+        "lookahead_layers": 2,
+        "lookahead2_count": 5,
+        "read_priority": true,
+        "prefetch_inflight": 2,
+        "lookahead_router_q8": true,
+        "expert_pack_split": 2,
+        "coalesce_kib": 2048,
+        "coalesce_gap": 1,
+        "prefill_prefetch_mib": 0,
+        "prefill_prefetch_min_coverage": 0.9,
+        "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+      },
+      "sequence": [
+        {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Scrivi in italiano una guida tecnica dettagliata di circa 500 parole su come Android gestisce la memoria virtuale. Spiega tabelle delle pagine, fault, file mappati, memoria anonima, zRAM e pressione di memoria. Usa esempi concreti e termina con un confronto ragionato tra le diverse strategie."
+            }
+          ],
+          "max_tokens": 1536,
+          "temperature": 0,
+          "seed": 42,
+          "thinking": false,
+          "ignore_eos": false
+        },
+        {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Write a detailed tutorial of about 500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."
+            }
+          ],
+          "max_tokens": 1536,
+          "temperature": 0,
+          "seed": 42,
+          "thinking": false,
+          "ignore_eos": false
+        },
+        {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Design and explain a C++20 bounded producer-consumer queue for an offline inference engine. Include complete code, ownership rules, cancellation, shutdown, worker failures and a worked execution trace. Discuss deadlocks and memory ordering in detail. Aim for a substantial tutorial with four concrete failure scenarios."
+            }
+          ],
+          "max_tokens": 1536,
+          "temperature": 0,
+          "seed": 42,
+          "thinking": false,
+          "ignore_eos": false
+        },
+        {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Analyze a hypothetical warehouse with three machines and two workers. Each order needs 4 minutes on machine A, 7 on B and 3 on C, in that order. Workers attend only the first and last minute of each operation; machines run unattended otherwise. Design a feasible schedule for six orders, show start and finish times, verify resource conflicts, derive lower bounds and explain whether your schedule is optimal. State assumptions and examine two alternative schedules."
+            }
+          ],
+          "max_tokens": 1536,
+          "temperature": 0,
+          "seed": 42,
+          "thinking": false,
+          "ignore_eos": false
+        }
+      ],
+      "sustained_seconds": 900.0
+    },
+    "energy_joules": null
+  },
+  "cache_screen": {
+    "rows": [
+      {
+        "cache_mib": 1792,
+        "tokens": 32,
+        "tokens_equal": true,
+        "speed": 2.613556985279453,
+        "io_mb_token": 547.204608,
+        "busy_gbs": 1.8131418001733768,
+        "cache_hits": 0.5140456989247312,
+        "drain_ms": 0.08625,
+        "io_by_bank": {
+          "demand": {
+            "gate": 1285316608,
+            "up": 1285316608,
+            "down": 2466201600,
+            "other": 0
+          },
+          "speculative": {
+            "gate": 3180830720,
+            "up": 3180830720,
+            "down": 6112051200,
+            "other": 0
+          }
+        },
+        "before": {
+          "celsius": {
+            "AP": 47.9,
+            "BAT": 45.2,
+            "CP": 47.7,
+            "PA": 47.7,
+            "SKIN": 43.2,
+            "SUBBAT": 0.0,
+            "USB": 38.5
+          },
+          "thermal": "3",
+          "available_mib": 7005.0859375
+        },
+        "after": {
+          "celsius": {
+            "AP": 67.1,
+            "BAT": 46.9,
+            "CP": 59.2,
+            "PA": 57.1,
+            "SKIN": 46.6,
+            "SUBBAT": 0.0,
+            "USB": 38.7
+          },
+          "thermal": "3"
+        }
+      },
+      {
+        "cache_mib": 2304,
+        "tokens": 32,
+        "tokens_equal": true,
+        "speed": 2.3238642521959156,
+        "io_mb_token": 516.932864,
+        "busy_gbs": 1.736302584119686,
+        "cache_hits": 0.5555107526881721,
+        "drain_ms": 0.085625,
+        "io_by_bank": {
+          "demand": {
+            "gate": 1063936000,
+            "up": 1063936000,
+            "down": 2040422400,
+            "other": 0
+          },
+          "speculative": {
+            "gate": 3156557824,
+            "up": 3156557824,
+            "down": 6060441600,
+            "other": 0
+          }
+        },
+        "before": {
+          "celsius": {
+            "AP": 67.1,
+            "BAT": 46.9,
+            "CP": 59.2,
+            "PA": 57.1,
+            "SKIN": 46.6,
+            "SUBBAT": 0.0,
+            "USB": 38.7
+          },
+          "thermal": "3",
+          "available_mib": 7128.28125
+        },
+        "after": {
+          "celsius": {
+            "AP": 63.5,
+            "BAT": 47.4,
+            "CP": 57.7,
+            "PA": 55.8,
+            "SKIN": 46.7,
+            "SUBBAT": 0.0,
+            "USB": 38.5
+          },
+          "thermal": "3"
+        }
+      },
+      {
+        "cache_mib": 1792,
+        "tokens": 32,
+        "tokens_equal": true,
+        "speed": 2.7473301305419993,
+        "io_mb_token": 555.315712,
+        "busy_gbs": 1.9002112407384935,
+        "cache_hits": 0.514986559139785,
+        "drain_ms": 0.085,
+        "io_by_bank": {
+          "demand": {
+            "gate": 1170169856,
+            "up": 1170169856,
+            "down": 2242252800,
+            "other": 0
+          },
+          "speculative": {
+            "gate": 3363086336,
+            "up": 3363086336,
+            "down": 6461337600,
+            "other": 0
+          }
+        },
+        "before": {
+          "celsius": {
+            "AP": 63.5,
+            "BAT": 47.4,
+            "CP": 57.7,
+            "PA": 55.8,
+            "SKIN": 46.7,
+            "SUBBAT": 0.0,
+            "USB": 38.5
+          },
+          "thermal": "3",
+          "available_mib": 7305.125
+        },
+        "after": {
+          "celsius": {
+            "AP": 63.9,
+            "BAT": 47.6,
+            "CP": 58.0,
+            "PA": 56.3,
+            "SKIN": 47.0,
+            "SUBBAT": 0.0,
+            "USB": 38.4
+          },
+          "thermal": "4"
+        }
+      }
+    ],
+    "artifacts": {
+      "eqt-bench": "d0a665ad103c8b2d7dbd88940d4978053549580c10ab3b865a592b304f231828",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "source_sha256": "d828b1fac15f02dc17d2f5bdfdf5c6a973a545914aa8db37515b293157f4f1f4"
+  },
+  "large_cache_screen": {
+    "rows": [
+      {
+        "cache_mib": 2816,
+        "tokens": 32,
+        "tokens_equal": true,
+        "speed": 0.6920564195296115,
+        "io_mb_token": 476.375808,
+        "busy_gbs": 1.0310648035420922,
+        "cache_hits": 0.6026209677419355,
+        "drain_ms": 0.087344,
+        "io_by_bank": {
+          "demand": {
+            "gate": 942940160,
+            "up": 942940160,
+            "down": 1806336000,
+            "other": 0
+          },
+          "speculative": {
+            "gate": 2947514368,
+            "up": 2947514368,
+            "down": 5656780800,
+            "other": 0
+          }
+        },
+        "before": {
+          "celsius": {
+            "AP": 48.3,
+            "BAT": 45.2,
+            "CP": 48.0,
+            "PA": 48.0,
+            "SKIN": 43.5,
+            "SUBBAT": 0.0,
+            "USB": 38.3
+          },
+          "thermal": "3",
+          "available_mib": 7295.015625
+        },
+        "after": {
+          "celsius": {
+            "AP": 63.3,
+            "BAT": 47.2,
+            "CP": 57.8,
+            "PA": 56.2,
+            "SKIN": 46.7,
+            "SUBBAT": 0.0,
+            "USB": 38.3
+          },
+          "thermal": "3"
+        }
+      }
+    ],
+    "artifacts": {
+      "eqt-bench": "d0a665ad103c8b2d7dbd88940d4978053549580c10ab3b865a592b304f231828",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "source_sha256": "d828b1fac15f02dc17d2f5bdfdf5c6a973a545914aa8db37515b293157f4f1f4"
+  },
+  "recovery_screen": {
+    "rows": [
+      {
+        "cache_mib": 1792,
+        "tokens": 32,
+        "tokens_equal": true,
+        "speed": 3.083500172116547,
+        "io_mb_token": 550.61696,
+        "busy_gbs": 2.0362280695934643,
+        "cache_hits": 0.5129704301075269,
+        "drain_ms": 0.077578,
+        "io_by_bank": {
+          "demand": {
+            "gate": 1222737920,
+            "up": 1222737920,
+            "down": 2342707200,
+            "other": 0
+          },
+          "speculative": {
+            "gate": 3270819840,
+            "up": 3270819840,
+            "down": 6289920000,
+            "other": 0
+          }
+        },
+        "before": {
+          "celsius": {
+            "AP": 43.8,
+            "BAT": 42.5,
+            "CP": 44.0,
+            "PA": 44.0,
+            "SKIN": 40.6,
+            "SUBBAT": 0.0,
+            "USB": 37.8
+          },
+          "thermal": "2",
+          "available_mib": 7115.12109375
+        },
+        "after": {
+          "celsius": {
+            "AP": 64.3,
+            "BAT": 43.0,
+            "CP": 53.1,
+            "PA": 51.6,
+            "SKIN": 43.0,
+            "SUBBAT": 0.0,
+            "USB": 37.8
+          },
+          "thermal": "2"
+        }
+      }
+    ],
+    "artifacts": {
+      "eqt-bench": "d0a665ad103c8b2d7dbd88940d4978053549580c10ab3b865a592b304f231828",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "source_sha256": "d828b1fac15f02dc17d2f5bdfdf5c6a973a545914aa8db37515b293157f4f1f4"
+  },
+  "cache_profile_records": [
+    {
+      "file": "cache-1792-0.json",
+      "decode_process_cpu": {
+        "user_ms": 75077.968,
+        "system_ms": 7912.361999999999,
+        "minor_faults": 76280.0,
+        "major_faults": 44.0,
+        "voluntary_switches": 170685.0,
+        "involuntary_switches": 21651.0
+      },
+      "memory_after": {
+        "rss_bytes": 6031941632,
+        "peak_rss_bytes": 6329860096,
+        "pss_bytes": 6032937984,
+        "minor_faults": 1642776,
+        "major_faults": 187,
+        "storage_read_bytes": 35596029952
+      },
+      "op_profile": [
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq2_xs",
+          "ms_per_token": 156.15646415625017,
+          "nodes_per_token": 91.0625
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q5_K",
+          "ms_per_token": 57.37593768749978,
+          "nodes_per_token": 182.125
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q8_0",
+          "ms_per_token": 30.466222750000014,
+          "nodes_per_token": 236.375
+        },
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq4_nl",
+          "ms_per_token": 23.236296312500027,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q6_K",
+          "ms_per_token": 20.673444593750006,
+          "nodes_per_token": 62.0
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q4_K",
+          "ms_per_token": 18.000301625000002,
+          "nodes_per_token": 0.9375
+        },
+        {
+          "op": "ARGSORT",
+          "type": "f32",
+          "ms_per_token": 13.85856940625001,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "f32",
+          "ms_per_token": 12.308190062500087,
+          "nodes_per_token": 255.75
+        },
+        {
+          "op": "GATED_DELTA_NET",
+          "type": "f32",
+          "ms_per_token": 8.579314843749996,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "CPY",
+          "type": "f32",
+          "ms_per_token": 5.711102468749994,
+          "nodes_per_token": 82.34375
+        },
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq3_xxs",
+          "ms_per_token": 5.034233531250002,
+          "nodes_per_token": 1.9375
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "bf16",
+          "ms_per_token": 4.233202812499997,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "UNARY",
+          "type": "f32",
+          "ms_per_token": 3.8889283749999426,
+          "nodes_per_token": 389.4375
+        },
+        {
+          "op": "CONCAT",
+          "type": "f32",
+          "ms_per_token": 2.9162501249999946,
+          "nodes_per_token": 59.09375
+        },
+        {
+          "op": "DSV4_HC_POST",
+          "type": "f32",
+          "ms_per_token": 2.897063437500015,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "MUL",
+          "type": "f32",
+          "ms_per_token": 1.9126074062499994,
+          "nodes_per_token": 193.75
+        },
+        {
+          "op": "DSV4_HC_PRE",
+          "type": "f32",
+          "ms_per_token": 1.8860214062500043,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "f32",
+          "ms_per_token": 1.8845059374999986,
+          "nodes_per_token": 61.03125
+        },
+        {
+          "op": "ADD",
+          "type": "f32",
+          "ms_per_token": 1.6796393437498236,
+          "nodes_per_token": 554.125
+        },
+        {
+          "op": "FLASH_ATTN_EXT",
+          "type": "f32",
+          "ms_per_token": 1.1775855937499997,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "GLU",
+          "type": "f32",
+          "ms_per_token": 1.1523894062500022,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "SUM_ROWS",
+          "type": "f32",
+          "ms_per_token": 1.127764281250003,
+          "nodes_per_token": 47.46875
+        },
+        {
+          "op": "DIV",
+          "type": "f32",
+          "ms_per_token": 1.0629403750000028,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "CONT",
+          "type": "f32",
+          "ms_per_token": 0.9731152499999919,
+          "nodes_per_token": 68.78125
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "q5_K",
+          "ms_per_token": 0.7068052812500001,
+          "nodes_per_token": 0.96875
+        },
+        {
+          "op": "SCALE",
+          "type": "f32",
+          "ms_per_token": 0.7017071249999821,
+          "nodes_per_token": 398.15625
+        },
+        {
+          "op": "SOFT_MAX",
+          "type": "f32",
+          "ms_per_token": 0.5742786562499999,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "SSM_CONV",
+          "type": "f32",
+          "ms_per_token": 0.45393106250000054,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "RMS_NORM",
+          "type": "f32",
+          "ms_per_token": 0.2029215625000003,
+          "nodes_per_token": 69.75
+        },
+        {
+          "op": "ROPE",
+          "type": "f32",
+          "ms_per_token": 0.15666109375000017,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "CUSTOM",
+          "type": "f32",
+          "ms_per_token": 0.1548730624999999,
+          "nodes_per_token": 70.71875
+        },
+        {
+          "op": "CLAMP",
+          "type": "f32",
+          "ms_per_token": 0.1021708437499993,
+          "nodes_per_token": 70.71875
+        },
+        {
+          "op": "SET_ROWS",
+          "type": "f32",
+          "ms_per_token": 0.0751394999999999,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "f16",
+          "ms_per_token": 0.049008593750000065,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "TOP_K",
+          "type": "f32",
+          "ms_per_token": 0.04667965625000003,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "iq4_nl",
+          "ms_per_token": 0.0350940625,
+          "nodes_per_token": 0.96875
+        },
+        {
+          "op": "LIGHTNING_INDEXER",
+          "type": "f32",
+          "ms_per_token": 0.03352521875000003,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "REPEAT",
+          "type": "f32",
+          "ms_per_token": 0.03203775,
+          "nodes_per_token": 13.5625
+        },
+        {
+          "op": "FILL",
+          "type": "f32",
+          "ms_per_token": 0.025779562500000023,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "CPY",
+          "type": "i32",
+          "ms_per_token": 0.022899187500000057,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "FILL",
+          "type": "f16",
+          "ms_per_token": 0.02183968750000004,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "ADD",
+          "type": "f16",
+          "ms_per_token": 0.017826781249999996,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "REPEAT",
+          "type": "f16",
+          "ms_per_token": 0.015254843749999993,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "SET_ROWS",
+          "type": "f16",
+          "ms_per_token": 0.014771906249999972,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SUB",
+          "type": "f32",
+          "ms_per_token": 0.012432937499999987,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "i32",
+          "ms_per_token": 0.012157156249999992,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "CONCAT",
+          "type": "i32",
+          "ms_per_token": 0.010076593749999991,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "CUMSUM",
+          "type": "f32",
+          "ms_per_token": 0.008529125,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SQRT",
+          "type": "f32",
+          "ms_per_token": 0.0009594687499999998,
+          "nodes_per_token": 0.96875
+        }
+      ]
+    },
+    {
+      "file": "cache-1792-2.json",
+      "decode_process_cpu": {
+        "user_ms": 73216.794,
+        "system_ms": 8215.445,
+        "minor_faults": 73080.0,
+        "major_faults": 45.0,
+        "voluntary_switches": 175212.0,
+        "involuntary_switches": 19201.0
+      },
+      "memory_after": {
+        "rss_bytes": 6046408704,
+        "peak_rss_bytes": 6331154432,
+        "pss_bytes": 6047755264,
+        "minor_faults": 1640791,
+        "major_faults": 181,
+        "storage_read_bytes": 35841499136
+      },
+      "op_profile": [
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq2_xs",
+          "ms_per_token": 137.5977029062503,
+          "nodes_per_token": 91.0625
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q5_K",
+          "ms_per_token": 58.757969124999946,
+          "nodes_per_token": 182.125
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q8_0",
+          "ms_per_token": 30.71437290624988,
+          "nodes_per_token": 236.375
+        },
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq4_nl",
+          "ms_per_token": 23.44106081250001,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q6_K",
+          "ms_per_token": 21.134077781249992,
+          "nodes_per_token": 62.0
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q4_K",
+          "ms_per_token": 19.746674843750004,
+          "nodes_per_token": 0.9375
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "f32",
+          "ms_per_token": 11.46763762500001,
+          "nodes_per_token": 255.75
+        },
+        {
+          "op": "ARGSORT",
+          "type": "f32",
+          "ms_per_token": 11.426339500000015,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "GATED_DELTA_NET",
+          "type": "f32",
+          "ms_per_token": 9.2646658125,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "CPY",
+          "type": "f32",
+          "ms_per_token": 5.159423781250003,
+          "nodes_per_token": 82.34375
+        },
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq3_xxs",
+          "ms_per_token": 5.028114125000001,
+          "nodes_per_token": 1.9375
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "bf16",
+          "ms_per_token": 4.880413624999998,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "UNARY",
+          "type": "f32",
+          "ms_per_token": 4.632608343750013,
+          "nodes_per_token": 389.4375
+        },
+        {
+          "op": "CONCAT",
+          "type": "f32",
+          "ms_per_token": 3.8026538437500035,
+          "nodes_per_token": 59.09375
+        },
+        {
+          "op": "DSV4_HC_POST",
+          "type": "f32",
+          "ms_per_token": 3.2163470625000063,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "DSV4_HC_PRE",
+          "type": "f32",
+          "ms_per_token": 2.18152465624999,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "MUL",
+          "type": "f32",
+          "ms_per_token": 1.847080812499981,
+          "nodes_per_token": 193.75
+        },
+        {
+          "op": "ADD",
+          "type": "f32",
+          "ms_per_token": 1.823855281250191,
+          "nodes_per_token": 554.125
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "f32",
+          "ms_per_token": 1.4798990312500009,
+          "nodes_per_token": 61.03125
+        },
+        {
+          "op": "FLASH_ATTN_EXT",
+          "type": "f32",
+          "ms_per_token": 0.8733868750000003,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "GLU",
+          "type": "f32",
+          "ms_per_token": 0.7043147187499992,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "CONT",
+          "type": "f32",
+          "ms_per_token": 0.6636506250000015,
+          "nodes_per_token": 68.78125
+        },
+        {
+          "op": "SSM_CONV",
+          "type": "f32",
+          "ms_per_token": 0.46406737499999917,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "SCALE",
+          "type": "f32",
+          "ms_per_token": 0.440032562499989,
+          "nodes_per_token": 398.15625
+        },
+        {
+          "op": "SOFT_MAX",
+          "type": "f32",
+          "ms_per_token": 0.4318135937499983,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "q5_K",
+          "ms_per_token": 0.3348144375,
+          "nodes_per_token": 0.96875
+        },
+        {
+          "op": "ROPE",
+          "type": "f32",
+          "ms_per_token": 0.19054799999999977,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "RMS_NORM",
+          "type": "f32",
+          "ms_per_token": 0.18531649999999972,
+          "nodes_per_token": 69.75
+        },
+        {
+          "op": "SUM_ROWS",
+          "type": "f32",
+          "ms_per_token": 0.17619853125000026,
+          "nodes_per_token": 47.46875
+        },
+        {
+          "op": "CUSTOM",
+          "type": "f32",
+          "ms_per_token": 0.15602943750000042,
+          "nodes_per_token": 70.71875
+        },
+        {
+          "op": "CLAMP",
+          "type": "f32",
+          "ms_per_token": 0.08811012500000022,
+          "nodes_per_token": 70.71875
+        },
+        {
+          "op": "SET_ROWS",
+          "type": "f32",
+          "ms_per_token": 0.08808724999999991,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "TOP_K",
+          "type": "f32",
+          "ms_per_token": 0.05504534375000001,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "f16",
+          "ms_per_token": 0.05447321875000003,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "DIV",
+          "type": "f32",
+          "ms_per_token": 0.052142375000000026,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "iq4_nl",
+          "ms_per_token": 0.043343499999999986,
+          "nodes_per_token": 0.96875
+        },
+        {
+          "op": "LIGHTNING_INDEXER",
+          "type": "f32",
+          "ms_per_token": 0.04118996874999996,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "REPEAT",
+          "type": "f32",
+          "ms_per_token": 0.03686546875000002,
+          "nodes_per_token": 13.5625
+        },
+        {
+          "op": "FILL",
+          "type": "f32",
+          "ms_per_token": 0.030826718750000176,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "ADD",
+          "type": "f16",
+          "ms_per_token": 0.027426593750000026,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "CPY",
+          "type": "i32",
+          "ms_per_token": 0.02644659375000005,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "FILL",
+          "type": "f16",
+          "ms_per_token": 0.024997249999999988,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "REPEAT",
+          "type": "f16",
+          "ms_per_token": 0.019264218749999996,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "SET_ROWS",
+          "type": "f16",
+          "ms_per_token": 0.016817687499999994,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SUB",
+          "type": "f32",
+          "ms_per_token": 0.01519924999999998,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "i32",
+          "ms_per_token": 0.013999031249999986,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "CONCAT",
+          "type": "i32",
+          "ms_per_token": 0.011784843750000005,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "CUMSUM",
+          "type": "f32",
+          "ms_per_token": 0.010194656249999979,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SQRT",
+          "type": "f32",
+          "ms_per_token": 0.00101559375,
+          "nodes_per_token": 0.96875
+        }
+      ]
+    },
+    {
+      "file": "cache-2304-1.json",
+      "decode_process_cpu": {
+        "user_ms": 79986.44700000001,
+        "system_ms": 11105.547999999999,
+        "minor_faults": 78301.0,
+        "major_faults": 367785.0,
+        "voluntary_switches": 170910.0,
+        "involuntary_switches": 30287.0
+      },
+      "memory_after": {
+        "rss_bytes": 6234017792,
+        "peak_rss_bytes": 6626983936,
+        "pss_bytes": 6234621952,
+        "minor_faults": 1777177,
+        "major_faults": 495004,
+        "storage_read_bytes": 34621493248
+      },
+      "op_profile": [
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq2_xs",
+          "ms_per_token": 147.83656615624992,
+          "nodes_per_token": 91.0625
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q5_K",
+          "ms_per_token": 70.07313918749992,
+          "nodes_per_token": 182.125
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q8_0",
+          "ms_per_token": 38.503884781249944,
+          "nodes_per_token": 236.375
+        },
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq4_nl",
+          "ms_per_token": 25.533728718749973,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q6_K",
+          "ms_per_token": 24.62615449999994,
+          "nodes_per_token": 62.0
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q4_K",
+          "ms_per_token": 19.250037875,
+          "nodes_per_token": 0.9375
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "f32",
+          "ms_per_token": 14.747053906250072,
+          "nodes_per_token": 255.75
+        },
+        {
+          "op": "ARGSORT",
+          "type": "f32",
+          "ms_per_token": 14.577763812500015,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "GATED_DELTA_NET",
+          "type": "f32",
+          "ms_per_token": 9.403006187499996,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "bf16",
+          "ms_per_token": 6.469180906250004,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "UNARY",
+          "type": "f32",
+          "ms_per_token": 5.972414531250017,
+          "nodes_per_token": 389.4375
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "f32",
+          "ms_per_token": 5.85909278124999,
+          "nodes_per_token": 61.03125
+        },
+        {
+          "op": "CPY",
+          "type": "f32",
+          "ms_per_token": 5.676256625000023,
+          "nodes_per_token": 82.34375
+        },
+        {
+          "op": "DSV4_HC_POST",
+          "type": "f32",
+          "ms_per_token": 4.704303281250015,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq3_xxs",
+          "ms_per_token": 4.6081639999999995,
+          "nodes_per_token": 1.9375
+        },
+        {
+          "op": "CONCAT",
+          "type": "f32",
+          "ms_per_token": 4.519613906250017,
+          "nodes_per_token": 59.09375
+        },
+        {
+          "op": "SCALE",
+          "type": "f32",
+          "ms_per_token": 4.502948437500151,
+          "nodes_per_token": 398.15625
+        },
+        {
+          "op": "DSV4_HC_PRE",
+          "type": "f32",
+          "ms_per_token": 3.7183486562499968,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "SUM_ROWS",
+          "type": "f32",
+          "ms_per_token": 3.223602406250004,
+          "nodes_per_token": 47.46875
+        },
+        {
+          "op": "MUL",
+          "type": "f32",
+          "ms_per_token": 2.6401936875000325,
+          "nodes_per_token": 193.75
+        },
+        {
+          "op": "ADD",
+          "type": "f32",
+          "ms_per_token": 2.469488374999455,
+          "nodes_per_token": 554.125
+        },
+        {
+          "op": "GLU",
+          "type": "f32",
+          "ms_per_token": 1.8936771249999989,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "q5_K",
+          "ms_per_token": 1.04822378125,
+          "nodes_per_token": 0.96875
+        },
+        {
+          "op": "CUSTOM",
+          "type": "f32",
+          "ms_per_token": 1.0346731874999926,
+          "nodes_per_token": 70.71875
+        },
+        {
+          "op": "FLASH_ATTN_EXT",
+          "type": "f32",
+          "ms_per_token": 0.9539283749999999,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "DIV",
+          "type": "f32",
+          "ms_per_token": 0.8128991249999947,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "CONT",
+          "type": "f32",
+          "ms_per_token": 0.7481001562500003,
+          "nodes_per_token": 68.78125
+        },
+        {
+          "op": "SOFT_MAX",
+          "type": "f32",
+          "ms_per_token": 0.6420281562500009,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "SSM_CONV",
+          "type": "f32",
+          "ms_per_token": 0.5948156874999982,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "FILL",
+          "type": "f32",
+          "ms_per_token": 0.439825562499998,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "f16",
+          "ms_per_token": 0.43487421875000015,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "CLAMP",
+          "type": "f32",
+          "ms_per_token": 0.3225667499999978,
+          "nodes_per_token": 70.71875
+        },
+        {
+          "op": "ROPE",
+          "type": "f32",
+          "ms_per_token": 0.3034721249999999,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "RMS_NORM",
+          "type": "f32",
+          "ms_per_token": 0.2154834062500002,
+          "nodes_per_token": 69.75
+        },
+        {
+          "op": "SET_ROWS",
+          "type": "f32",
+          "ms_per_token": 0.09349162499999976,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "TOP_K",
+          "type": "f32",
+          "ms_per_token": 0.055953218750000026,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "iq4_nl",
+          "ms_per_token": 0.046391593749999994,
+          "nodes_per_token": 0.96875
+        },
+        {
+          "op": "REPEAT",
+          "type": "f32",
+          "ms_per_token": 0.04157112499999998,
+          "nodes_per_token": 13.5625
+        },
+        {
+          "op": "LIGHTNING_INDEXER",
+          "type": "f32",
+          "ms_per_token": 0.04028818749999998,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "CPY",
+          "type": "i32",
+          "ms_per_token": 0.027180718749999996,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "FILL",
+          "type": "f16",
+          "ms_per_token": 0.024278531250000016,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "ADD",
+          "type": "f16",
+          "ms_per_token": 0.020479468750000014,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "REPEAT",
+          "type": "f16",
+          "ms_per_token": 0.01923400000000002,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "SET_ROWS",
+          "type": "f16",
+          "ms_per_token": 0.01761743749999999,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "i32",
+          "ms_per_token": 0.01693434374999999,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SUB",
+          "type": "f32",
+          "ms_per_token": 0.015981499999999982,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "CUMSUM",
+          "type": "f32",
+          "ms_per_token": 0.012264187499999987,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "CONCAT",
+          "type": "i32",
+          "ms_per_token": 0.012078093749999994,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SQRT",
+          "type": "f32",
+          "ms_per_token": 0.0010693124999999997,
+          "nodes_per_token": 0.96875
+        }
+      ]
+    },
+    {
+      "file": "cache-2816-0.json",
+      "decode_process_cpu": {
+        "user_ms": 194226.56,
+        "system_ms": 32714.436,
+        "minor_faults": 295565.0,
+        "major_faults": 2574547.0,
+        "voluntary_switches": 165523.0,
+        "involuntary_switches": 110511.0
+      },
+      "memory_after": {
+        "rss_bytes": 6353649664,
+        "peak_rss_bytes": 6616526848,
+        "pss_bytes": 6354300928,
+        "minor_faults": 2142155,
+        "major_faults": 2926846,
+        "storage_read_bytes": 33361752064
+      },
+      "op_profile": [
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq2_xs",
+          "ms_per_token": 285.0691544062504,
+          "nodes_per_token": 91.0625
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q5_K",
+          "ms_per_token": 181.06524625000054,
+          "nodes_per_token": 182.125
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q8_0",
+          "ms_per_token": 131.7176284062496,
+          "nodes_per_token": 236.375
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "f32",
+          "ms_per_token": 96.26725775000213,
+          "nodes_per_token": 255.75
+        },
+        {
+          "op": "ADD",
+          "type": "f32",
+          "ms_per_token": 82.6614709062613,
+          "nodes_per_token": 554.125
+        },
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq4_nl",
+          "ms_per_token": 61.247594343749974,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q6_K",
+          "ms_per_token": 60.30844550000015,
+          "nodes_per_token": 62.0
+        },
+        {
+          "op": "UNARY",
+          "type": "f32",
+          "ms_per_token": 54.61068737499961,
+          "nodes_per_token": 389.4375
+        },
+        {
+          "op": "SCALE",
+          "type": "f32",
+          "ms_per_token": 47.98666590624786,
+          "nodes_per_token": 398.15625
+        },
+        {
+          "op": "CPY",
+          "type": "f32",
+          "ms_per_token": 37.34275706250016,
+          "nodes_per_token": 82.34375
+        },
+        {
+          "op": "ARGSORT",
+          "type": "f32",
+          "ms_per_token": 33.24677274999996,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "MUL",
+          "type": "f32",
+          "ms_per_token": 31.755367375,
+          "nodes_per_token": 193.75
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "q4_K",
+          "ms_per_token": 30.92254265625,
+          "nodes_per_token": 0.9375
+        },
+        {
+          "op": "DSV4_HC_POST",
+          "type": "f32",
+          "ms_per_token": 29.21491265624995,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "CUSTOM",
+          "type": "f32",
+          "ms_per_token": 29.041276187500124,
+          "nodes_per_token": 70.71875
+        },
+        {
+          "op": "GATED_DELTA_NET",
+          "type": "f32",
+          "ms_per_token": 26.346208562499967,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "DSV4_HC_PRE",
+          "type": "f32",
+          "ms_per_token": 25.670364468749895,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "f32",
+          "ms_per_token": 24.89221765625002,
+          "nodes_per_token": 61.03125
+        },
+        {
+          "op": "MUL_MAT",
+          "type": "bf16",
+          "ms_per_token": 18.843101843749984,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "CONT",
+          "type": "f32",
+          "ms_per_token": 16.55625943750005,
+          "nodes_per_token": 68.78125
+        },
+        {
+          "op": "CONCAT",
+          "type": "f32",
+          "ms_per_token": 16.31026765625001,
+          "nodes_per_token": 59.09375
+        },
+        {
+          "op": "GLU",
+          "type": "f32",
+          "ms_per_token": 13.609559312500007,
+          "nodes_per_token": 93.0
+        },
+        {
+          "op": "RMS_NORM",
+          "type": "f32",
+          "ms_per_token": 12.508203718750028,
+          "nodes_per_token": 69.75
+        },
+        {
+          "op": "CLAMP",
+          "type": "f32",
+          "ms_per_token": 10.375811781249954,
+          "nodes_per_token": 70.71875
+        },
+        {
+          "op": "MUL_MAT_ID",
+          "type": "iq3_xxs",
+          "ms_per_token": 8.747526843749998,
+          "nodes_per_token": 1.9375
+        },
+        {
+          "op": "SUM_ROWS",
+          "type": "f32",
+          "ms_per_token": 7.60278331250002,
+          "nodes_per_token": 47.46875
+        },
+        {
+          "op": "SSM_CONV",
+          "type": "f32",
+          "ms_per_token": 7.50406884374998,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "DIV",
+          "type": "f32",
+          "ms_per_token": 6.323167843750023,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "SET_ROWS",
+          "type": "f32",
+          "ms_per_token": 6.116330062500007,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "FILL",
+          "type": "f32",
+          "ms_per_token": 5.972875968750009,
+          "nodes_per_token": 34.875
+        },
+        {
+          "op": "FLASH_ATTN_EXT",
+          "type": "f32",
+          "ms_per_token": 5.7589023125,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SOFT_MAX",
+          "type": "f32",
+          "ms_per_token": 5.577270499999999,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "ROPE",
+          "type": "f32",
+          "ms_per_token": 4.915698562500002,
+          "nodes_per_token": 46.5
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "q5_K",
+          "ms_per_token": 3.0331359375000004,
+          "nodes_per_token": 0.96875
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "f16",
+          "ms_per_token": 3.028703968750002,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "REPEAT",
+          "type": "f16",
+          "ms_per_token": 2.9019042499999994,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "FILL",
+          "type": "f16",
+          "ms_per_token": 2.7638089374999955,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "CPY",
+          "type": "i32",
+          "ms_per_token": 2.7105996562500208,
+          "nodes_per_token": 23.25
+        },
+        {
+          "op": "CONCAT",
+          "type": "i32",
+          "ms_per_token": 2.402587906250004,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "TOP_K",
+          "type": "f32",
+          "ms_per_token": 2.2371436875000033,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "ADD",
+          "type": "f16",
+          "ms_per_token": 1.3693144062499998,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "REPEAT",
+          "type": "f32",
+          "ms_per_token": 1.3336387187499972,
+          "nodes_per_token": 13.5625
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "iq4_nl",
+          "ms_per_token": 1.1118371875,
+          "nodes_per_token": 0.96875
+        },
+        {
+          "op": "LIGHTNING_INDEXER",
+          "type": "f32",
+          "ms_per_token": 1.0503295312499994,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SET_ROWS",
+          "type": "f16",
+          "ms_per_token": 1.0249033749999994,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "CUMSUM",
+          "type": "f32",
+          "ms_per_token": 0.9096409999999987,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SUB",
+          "type": "f32",
+          "ms_per_token": 0.7578824687499987,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "GET_ROWS",
+          "type": "i32",
+          "ms_per_token": 0.645496937499998,
+          "nodes_per_token": 11.625
+        },
+        {
+          "op": "SQRT",
+          "type": "f32",
+          "ms_per_token": 0.12346190625000003,
+          "nodes_per_token": 0.96875
+        }
+      ]
+    }
+  ],
+  "cgroup_limits": null,
+  "cgroup_scope": "Read permission denied; no memory limit value or cause inferred.",
+  "correctness": [
+    {
+      "record": "counter-host-final.json",
+      "cases": 21,
+      "all_bitwise": true,
+      "mtp_cases": 5,
+      "lifecycle_included": true
+    },
+    {
+      "record": "counter-android.json",
+      "cases": 4,
+      "all_bitwise": true,
+      "mtp_cases": 0,
+      "lifecycle_included": true
+    }
+  ],
+  "telemetry": [
+    {
+      "elapsed_approx_s": 172,
+      "thermal": "2",
+      "celsius": {
+        "AP": 60.8,
+        "BAT": 39.8,
+        "CP": 54.9,
+        "PA": 52.8,
+        "SKIN": 43.4,
+        "SUBBAT": 0.0,
+        "USB": 29.3
+      },
+      "memory": [
+        "MemAvailable:    1542468 kB",
+        "SwapFree:        9012460 kB"
+      ]
+    },
+    {
+      "elapsed_approx_s": 288,
+      "thermal": "3",
+      "celsius": {
+        "AP": 61.3,
+        "BAT": 42.3,
+        "CP": 56.5,
+        "PA": 54.8,
+        "SKIN": 45.0,
+        "SUBBAT": 0.0,
+        "USB": 30.5
+      },
+      "memory": [
+        "MemAvailable:    1657780 kB",
+        "SwapFree:        8941380 kB"
+      ]
+    },
+    {
+      "elapsed_approx_s": 516,
+      "thermal": "4",
+      "celsius": {
+        "AP": 66.0,
+        "BAT": 45.9,
+        "CP": 60.3,
+        "PA": 58.5,
+        "SKIN": 47.8,
+        "SUBBAT": 0.0,
+        "USB": 33.0
+      },
+      "memory": [
+        "MemAvailable:    1617692 kB",
+        "SwapFree:        9028380 kB"
+      ]
+    },
+    {
+      "elapsed_approx_s": 602,
+      "thermal": "4",
+      "celsius": {
+        "AP": 67.6,
+        "BAT": 47.3,
+        "CP": 61.9,
+        "PA": 60.0,
+        "SKIN": 48.9,
+        "SUBBAT": 0.0,
+        "USB": 34.0
+      },
+      "memory": [
+        "MemAvailable:    1599812 kB",
+        "SwapFree:        9084932 kB"
+      ]
+    },
+    {
+      "elapsed_approx_s": 723,
+      "thermal": "4",
+      "celsius": {
+        "AP": 68.4,
+        "BAT": 48.5,
+        "CP": 62.6,
+        "PA": 60.9,
+        "SKIN": 49.6,
+        "SUBBAT": 0.0,
+        "USB": 35.0
+      },
+      "memory": [
+        "MemAvailable:    1533240 kB",
+        "SwapFree:        9275072 kB"
+      ]
+    },
+    {
+      "elapsed_approx_s": 836,
+      "thermal": "4",
+      "celsius": {
+        "AP": 62.9,
+        "BAT": 48.4,
+        "CP": 59.5,
+        "PA": 57.6,
+        "SKIN": 48.6,
+        "SUBBAT": 0.0,
+        "USB": 36.1
+      },
+      "memory": [
+        "MemAvailable:    1557928 kB",
+        "SwapFree:        8965612 kB"
+      ]
+    },
+    {
+      "elapsed_approx_s": 918,
+      "thermal": "4",
+      "celsius": {
+        "AP": 62.8,
+        "BAT": 48.6,
+        "CP": 59.7,
+        "PA": 58.3,
+        "SKIN": 48.6,
+        "SUBBAT": 0.0,
+        "USB": 36.6
+      },
+      "memory": [
+        "MemAvailable:    1642324 kB",
+        "SwapFree:        9115104 kB"
+      ]
+    },
+    {
+      "elapsed_approx_s": 1143,
+      "thermal": "4",
+      "celsius": {
+        "AP": 63.6,
+        "BAT": 49.2,
+        "CP": 60.4,
+        "PA": 59.0,
+        "SKIN": 48.9,
+        "SUBBAT": 0.0,
+        "USB": 37.6
+      },
+      "memory": [
+        "MemAvailable:    1710032 kB",
+        "SwapFree:        9185516 kB"
+      ]
+    },
+    {
+      "elapsed_approx_s": 1267,
+      "thermal": "4",
+      "celsius": {
+        "AP": 64.4,
+        "BAT": 49.8,
+        "CP": 61.4,
+        "PA": 59.4,
+        "SKIN": 49.3,
+        "SUBBAT": 0.0,
+        "USB": 38.1
+      },
+      "memory": [
+        "MemAvailable:    1684696 kB",
+        "SwapFree:        9027252 kB"
+      ],
+      "process": [
+        "VmRSS:\t 5594612 kB",
+        "VmSwap:\t  360504 kB",
+        "Cpus_allowed_list:\t0-9"
+      ]
+    },
+    {
+      "elapsed_approx_s": 1436,
+      "thermal": "4",
+      "celsius": {
+        "AP": 51.3,
+        "BAT": 48.3,
+        "CP": 51.6,
+        "PA": 51.4,
+        "SKIN": 46.5,
+        "SUBBAT": 0.0,
+        "USB": 38.5
+      },
+      "memory": [
+        "MemAvailable:    7217464 kB",
+        "SwapFree:        9487696 kB"
+      ]
+    }
+  ],
+  "scope": [
+    "The sustained run used the pre-instrumentation binary; source files changed while it ran. Artifact hashes identify the executed build. Its end-of-run source hash is not a frozen build-source identity.",
+    "The old I/O counters may omit final decode reads; corrected bank/drain counters are used only in the subsequent short cache screens.",
+    "Two sustained answers reached EOS; the code answer reached the 1536-token cap. The reasoning workload was not reached. No answer-quality evaluation.",
+    "No cooldown or within-arm thermal matching in the cache screen. One short A/B/A sequence and one larger-cache screening run do not establish a repeatable speedup.",
+    "2816 MiB passed the free-memory estimate but triggered severe major faults and a large slowdown. This rejects free-memory-only admission as sufficient evidence of safe cache residency. 3072 MiB was not attempted after this failure.",
+    "No retained scheduling optimization, quantization, APK installation, stock thermal override, model/chat deletion or sustained-five-token/s achievement.",
+    "Shared-expert-first is a rejected single-token graph scheduling experiment, not complete per-expert FFN fusion. Plain 2.91/2.79 and candidate 2.76/2.62 tokens/s; all 32 output token IDs agree. No precise slowdown attribution from one short ABBA."
+  ],
+  "shared_expert_first_experiment": {
+    "rows": [
+      {
+        "enabled": false,
+        "speed": 2.9061632592457043,
+        "io_mb_token": 546.4832,
+        "wait_thread_ms_token": 590.7251045,
+        "major_faults": 37.0,
+        "tokens_equal": true,
+        "before": {
+          "celsius": {
+            "AP": 39.3,
+            "BAT": 37.9,
+            "CP": 39.4,
+            "PA": 39.4,
+            "SKIN": 36.8,
+            "SUBBAT": 0.0,
+            "USB": 35.3
+          },
+          "thermal": "0"
+        },
+        "after": {
+          "celsius": {
+            "AP": 59.2,
+            "BAT": 39.4,
+            "CP": 49.8,
+            "PA": 48.1,
+            "SKIN": 40.1,
+            "SUBBAT": 0.0,
+            "USB": 35.3
+          },
+          "thermal": "1"
+        }
+      },
+      {
+        "enabled": true,
+        "speed": 2.756011611001816,
+        "io_mb_token": 545.176704,
+        "wait_thread_ms_token": 569.6091624375,
+        "major_faults": 95.0,
+        "tokens_equal": true,
+        "before": {
+          "celsius": {
+            "AP": 59.2,
+            "BAT": 39.4,
+            "CP": 49.8,
+            "PA": 48.1,
+            "SKIN": 40.1,
+            "SUBBAT": 0.0,
+            "USB": 35.3
+          },
+          "thermal": "1"
+        },
+        "after": {
+          "celsius": {
+            "AP": 59.7,
+            "BAT": 41.3,
+            "CP": 52.2,
+            "PA": 50.3,
+            "SKIN": 41.8,
+            "SUBBAT": 0.0,
+            "USB": 35.1
+          },
+          "thermal": "1"
+        }
+      },
+      {
+        "enabled": true,
+        "speed": 2.6243950268367717,
+        "io_mb_token": 550.558336,
+        "wait_thread_ms_token": 515.331883,
+        "major_faults": 36.0,
+        "tokens_equal": true,
+        "before": {
+          "celsius": {
+            "AP": 59.7,
+            "BAT": 41.3,
+            "CP": 52.2,
+            "PA": 50.3,
+            "SKIN": 41.8,
+            "SUBBAT": 0.0,
+            "USB": 35.1
+          },
+          "thermal": "1"
+        },
+        "after": {
+          "celsius": {
+            "AP": 60.7,
+            "BAT": 42.2,
+            "CP": 53.9,
+            "PA": 52.0,
+            "SKIN": 43.0,
+            "SUBBAT": 0.0,
+            "USB": 35.1
+          },
+          "thermal": "2"
+        }
+      },
+      {
+        "enabled": false,
+        "speed": 2.788337820632981,
+        "io_mb_token": 552.420352,
+        "wait_thread_ms_token": 500.8867826875,
+        "major_faults": 35.0,
+        "tokens_equal": true,
+        "before": {
+          "celsius": {
+            "AP": 60.7,
+            "BAT": 42.2,
+            "CP": 53.9,
+            "PA": 52.0,
+            "SKIN": 43.0,
+            "SUBBAT": 0.0,
+            "USB": 35.1
+          },
+          "thermal": "2"
+        },
+        "after": {
+          "celsius": {
+            "AP": 58.0,
+            "BAT": 42.7,
+            "CP": 51.9,
+            "PA": 50.3,
+            "SKIN": 43.0,
+            "SUBBAT": 0.0,
+            "USB": 35.1
+          },
+          "thermal": "2"
+        }
+      }
+    ],
+    "artifacts": {
+      "eqt-bench": "d0a665ad103c8b2d7dbd88940d4978053549580c10ab3b865a592b304f231828",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "d23a25cae97f0cef2fabbf7c0d078352409f47867a871c94ce835f6526d3e4f1",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "scope": "Short profiled ABBA; no sustained result or precise small-speedup attribution.",
+    "host_checks": [
+      {
+        "batch": 1,
+        "shared_first": false,
+        "streamed": false,
+        "logits_equal": true,
+        "tokens_equal": true
+      },
+      {
+        "batch": 1,
+        "shared_first": true,
+        "streamed": false,
+        "logits_equal": true,
+        "tokens_equal": true
+      },
+      {
+        "batch": 1,
+        "shared_first": true,
+        "streamed": true,
+        "logits_equal": true,
+        "tokens_equal": true
+      },
+      {
+        "batch": 16,
+        "shared_first": false,
+        "streamed": false,
+        "logits_equal": true,
+        "tokens_equal": true
+      },
+      {
+        "batch": 16,
+        "shared_first": true,
+        "streamed": false,
+        "logits_equal": true,
+        "tokens_equal": true
+      },
+      {
+        "batch": 16,
+        "shared_first": true,
+        "streamed": true,
+        "logits_equal": true,
+        "tokens_equal": true
+      }
+    ],
+    "candidate_diff": "shared-expert-first-rejected.patch",
+    "candidate_diff_base": "Pinned llama.cpp plus the seven existing recorded patches",
+    "candidate_diff_sha256": "82a2d08311de46ad13839dfe07465fe4f0f80f1799a0012a7f04d784594498e1",
+    "decision": "No demonstrated end-to-end benefit in the short ABBA screening; experimental source changes restored. This does not reject full expert-FFN fusion.",
+    "environment": "EQT_SHARED_EXPERT_FIRST=1 only in the two experimental child processes"
+  },
+  "final_restored_cli_artifacts": {
+    "eqt-bench": "d0a665ad103c8b2d7dbd88940d4978053549580c10ab3b865a592b304f231828",
+    "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+    "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+    "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+    "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+    "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+    "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+    "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+    "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+    "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+    "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+    "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+    "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+    "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+  }
+}
