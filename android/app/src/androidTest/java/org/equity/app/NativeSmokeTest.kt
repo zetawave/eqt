@@ -23,7 +23,8 @@ class NativeSmokeTest : Instrumentation() {
     }
     override fun onStart() {
         try {
-            val result = if (arguments.getString("case") == "attachment-context") testAttachmentContext()
+            val result = if (arguments.getString("case") == "chat-history") testChatHistory()
+                else if (arguments.getString("case") == "attachment-context") testAttachmentContext()
                 else if (arguments.getString("case") == "unload-cancel") testUnloadCancellation()
                 else if (arguments.getString("case") == "steering") testSteeringImportAndChat()
                 else if (arguments.getString("case") == "steering-real") testSteeringImportAndChat(realPackage = true)
@@ -235,6 +236,37 @@ class NativeSmokeTest : Instrumentation() {
             Thread.sleep(100)
         }
         error("Timed out: ${EngineController.state.value.status}")
+    }
+
+    private fun testChatHistory(): String {
+        val requestMessages = EngineController::class.java.getDeclaredMethod("requestMessages", Chat::class.java,
+            Boolean::class.javaPrimitiveType).apply { isAccessible = true }
+        fun request(previous: List<Message>): List<Pair<String, String>> {
+            val chat = Chat("history-check", "History check", 0, 0, previous + listOf(
+                Message(100, true, "What was the name?"), Message(101, false, "", streaming = true)))
+            @Suppress("UNCHECKED_CAST")
+            val messages = requestMessages.invoke(EngineController, chat, false) as List<JSONObject>
+            return messages.map { it.getString("role") to it.getString("content") }
+        }
+        val question = Message(1, true, "The project's name is Cedar.")
+        val answer = Message(2, false, "The name is Cedar.")
+        val current = "user" to "What was the name?"
+        val expected = listOf("user" to question.text, "assistant" to answer.text, current)
+        check(request(emptyList()) == listOf(current))
+        check(request(listOf(question, answer)) == expected)
+        check(request(listOf(question, answer.copy(stopped = true))) == expected)
+        check(request(listOf(question, answer.copy(stopped = true, text = "", reasoning = "Private reasoning"))) ==
+            listOf("user" to question.text, "assistant" to "", current))
+        check(request(listOf(question, answer.copy(failed = true))) == listOf(current))
+        check(request(listOf(question, answer.copy(streaming = true))) == listOf(current))
+        val interrupted = (0 until 5).flatMap { turn -> listOf(
+            Message(2L * turn + 1, true, "Question $turn"),
+            Message(2L * turn + 2, false, "Partial answer $turn", stopped = true)) }
+        check(request(interrupted) == interrupted.map { (if (it.fromUser) "user" else "assistant") to it.text } + current)
+        val mixed = interrupted + listOf(question.copy(id = 11), answer.copy(id = 12, failed = true),
+            question.copy(id = 13), answer.copy(id = 14))
+        check(request(mixed) == request(interrupted).dropLast(1) + expected)
+        return "chat history: stopped turns retained, completed turns unchanged, failed/streaming turns excluded"
     }
 
     private fun testAttachmentContext(): String {

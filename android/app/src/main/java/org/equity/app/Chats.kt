@@ -31,7 +31,7 @@ data class Message(
     val streaming: Boolean = false,
     val stats: String? = null,
     val failed: Boolean = false,
-    /** Stopped before the end; shown, but the turn is not sent back to the model as context. */
+    /** Explicitly stopped before the end; its question and partial answer remain conversation context. */
     val stopped: Boolean = false,
     val steering: String? = null,
     /** The model's reasoning before [text] when thinking was on; never sent back as context. */

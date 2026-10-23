@@ -841,8 +841,8 @@ object EngineController {
     }
 
     /**
-     * The conversation as the engine sees it. A turn is context only once its answer completed; the newest user
-     * message is the question. Attached documents become text; images are files the engine encodes.
+     * The conversation as the engine sees it. Completed and explicitly stopped turns remain context; failed or
+     * streaming turns do not. Attached documents become text; images are files the engine encodes.
      */
     private fun requestMessages(chat: Chat, vision: Boolean): List<JSONObject> {
         val list = chat.messages.dropLast(1)
@@ -854,7 +854,7 @@ object EngineController {
                 continue
             }
             val answer = list[i + 1]
-            if (!answer.fromUser && !answer.failed && !answer.stopped && !answer.streaming) turns += listOf(message, answer)
+            if (!answer.fromUser && !answer.failed && !answer.streaming) turns += listOf(message, answer)
         }
         val shown = if (!vision) emptySet() else turns.asReversed().asSequence().filter { it.fromUser }
             .flatMap { m -> m.attachments.asReversed().asSequence().filter { it.kind == AttachmentKind.Image }.map { it.file } }

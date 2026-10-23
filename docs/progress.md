@@ -1,5 +1,11 @@
 # Progress — 2026-10-06
 
+## Stopped-answer chat history: 2026-10-23
+
+- Explicitly stopped answers now keep their user question and generated text in subsequent requests. Previously, the request builder silently omitted both, so repeated stops made a conversation appear to lose its context. The change also applies to existing saved chats without rewriting them.
+- Failed and still-streaming turns remain excluded; reasoning stays outside the model's conversation history. Native decoding, cancellation and cache/session lifetime rules are unchanged.
+- Debug Vulkan APK and instrumentation APK built successfully. The focused request-builder check passed on the Galaxy with synthetic messages: completed turns, stopped partial answers, stops during reasoning, repeated stops and mixed failed/completed turns. No model was loaded or generation run. Installed the debug update; saved chat content hashes are unchanged.
+
 ## Chat header cleanup: 2026-10-23
 
 - Removed the last-model "Load model" shortcut from the chat header. Models are loaded from the Models screen. No temperature indicator or logo animation was added.
