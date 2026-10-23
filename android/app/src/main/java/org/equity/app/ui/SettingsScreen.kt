@@ -181,6 +181,20 @@ fun SettingsScreen(engine: EngineState) {
             }
         }
 
+        Section(strings.getString(R.string.advanced), strings.getString(R.string.applies_the_next_time_a_model_is_loaded)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HelpLabel(
+                    strings.getString(R.string.prompt_lookup),
+                    strings.getString(R.string.prompt_lookup_help),
+                    summary = strings.getString(R.string.prompt_lookup_summary),
+                    modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                )
+                Switch(checked = settings.promptLookup, onCheckedChange = { enabled ->
+                    SettingsStore.update(context) { it.copy(promptLookup = enabled) }
+                })
+            }
+        }
+
         Section(strings.getString(R.string.diagnostics)) {
             Labeled(strings.getString(R.string.engine), engine.configuration ?: strings.getString(R.string.no_model_loaded))
             val result = engine.lastResult?.let { runCatching { JSONObject(it) }.getOrNull() }

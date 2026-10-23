@@ -1,5 +1,33 @@
 # Progress — 2026-10-06
 
+## Chat header cleanup: 2026-10-23
+
+- Removed the last-model "Load model" shortcut from the chat header. Models are loaded from the Models screen. No temperature indicator or logo animation was added.
+- Debug Vulkan APK built successfully and installed as an update on the connected Galaxy. This UI-only removal does not change inference.
+
+## Ordinary-question lookup check: 2026-10-23
+
+- The owner observes about 4 tokens/s asking questions on the 9B Q4. A short Galaxy CLI check on an ordinary sky-color question gives plain → lookup → plain: 4.61 → 4.33 → 3.70 tokens/s, identical 32 token IDs. Lookup proposes **zero** tokens, so it accelerates none of this answer. The plain drift brackets the lookup rate; it does not establish a precise overhead or slowdown.
+- Record: `results/2026-10-23/galaxy/lookup-question.json`. D039/D040's copy gains do not apply to general question answering. No inference code, app default or user preference was changed during this check. Reserving snapshots and scanning without useful matches remains a potential cost; default enablement was premature as a general performance measure.
+
+## App prompt lookup enabled by default: 2026-10-23
+
+- Settings now has Advanced → Prompt lookup, persisted and enabled by default. The app applies it to the pinned Qwen3.5 9B Q4_K_M (catalog or hash-verified local file), with creativity 0, text input and no steering. Models without a measured profile keep their existing decoder.
+- Four recurrent rollback slots reserve an additional 192 MiB when they fit beside the existing context and memory margin. Otherwise the model loads normally without lookup; no context is reduced for the optimization. Allocation failure also retries without snapshots. Disabling applies to the next answer; enabling needs a model reload.
+- Lookup now uses the normal full-prompt prefill and first sample. First logits match plain decoding on the host fixtures and Qwen3.5-0.8B. Prefix/session eligibility follows the normal path instead of being disabled by lookup. Later batched calculations still carry the numerical caveat of D039.
+- Debug APK with Vulkan built; Android lint passed (0 errors, 32 warnings). Focused lookup checks and the small-model lifecycle comparison passed. The tested tiny fixture and 0.8B templates decline prefix/session reuse in both paths; these checks establish matching fallback, not a successful session restore on those models.
+- Final Galaxy CLI copy check with the integrated prefill: 6.77 tokens/s with lookup against 4.24/3.58 plain, the same 32 token IDs. The phone entered thermal status 1 at the end; these absolute rates are not comparable to the cooler D039 session. Record: `results/2026-10-23/galaxy/lookup-app.json`. Installed the debug APK as an update and launched it successfully; no weights or chats were removed.
+
+## Short verification screening: 2026-10-23
+
+- Extended `verify_replay` from one proposal to 1–7 proposals (2–8 verification rows including the anchor). Each reached depth has its own deterministic conditional acceptance schedule; rejected suffixes roll back through recurrent snapshots. The final block shrinks to the remaining reference/output tokens. This remains teacher-forced measurement without a drafter, not speculative inference.
+- `tools/bench_verification.py` performs five short runs by default: 32-token plain decode, perfect free proposals with 8/4/2 rows, and plain decode again to expose drift. It records actual expert I/O bytes per emitted token, numerical agreement, thermal readings and source/artifact hashes. No cooldown or sustained test. The English workload is `configs/verification-request.json`.
+- Host and Android CLI builds passed. Focused host checks passed on the qwen35moe and qwen4exp fixtures: perfect proposals at 2/4/8 rows, 8-row verification at conditional acceptance 0.65 and 0, and rejection of invalid widths, insufficient rollback slots and invalid token IDs (16 checks). Every emitted reference position matched the target's greedy token. The five-arm tool smoke check also passed. These are correctness checks, not mobile performance results.
+- Galaxy screening is complete (D039, `results/2026-10-23/galaxy/verification-lookup.json`). Perfect free proposals do not establish a useful MTP gain on the 35B; Flash-Next has modest headroom and some batch-dependent greedy differences. On the resident 9B, four verification rows are promising and eight lose.
+- Implemented opt-in greedy `prompt_lookup`: longest matching suffix (3–8 tokens), most recent occurrence, overlapping periodic continuations, full target verification and recurrent rollback. It defaults off and does not use a second model. Prefix/session reuse is disabled while it runs.
+- Real 9B Q4_K_M copy decoding on the Galaxy: 9.27 tokens/s against 6.18/5.44 plain at 32 tokens. One 64-token repeat in reversed order gave 9.71/9.36 against 5.37 plain (+74–81%), identical token IDs, thermal status 0. This is a short prompt-copy result, not a free-form or sustained-speed claim. No APK was installed and no inference default changed.
+- Focused lookup checks cover accepted proposals, no-match fallback, invalid inputs and a rejected proposal at EOS. Host fixture first logits are bitwise equal; Qwen3.5-0.8B retains sampled token IDs but its first logits differ by up to 0.347. The lookup path is experimental, not claimed bitwise equivalent to plain decoding.
+
 
 ## App UI refinements: 2026-10-22
 

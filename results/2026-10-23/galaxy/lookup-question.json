@@ -1,0 +1,152 @@
+{
+  "source_sha256": "f153877b4fa8c43a44e4dee474636a2821462ca193d5c13aba7a4fa614a9e259",
+  "artifacts": {
+    "eqt-bench": "daf0978606096da43be73f353de48ace45032fb684b0045082e160258d61f31a",
+    "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+    "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+    "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+    "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+    "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+    "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+    "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+    "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+    "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+    "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+    "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+    "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+    "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+  },
+  "target": "android",
+  "model": "files/models/qwen3.5-9b-q4km/Qwen3.5-9B-Q4_K_M.gguf",
+  "base_request": {
+    "load": {
+      "context": 1024,
+      "batch": 128,
+      "threads": 6,
+      "mmap": true,
+      "memory_budget_mib": 8192,
+      "mtp": false,
+      "rollback_slots": 0
+    },
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant."
+      },
+      {
+        "role": "user",
+        "content": "Why does the sky look blue during the day and red near sunset? Explain the physical mechanism in about 150 words."
+      }
+    ],
+    "max_tokens": 32,
+    "temperature": 0,
+    "thinking": false,
+    "seed": 42,
+    "ignore_eos": true
+  },
+  "mode": "prompt_lookup",
+  "requested_acceptance": null,
+  "scope": "Short real greedy prompt-lookup comparison; no general-quality or sustained-speed claim.",
+  "rows": [
+    {
+      "arm": "plain_before",
+      "verification_rows": null,
+      "decode_tokens_per_second": 4.61101791690739,
+      "decode_ms": 6939.899297,
+      "tokens": 32,
+      "token_ids_equal": true,
+      "target_agreement": null,
+      "tokens_per_step": null,
+      "step_ms": null,
+      "drafted_tokens": null,
+      "acceptance_rate": null,
+      "thermal_before": "1",
+      "thermal_after": "1",
+      "celsius_before": {
+        "AP": 41.2,
+        "BAT": 38.1,
+        "CP": 41.1,
+        "PA": 41.1,
+        "SKIN": 38.0,
+        "SUBBAT": 0.0,
+        "USB": 34.3
+      },
+      "read_bytes_per_token": null,
+      "memory_after": {
+        "rss_bytes": 5782851584,
+        "peak_rss_bytes": 5782851584,
+        "pss_bytes": 5781818368,
+        "minor_faults": 343149,
+        "major_faults": 1811,
+        "storage_read_bytes": 4866949120
+      }
+    },
+    {
+      "arm": "lookup_4",
+      "verification_rows": 4,
+      "decode_tokens_per_second": 4.332385296232628,
+      "decode_ms": 7386.231328,
+      "tokens": 32,
+      "token_ids_equal": true,
+      "target_agreement": null,
+      "tokens_per_step": 1.032258064516129,
+      "step_ms": 238.2655267096774,
+      "drafted_tokens": 0,
+      "acceptance_rate": null,
+      "thermal_before": "1",
+      "thermal_after": "1",
+      "celsius_before": {
+        "AP": 63.5,
+        "BAT": 39.1,
+        "CP": 50.1,
+        "PA": 47.9,
+        "SKIN": 40.5,
+        "SUBBAT": 0.0,
+        "USB": 34.3
+      },
+      "read_bytes_per_token": null,
+      "memory_after": {
+        "rss_bytes": 5719560192,
+        "peak_rss_bytes": 6085115904,
+        "pss_bytes": 5718095872,
+        "minor_faults": 296943,
+        "major_faults": 32,
+        "storage_read_bytes": 12488704
+      }
+    },
+    {
+      "arm": "plain_after",
+      "verification_rows": null,
+      "decode_tokens_per_second": 3.704629358517221,
+      "decode_ms": 8637.841172,
+      "tokens": 32,
+      "token_ids_equal": true,
+      "target_agreement": null,
+      "tokens_per_step": null,
+      "step_ms": null,
+      "drafted_tokens": null,
+      "acceptance_rate": null,
+      "thermal_before": "1",
+      "thermal_after": "1",
+      "celsius_before": {
+        "AP": 62.8,
+        "BAT": 40.0,
+        "CP": 50.4,
+        "PA": 49.0,
+        "SKIN": 41.2,
+        "SUBBAT": 0.0,
+        "USB": 34.2
+      },
+      "read_bytes_per_token": null,
+      "memory_after": {
+        "rss_bytes": 5770346496,
+        "peak_rss_bytes": 5865426944,
+        "pss_bytes": 5768881152,
+        "minor_faults": 245226,
+        "major_faults": 2928,
+        "storage_read_bytes": 159744
+      }
+    }
+  ],
+  "interpretation": "Ordinary question, 32 tokens: lookup proposed zero tokens. Plain-before/after drift brackets the lookup rate, so no isolated overhead estimate is justified. No general generation gain is demonstrated."
+}

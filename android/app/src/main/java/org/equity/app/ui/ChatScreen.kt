@@ -77,7 +77,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -120,7 +119,6 @@ import org.equity.app.Attachment
 import org.equity.app.AttachmentException
 import org.equity.app.AttachmentKind
 import org.equity.app.Attachments
-import org.equity.app.Catalog
 import org.equity.app.ChatStore
 import org.equity.app.ChatsState
 import org.equity.app.EngineController
@@ -288,7 +286,6 @@ fun ChatScreen(engine: EngineState, chats: ChatsState, onOpenModels: () -> Unit,
 private fun ChatHeader(engine: EngineState, title: String?, onOpenChats: () -> Unit, onNewChat: () -> Unit, canStartNew: Boolean) {
     val strings = LocalContext.current.resources
     val colors = MaterialTheme.colorScheme
-    val context = LocalContext.current
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -313,10 +310,6 @@ private fun ChatHeader(engine: EngineState, title: String?, onOpenChats: () -> U
                 Text(detail, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             }
-        }
-        val reload = Catalog.byId(engine.lastModelId)
-        if (engine.phase == Phase.Empty && reload != null) {
-            TextButton(onClick = { EngineController.load(context, reload) }) { Text(strings.getString(R.string.load_model)) }
         }
         IconButton(onClick = onNewChat, enabled = canStartNew) { Icon(Icons.Rounded.Add, contentDescription = strings.getString(R.string.new_chat)) }
     }

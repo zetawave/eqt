@@ -1,0 +1,973 @@
+{
+  "date": "2026-10-23",
+  "decision": "D039",
+  "surface": "CLI, Galaxy S24+ Exynos 2400, USB-powered",
+  "scope": "Short screening and real greedy prompt-copy decoding. No sustained-speed, free-form-speed, general-quality or bitwise-equivalence claim.",
+  "verification_screens": {
+    "flash-next": {
+      "source_sha256": "b999094cb2a0ecb005e45e8eb98bffe1fe7663004fb6b6f847574cf48cdf335d",
+      "artifacts": {
+        "eqt-bench": "27869e4be3becae63593438bf31256207a23e07f5b13d1f162566992fa8a02f0",
+        "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+        "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+        "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+        "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+        "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+        "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+        "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+        "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+        "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+        "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+        "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+        "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+        "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+      },
+      "target": "android",
+      "model": "files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+      "base_request": {
+        "load": {
+          "context": 2048,
+          "batch": 128,
+          "threads": 6,
+          "mmap": false,
+          "memory_budget_mib": 8192,
+          "expert_streaming": true,
+          "expert_cache_mib": 1024,
+          "io_threads": 16,
+          "direct_io": true,
+          "prefetch": true,
+          "coalesce_kib": 2048,
+          "coalesce_gap": 1,
+          "prefill_prefetch_mib": 0,
+          "prefill_prefetch_min_coverage": 0.9,
+          "speculative_pool": true,
+          "lookahead_layers": 2,
+          "lookahead2_count": 5,
+          "read_priority": true,
+          "prefetch_inflight": 2,
+          "lookahead_router_q8": true,
+          "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack",
+          "expert_pack_split": 2,
+          "mtp": false,
+          "rollback_slots": 0
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful technical assistant."
+          },
+          {
+            "role": "user",
+            "content": "Explain how virtual memory works on an Android phone. Cover page tables, page faults, file mappings and the difference between RAM and storage. Give a concrete example for each part, in about 400 words."
+          }
+        ],
+        "max_tokens": 32,
+        "temperature": 0,
+        "thinking": false,
+        "seed": 42,
+        "ignore_eos": true
+      },
+      "requested_acceptance": 1.0,
+      "scope": "Short verifier screening with zero draft cost; no inference speedup or sustained-speed claim.",
+      "rows": [
+        {
+          "arm": "plain_before",
+          "verification_rows": null,
+          "decode_tokens_per_second": 3.071708729077831,
+          "decode_ms": 10417.654414,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": null,
+          "tokens_per_step": null,
+          "step_ms": null,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 30.9,
+            "BAT": 28.7,
+            "CP": 30.7,
+            "PA": 30.6,
+            "SKIN": 30.1,
+            "SUBBAT": 0.0,
+            "USB": 28.7
+          },
+          "read_bytes_per_token": 630219648.0,
+          "memory_after": {
+            "rss_bytes": 5002690560,
+            "peak_rss_bytes": 5317263360,
+            "pss_bytes": 5003310080,
+            "minor_faults": 1426989,
+            "major_faults": 99164,
+            "storage_read_bytes": 38408388608
+          }
+        },
+        {
+          "arm": "verify_8",
+          "verification_rows": 8,
+          "decode_tokens_per_second": 3.320297329641752,
+          "decode_ms": 9637.691093,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": 1.0,
+          "tokens_per_step": 8.0,
+          "step_ms": 2409.42277325,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 60.6,
+            "BAT": 30.3,
+            "CP": 46.1,
+            "PA": 43.7,
+            "SKIN": 35.0,
+            "SUBBAT": 0.0,
+            "USB": 28.7
+          },
+          "read_bytes_per_token": 443580160.0,
+          "memory_after": {
+            "rss_bytes": 6179241984,
+            "peak_rss_bytes": 6333132800,
+            "pss_bytes": 6179320832,
+            "minor_faults": 1696557,
+            "major_faults": 149,
+            "storage_read_bytes": 31729897472
+          }
+        },
+        {
+          "arm": "verify_4",
+          "verification_rows": 4,
+          "decode_tokens_per_second": 3.744570897754632,
+          "decode_ms": 8545.705469,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": 0.96875,
+          "tokens_per_step": 4.0,
+          "step_ms": 1068.213183625,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 61.3,
+            "BAT": 33.9,
+            "CP": 48.7,
+            "PA": 47.5,
+            "SKIN": 37.8,
+            "SUBBAT": 0.0,
+            "USB": 28.7
+          },
+          "read_bytes_per_token": 537240960.0,
+          "memory_after": {
+            "rss_bytes": 5592260608,
+            "peak_rss_bytes": 5847613440,
+            "pss_bytes": 5592772608,
+            "minor_faults": 1555374,
+            "major_faults": 141,
+            "storage_read_bytes": 34839269376
+          }
+        },
+        {
+          "arm": "verify_2",
+          "verification_rows": 2,
+          "decode_tokens_per_second": 3.399501159813176,
+          "decode_ms": 9413.145781,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": 0.96875,
+          "tokens_per_step": 2.0,
+          "step_ms": 588.3216113125,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 58.9,
+            "BAT": 35.0,
+            "CP": 48.8,
+            "PA": 47.0,
+            "SKIN": 38.7,
+            "SUBBAT": 0.0,
+            "USB": 28.7
+          },
+          "read_bytes_per_token": 613480192.0,
+          "memory_after": {
+            "rss_bytes": 5282746368,
+            "peak_rss_bytes": 5604847616,
+            "pss_bytes": 5283433472,
+            "minor_faults": 1479384,
+            "major_faults": 103,
+            "storage_read_bytes": 37121921024
+          }
+        },
+        {
+          "arm": "plain_after",
+          "verification_rows": null,
+          "decode_tokens_per_second": 3.0050071298475394,
+          "decode_ms": 10648.893203,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": null,
+          "tokens_per_step": null,
+          "step_ms": null,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 54.4,
+            "BAT": 35.4,
+            "CP": 47.5,
+            "PA": 45.5,
+            "SKIN": 38.7,
+            "SUBBAT": 0.0,
+            "USB": 28.8
+          },
+          "read_bytes_per_token": 635318400.0,
+          "memory_after": {
+            "rss_bytes": 5049552896,
+            "peak_rss_bytes": 5360812032,
+            "pss_bytes": 5050382336,
+            "minor_faults": 1424816,
+            "major_faults": 113,
+            "storage_read_bytes": 37313400832
+          }
+        }
+      ]
+    },
+    "35b-iq2m": {
+      "source_sha256": "b999094cb2a0ecb005e45e8eb98bffe1fe7663004fb6b6f847574cf48cdf335d",
+      "artifacts": {
+        "eqt-bench": "27869e4be3becae63593438bf31256207a23e07f5b13d1f162566992fa8a02f0",
+        "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+        "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+        "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+        "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+        "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+        "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+        "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+        "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+        "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+        "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+        "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+        "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+        "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+      },
+      "target": "android",
+      "model": "files/models/qwen3.6-35b-a3b-iq2m/Qwen3.6-35B-A3B-UD-IQ2_M.gguf",
+      "base_request": {
+        "load": {
+          "context": 2048,
+          "batch": 128,
+          "threads": 6,
+          "mmap": false,
+          "memory_budget_mib": 6144,
+          "expert_streaming": true,
+          "expert_cache_mib": 2048,
+          "io_threads": 16,
+          "direct_io": true,
+          "prefetch": true,
+          "coalesce_kib": 2048,
+          "coalesce_gap": 1,
+          "prefill_prefetch_mib": 512,
+          "mtp": false,
+          "rollback_slots": 0
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful technical assistant."
+          },
+          {
+            "role": "user",
+            "content": "Explain how virtual memory works on an Android phone. Cover page tables, page faults, file mappings and the difference between RAM and storage. Give a concrete example for each part, in about 400 words."
+          }
+        ],
+        "max_tokens": 32,
+        "temperature": 0,
+        "thinking": false,
+        "seed": 42,
+        "ignore_eos": true
+      },
+      "requested_acceptance": 1.0,
+      "scope": "Short verifier screening with zero draft cost; no inference speedup or sustained-speed claim.",
+      "rows": [
+        {
+          "arm": "plain_before",
+          "verification_rows": null,
+          "decode_tokens_per_second": 9.366569928820255,
+          "decode_ms": 3416.405391,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": null,
+          "tokens_per_step": null,
+          "step_ms": null,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 43.1,
+            "BAT": 36.5,
+            "CP": 43.5,
+            "PA": 43.7,
+            "SKIN": 38.5,
+            "SUBBAT": 0.0,
+            "USB": 28.9
+          },
+          "read_bytes_per_token": 62635008.0,
+          "memory_after": {
+            "rss_bytes": 4515430400,
+            "peak_rss_bytes": 4625350656,
+            "pss_bytes": 4516048896,
+            "minor_faults": 1323855,
+            "major_faults": 92,
+            "storage_read_bytes": 13241757696
+          }
+        },
+        {
+          "arm": "verify_8",
+          "verification_rows": 8,
+          "decode_tokens_per_second": 9.761225900745016,
+          "decode_ms": 3278.276758,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": 1.0,
+          "tokens_per_step": 8.0,
+          "step_ms": 819.5691895,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 59.6,
+            "BAT": 35.3,
+            "CP": 46.1,
+            "PA": 43.8,
+            "SKIN": 38.6,
+            "SUBBAT": 0.0,
+            "USB": 29.1
+          },
+          "read_bytes_per_token": 67884288.0,
+          "memory_after": {
+            "rss_bytes": 5078884352,
+            "peak_rss_bytes": 5171167232,
+            "pss_bytes": 5079736320,
+            "minor_faults": 1461598,
+            "major_faults": 18,
+            "storage_read_bytes": 11963699200
+          }
+        },
+        {
+          "arm": "verify_4",
+          "verification_rows": 4,
+          "decode_tokens_per_second": 8.784933650352817,
+          "decode_ms": 3642.600078,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": 1.0,
+          "tokens_per_step": 4.0,
+          "step_ms": 455.32500975,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 53.8,
+            "BAT": 35.6,
+            "CP": 47.1,
+            "PA": 45.3,
+            "SKIN": 39.1,
+            "SUBBAT": 0.0,
+            "USB": 29.2
+          },
+          "read_bytes_per_token": 68913664.0,
+          "memory_after": {
+            "rss_bytes": 4800651264,
+            "peak_rss_bytes": 4898217984,
+            "pss_bytes": 4800743424,
+            "minor_faults": 1393293,
+            "major_faults": 13,
+            "storage_read_bytes": 11997732864
+          }
+        },
+        {
+          "arm": "verify_2",
+          "verification_rows": 2,
+          "decode_tokens_per_second": 8.137262263166562,
+          "decode_ms": 3932.526563,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": 1.0,
+          "tokens_per_step": 2.0,
+          "step_ms": 245.7829101875,
+          "thermal_before": "0",
+          "thermal_after": "1",
+          "celsius_before": {
+            "AP": 50.2,
+            "BAT": 36.2,
+            "CP": 46.4,
+            "PA": 45.6,
+            "SKIN": 39.2,
+            "SUBBAT": 0.0,
+            "USB": 29.2
+          },
+          "read_bytes_per_token": 69424896.0,
+          "memory_after": {
+            "rss_bytes": 4661075968,
+            "peak_rss_bytes": 4762329088,
+            "pss_bytes": 4661665792,
+            "minor_faults": 1360030,
+            "major_faults": 37,
+            "storage_read_bytes": 12168781824
+          }
+        },
+        {
+          "arm": "plain_after",
+          "verification_rows": null,
+          "decode_tokens_per_second": 7.457601708920245,
+          "decode_ms": 4290.923711,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": null,
+          "tokens_per_step": null,
+          "step_ms": null,
+          "thermal_before": "1",
+          "thermal_after": "1",
+          "celsius_before": {
+            "AP": 57.0,
+            "BAT": 36.9,
+            "CP": 49.8,
+            "PA": 48.2,
+            "SKIN": 40.2,
+            "SUBBAT": 0.0,
+            "USB": 29.3
+          },
+          "read_bytes_per_token": 62281728.0,
+          "memory_after": {
+            "rss_bytes": 4513857536,
+            "peak_rss_bytes": 4624343040,
+            "pss_bytes": 4514716672,
+            "minor_faults": 1324216,
+            "major_faults": 58,
+            "storage_read_bytes": 12333776896
+          }
+        }
+      ]
+    },
+    "9b-q4km": {
+      "source_sha256": "b999094cb2a0ecb005e45e8eb98bffe1fe7663004fb6b6f847574cf48cdf335d",
+      "artifacts": {
+        "eqt-bench": "27869e4be3becae63593438bf31256207a23e07f5b13d1f162566992fa8a02f0",
+        "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+        "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+        "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+        "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+        "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+        "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+        "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+        "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+        "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+        "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+        "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+        "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+        "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+      },
+      "target": "android",
+      "model": "files/models/qwen3.5-9b-q4km/Qwen3.5-9B-Q4_K_M.gguf",
+      "base_request": {
+        "load": {
+          "context": 1024,
+          "batch": 128,
+          "threads": 6,
+          "mmap": true,
+          "memory_budget_mib": 8192,
+          "mtp": false,
+          "rollback_slots": 0
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful technical assistant."
+          },
+          {
+            "role": "user",
+            "content": "Explain how virtual memory works on an Android phone. Cover page tables, page faults, file mappings and the difference between RAM and storage. Give a concrete example for each part, in about 400 words."
+          }
+        ],
+        "max_tokens": 32,
+        "temperature": 0,
+        "thinking": false,
+        "seed": 42,
+        "ignore_eos": true
+      },
+      "requested_acceptance": 1.0,
+      "scope": "Short verifier screening with zero draft cost; no inference speedup or sustained-speed claim.",
+      "rows": [
+        {
+          "arm": "plain_before",
+          "verification_rows": null,
+          "decode_tokens_per_second": 6.14891104375485,
+          "decode_ms": 5204.173515,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": null,
+          "tokens_per_step": null,
+          "step_ms": null,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 39.8,
+            "BAT": 35.7,
+            "CP": 39.9,
+            "PA": 39.8,
+            "SKIN": 37.4,
+            "SUBBAT": 0.0,
+            "USB": 29.6
+          },
+          "read_bytes_per_token": null,
+          "memory_after": {
+            "rss_bytes": 5875576832,
+            "peak_rss_bytes": 5875576832,
+            "pss_bytes": 5873888256,
+            "minor_faults": 246409,
+            "major_faults": 0,
+            "storage_read_bytes": 5687046144
+          }
+        },
+        {
+          "arm": "verify_8",
+          "verification_rows": 8,
+          "decode_tokens_per_second": 4.756619923585644,
+          "decode_ms": 6727.46625,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": 1.0,
+          "tokens_per_step": 8.0,
+          "step_ms": 1681.8665625,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 60.2,
+            "BAT": 35.2,
+            "CP": 46.1,
+            "PA": 44.0,
+            "SKIN": 38.5,
+            "SUBBAT": 0.0,
+            "USB": 29.7
+          },
+          "read_bytes_per_token": null,
+          "memory_after": {
+            "rss_bytes": 6315130880,
+            "peak_rss_bytes": 6315130880,
+            "pss_bytes": 6313326592,
+            "minor_faults": 353202,
+            "major_faults": 67,
+            "storage_read_bytes": 2809856
+          }
+        },
+        {
+          "arm": "verify_4",
+          "verification_rows": 4,
+          "decode_tokens_per_second": 9.011933462606216,
+          "decode_ms": 3550.847344,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": 1.0,
+          "tokens_per_step": 4.0,
+          "step_ms": 443.855918,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 55.5,
+            "BAT": 36.1,
+            "CP": 46.1,
+            "PA": 45.3,
+            "SKIN": 39.1,
+            "SUBBAT": 0.0,
+            "USB": 29.7
+          },
+          "read_bytes_per_token": null,
+          "memory_after": {
+            "rss_bytes": 6092009472,
+            "peak_rss_bytes": 6092009472,
+            "pss_bytes": 6090025984,
+            "minor_faults": 298839,
+            "major_faults": 11,
+            "storage_read_bytes": 2101248
+          }
+        },
+        {
+          "arm": "plain_after",
+          "verification_rows": null,
+          "decode_tokens_per_second": 4.913718474853114,
+          "decode_ms": 6512.379609,
+          "tokens": 32,
+          "token_ids_equal": true,
+          "target_agreement": null,
+          "tokens_per_step": null,
+          "step_ms": null,
+          "thermal_before": "0",
+          "thermal_after": "0",
+          "celsius_before": {
+            "AP": 52.4,
+            "BAT": 36.7,
+            "CP": 45.5,
+            "PA": 45.0,
+            "SKIN": 39.2,
+            "SUBBAT": 0.0,
+            "USB": 29.8
+          },
+          "read_bytes_per_token": null,
+          "memory_after": {
+            "rss_bytes": 5874462720,
+            "peak_rss_bytes": 5874462720,
+            "pss_bytes": 5872843776,
+            "minor_faults": 245649,
+            "major_faults": 0,
+            "storage_read_bytes": 0
+          }
+        }
+      ]
+    }
+  },
+  "actual_lookup_32_tokens": {
+    "source_sha256": "7fa21650a54b7cc834359089c845171fbe6c7e7c20320a20995930d3f875ddd6",
+    "artifacts": {
+      "eqt-bench": "88959d43cca0c843af2f71d41232c51b80443e9815f55e4eeb0e9ff048d82358",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "target": "android",
+    "model": "files/models/qwen3.5-9b-q4km/Qwen3.5-9B-Q4_K_M.gguf",
+    "base_request": {
+      "load": {
+        "context": 1024,
+        "batch": 128,
+        "threads": 6,
+        "mmap": true,
+        "memory_budget_mib": 8192,
+        "mtp": false,
+        "rollback_slots": 0
+      },
+      "messages": [
+        {
+          "role": "system",
+          "content": "Follow the user's formatting instructions precisely."
+        },
+        {
+          "role": "user",
+          "content": "Copy the text inside the source tags exactly. Output only that text, without the tags, quotation marks or commentary.\n<source>\nMemory pages connect virtual addresses to physical storage.\nA page table records the location and permissions of each page.\nWhen a required page is absent, the processor raises a page fault.\nThe operating system locates the data and updates the mapping.\nFile mappings let a program access file contents through memory addresses.\nClean file pages can be discarded and loaded again when needed.\nDirty anonymous pages require a different reclamation strategy.\nRAM provides fast access while storage keeps data across restarts.\nAn inference engine must account for weights, state and temporary buffers.\nReducing unnecessary copies saves both bandwidth and energy.\n</source>"
+        }
+      ],
+      "max_tokens": 32,
+      "temperature": 0,
+      "thinking": false,
+      "seed": 42,
+      "ignore_eos": true
+    },
+    "requested_acceptance": 1.0,
+    "scope": "Short real greedy prompt-lookup comparison; no general-quality or sustained-speed claim.",
+    "rows": [
+      {
+        "arm": "plain_before",
+        "verification_rows": null,
+        "decode_tokens_per_second": 6.178420133170679,
+        "decode_ms": 5179.317578,
+        "tokens": 32,
+        "token_ids_equal": true,
+        "target_agreement": null,
+        "tokens_per_step": null,
+        "step_ms": null,
+        "drafted_tokens": null,
+        "acceptance_rate": null,
+        "thermal_before": "0",
+        "thermal_after": "0",
+        "celsius_before": {
+          "AP": 33.2,
+          "BAT": 31.6,
+          "CP": 33.4,
+          "PA": 33.4,
+          "SKIN": 32.3,
+          "SUBBAT": 0.0,
+          "USB": 30.1
+        },
+        "read_bytes_per_token": null,
+        "memory_after": {
+          "rss_bytes": 5775405056,
+          "peak_rss_bytes": 5775405056,
+          "pss_bytes": 5773945856,
+          "minor_faults": 281473,
+          "major_faults": 839,
+          "storage_read_bytes": 1926283264
+        }
+      },
+      {
+        "arm": "lookup_4",
+        "verification_rows": 4,
+        "decode_tokens_per_second": 9.271949899962136,
+        "decode_ms": 3451.269727,
+        "tokens": 32,
+        "token_ids_equal": true,
+        "target_agreement": null,
+        "tokens_per_step": 2.909090909090909,
+        "step_ms": 313.75179336363635,
+        "drafted_tokens": 21,
+        "acceptance_rate": 1.0,
+        "thermal_before": "0",
+        "thermal_after": "0",
+        "celsius_before": {
+          "AP": 59.9,
+          "BAT": 32.2,
+          "CP": 43.3,
+          "PA": 41.1,
+          "SKIN": 35.2,
+          "SUBBAT": 0.0,
+          "USB": 30.2
+        },
+        "read_bytes_per_token": null,
+        "memory_after": {
+          "rss_bytes": 6089945088,
+          "peak_rss_bytes": 6089945088,
+          "pss_bytes": 6093595648,
+          "minor_faults": 306759,
+          "major_faults": 84,
+          "storage_read_bytes": 115716096
+        }
+      },
+      {
+        "arm": "plain_after",
+        "verification_rows": null,
+        "decode_tokens_per_second": 5.43692700362232,
+        "decode_ms": 5885.677696,
+        "tokens": 32,
+        "token_ids_equal": true,
+        "target_agreement": null,
+        "tokens_per_step": null,
+        "step_ms": null,
+        "drafted_tokens": null,
+        "acceptance_rate": null,
+        "thermal_before": "0",
+        "thermal_after": "0",
+        "celsius_before": {
+          "AP": 58.9,
+          "BAT": 33.7,
+          "CP": 44.4,
+          "PA": 43.8,
+          "SKIN": 36.5,
+          "SUBBAT": 0.0,
+          "USB": 30.1
+        },
+        "read_bytes_per_token": null,
+        "memory_after": {
+          "rss_bytes": 5883256832,
+          "peak_rss_bytes": 5883256832,
+          "pss_bytes": 5881714688,
+          "minor_faults": 247885,
+          "major_faults": 0,
+          "storage_read_bytes": 0
+        }
+      }
+    ]
+  },
+  "actual_lookup_64_tokens": [
+    {
+      "arm": "lookup_before",
+      "tokens": 64,
+      "tokens_equal": true,
+      "tokens_per_second": 9.706154525111488,
+      "lookup": {
+        "draft_max": 3,
+        "verification_steps": 19,
+        "drafted_tokens": 45,
+        "accepted_tokens": 45,
+        "acceptance_rate": 1.0,
+        "tokens_per_step": 3.3684210526315788,
+        "lookup_ms": 0.031834
+      },
+      "thermal_before": "0",
+      "thermal_after": "0",
+      "celsius_before": {
+        "AP": 34.6,
+        "BAT": 32.6,
+        "CP": 34.8,
+        "PA": 34.7,
+        "SKIN": 33.5,
+        "SUBBAT": 0.0,
+        "USB": 30.1
+      },
+      "memory_after": {
+        "rss_bytes": 6033063936,
+        "peak_rss_bytes": 6053814272,
+        "pss_bytes": 6031657984,
+        "minor_faults": 299458,
+        "major_faults": 0,
+        "storage_read_bytes": 0
+      }
+    },
+    {
+      "arm": "plain",
+      "tokens": 64,
+      "tokens_equal": true,
+      "tokens_per_second": 5.3730528041106425,
+      "lookup": null,
+      "thermal_before": "0",
+      "thermal_after": "0",
+      "celsius_before": {
+        "AP": 56.1,
+        "BAT": 32.8,
+        "CP": 39.9,
+        "PA": 38.7,
+        "SKIN": 34.9,
+        "SUBBAT": 0.0,
+        "USB": 30.2
+      },
+      "memory_after": {
+        "rss_bytes": 5883035648,
+        "peak_rss_bytes": 5883146240,
+        "pss_bytes": 5881612288,
+        "minor_faults": 251709,
+        "major_faults": 0,
+        "storage_read_bytes": 0
+      }
+    },
+    {
+      "arm": "lookup_after",
+      "tokens": 64,
+      "tokens_equal": true,
+      "tokens_per_second": 9.364999424403722,
+      "lookup": {
+        "draft_max": 3,
+        "verification_steps": 19,
+        "drafted_tokens": 45,
+        "accepted_tokens": 45,
+        "acceptance_rate": 1.0,
+        "tokens_per_step": 3.3684210526315788,
+        "lookup_ms": 0.039023
+      },
+      "thermal_before": "0",
+      "thermal_after": "0",
+      "celsius_before": {
+        "AP": 62.1,
+        "BAT": 35.3,
+        "CP": 46.9,
+        "PA": 45.4,
+        "SKIN": 37.8,
+        "SUBBAT": 0.0,
+        "USB": 30.2
+      },
+      "memory_after": {
+        "rss_bytes": 5935439872,
+        "peak_rss_bytes": 6052802560,
+        "pss_bytes": 5934015488,
+        "minor_faults": 299585,
+        "major_faults": 0,
+        "storage_read_bytes": 0
+      }
+    }
+  ],
+  "actual_copy_speedup_ratio": [
+    1.8064506117799206,
+    1.7429568935631992
+  ],
+  "correctness": {
+    "verifier_fixture_checks": 16,
+    "lookup_host": [
+      {
+        "model": "eqt-tiny-qwen35moe.gguf",
+        "maximum": 3,
+        "token_ids_equal": true,
+        "max_logit_delta": 0.0,
+        "stats": {
+          "draft_max": 3,
+          "verification_steps": 10,
+          "drafted_tokens": 15,
+          "accepted_tokens": 15,
+          "acceptance_rate": 1.0,
+          "tokens_per_step": 2.5,
+          "lookup_ms": 0.020600000000000004
+        }
+      },
+      {
+        "model": "eqt-tiny-qwen35moe.gguf",
+        "maximum": 7,
+        "token_ids_equal": true,
+        "max_logit_delta": 0.0,
+        "stats": {
+          "draft_max": 7,
+          "verification_steps": 7,
+          "drafted_tokens": 18,
+          "accepted_tokens": 18,
+          "acceptance_rate": 1.0,
+          "tokens_per_step": 3.5714285714285716,
+          "lookup_ms": 0.019200000000000002
+        }
+      },
+      {
+        "model": "eqt-tiny-qwen4exp.gguf",
+        "maximum": 3,
+        "token_ids_equal": true,
+        "max_logit_delta": 0.0,
+        "stats": {
+          "draft_max": 3,
+          "verification_steps": 25,
+          "drafted_tokens": 0,
+          "accepted_tokens": 0,
+          "acceptance_rate": null,
+          "tokens_per_step": 1.0,
+          "lookup_ms": 0.1229
+        }
+      },
+      {
+        "model": "eqt-tiny-qwen4exp.gguf",
+        "maximum": 7,
+        "token_ids_equal": true,
+        "max_logit_delta": 0.0,
+        "stats": {
+          "draft_max": 7,
+          "verification_steps": 25,
+          "drafted_tokens": 0,
+          "accepted_tokens": 0,
+          "acceptance_rate": null,
+          "tokens_per_step": 1.0,
+          "lookup_ms": 0.1037
+        }
+      },
+      {
+        "model": "Qwen3.5-0.8B-Q8_0.gguf",
+        "maximum": 3,
+        "token_ids_equal": true,
+        "max_logit_delta": 0.3468344211578369,
+        "stats": {
+          "draft_max": 3,
+          "verification_steps": 9,
+          "drafted_tokens": 16,
+          "accepted_tokens": 16,
+          "acceptance_rate": 1.0,
+          "tokens_per_step": 2.7777777777777777,
+          "lookup_ms": 0.024599999999999997
+        }
+      }
+    ],
+    "lookup_rejection": {
+      "tokens_equal": true,
+      "stats": {
+        "draft_max": 3,
+        "verification_steps": 10,
+        "drafted_tokens": 18,
+        "accepted_tokens": 17,
+        "acceptance_rate": 0.9444444444444444,
+        "tokens_per_step": 2.6,
+        "lookup_ms": 0.011099999999999999
+      },
+      "termination": "eos"
+    }
+  },
+  "caveats": [
+    "Flash-Next uses a 1024 MiB expert cache in every screening arm to leave room for eight recurrent snapshots; the app normally targets 1792 MiB.",
+    "Perfect teacher-forced proposals have zero draft cost and guaranteed scheduled acceptance; they are not inference.",
+    "The 35B plain rate drifted from 9.37 to 7.46 tokens/s; small differences are inconclusive.",
+    "Flash-Next 2/4-row verification changed one of 32 greedy predictions relative to plain decoding.",
+    "Qwen3.5-0.8B prompt lookup retained the sampled greedy tokens but its first logits differed by up to 0.347 on the host.",
+    "Prompt lookup is off by default, greedy-only, without images, steering or MTP; chat prefix/session reuse is disabled while it runs.",
+    "No APK was installed or modified on the phone."
+  ],
+  "energy_joules": null
+}

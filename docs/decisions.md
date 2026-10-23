@@ -951,3 +951,43 @@ Galaxy, the same image, flash attention, the app's 1,024 MiB cache with keys and
 - encode 63.5 s, image prefill 127 s, first token after 209 s, decode 2.54 tokens/s.
 
 A full-resolution photo on Flash-Next takes three to four minutes to its first token.
+
+## D039: Short verification screening and opt-in greedy prompt lookup — 2026-10-23
+
+Record: `results/2026-10-23/galaxy/verification-lookup.json`. Galaxy S24+ (Exynos 2400), CLI as the app user, USB-powered. No APK was installed and no default changed. Runs are deliberately short: 32 tokens per screening arm, one 64-token repeat for the promising real decoder. No sustained-speed or energy result.
+
+**Verifier screening, not inference.** `verify_replay.draft_max` now supports 1–7 proposals (2–8 rows including the anchor). The answer is teacher-forced; perfect proposals cost nothing. Each reached depth has its own deterministic conditional acceptance schedule, and rejected suffixes roll back. The final block shrinks to the remaining reference/output tokens. Batch and rollback slots must fit the requested width.
+
+| Model and cache | Plain before / after (tokens/s) | Perfect 8 rows | Perfect 4 rows | Perfect 2 rows |
+|---|---|---|---|---|
+| Flash-Next, 1,024 MiB | 3.07 / 3.01 | 3.32 | 3.74 | 3.40 |
+| 35B UD-IQ2_M, 2,048 MiB | 9.37 / 7.46 | 9.76 | 8.78 | 8.14 |
+| 9B Q4_K_M, resident | 6.15 / 4.91 | 4.76 | 9.01 | not run |
+
+Flash-Next uses less cache than the app's 1,792 MiB to leave room for eight recurrent snapshots; every arm uses the same 1,024 MiB. Its 2/4-row batches disagree with one of 32 reference greedy predictions; 8 rows agree throughout. All 35B and 9B screened predictions agree. Token IDs in a replay are forced and alone establish nothing about inference equivalence. The 35B's 20% plain drift prevents attributing small differences, and the zero-draft-cost bound gives no reason to implement a reduced MTP vocabulary now. Eight-row verification on the 9B is rejected; four rows justify a real copy decoder.
+
+**Prompt lookup, actual decoding.** Request `prompt_lookup` (default 0) proposes up to 1–7 tokens from an earlier occurrence of the current token suffix. Longest (3–8 tokens), then most recent wins; overlapping matches can repeat their period. No neural drafter or weight transformation. The target samples every verified position greedily, accepts only the matching prefix and rolls back rejected rows. No match evaluates one token. Slots and batch must fit; images, non-greedy sampling, steering, MTP and replay are refused. Prefix/session reuse is disabled for the experimental path.
+
+Real 9B Q4_K_M, `configs/lookup-copy-request.json`, three proposals / four verification rows:
+
+- 32 tokens, plain → lookup → plain: **6.18 → 9.27 → 5.44 tokens/s**; 21 of 21 proposals accepted, 2.91 tokens per step.
+- One 64-token repeat, lookup → plain → lookup: **9.71 → 5.37 → 9.36 tokens/s**, **1.74–1.81×** plain; 45 of 45 proposals accepted, 3.37 tokens per step. Lookup itself costs 0.032–0.039 ms over the entire answer. Peak RSS is about 6.05 GB versus 5.88 GB plain.
+- Token IDs are identical in both sequences; thermal status stays 0. This is a short copy result. Free-form benefit, quality across tasks, sustained speed and energy are unmeasured.
+
+**Checks and numerical limits.** Host/Android CLI builds pass. Sixteen verifier fixture checks cover widths, partial/zero acceptance and invalid inputs. Lookup checks cover matched proposals, the no-match path, invalid inputs and a rejected proposal at EOS on Qwen3.5-0.8B; sampled token IDs match plain decoding. Fixture first logits are bitwise equal. The real 0.8B's first logits differ by up to 0.347, because lookup splits the last prompt token out of prefill; verified batch shapes can also round differently. This path is experimental, not bitwise equivalent to the plain reference, and remains off in the app.
+
+`tools/bench_verification.py` records raw results, source/artifact hashes, thermal state, actual expert I/O bytes and token agreement; `--lookup` selects real decoding. No long regression suite or sustained run was performed for this experiment.
+
+## D040: Default-enabled app lookup on the measured 9B profile — 2026-10-23
+
+The owner's request enables the optimization by default with an advanced opt-out. Settings → Advanced → Prompt lookup is persisted, true by default. The app sends three proposals / four verification rows for the pinned Qwen3.5 9B Q4_K_M only (catalog or a local file with the same verified hash). The 3-bit 9B and streamed models have no measured profile and keep their decoder. Creativity above zero, images and steering keep normal generation; the app does not change the user's sampling request.
+
+Four rollback slots add about 192 MiB (four times the 9B's 48 MiB recurrent state). Admission keeps the existing context and margins: snapshots are enabled only when that additional memory fits, otherwise loading proceeds without lookup. Context-allocation failure retries without slots. Disabling applies to the next answer; enabling needs a reload, and the existing slots are released by reloading. A context expansion can drop lookup before retrying the request when the larger window leaves insufficient memory.
+
+Lookup now evaluates the full prompt and samples the first token through the same path as plain decoding. This removes D039's split-prefill first-logit deviation and permits the usual prompt/session eligibility checks. The remaining accepted-prefix state contains all emitted tokens except the last sampled one at a length limit, or all emitted tokens at EOS, as plain decoding does. Later multi-token verification still has batch-dependent rounding; no general bitwise-equivalence or quality claim is added.
+
+Focused host checks on the qwen35moe/qwen4exp fixtures and Qwen3.5-0.8B retain token IDs and now have bitwise-equal first logits. `tools/verify_lookup.py` checks first outputs, turn reuse versus plain, the disabled path, session save/restore eligibility versus plain, and a one-token limit. The tiny fixture and 0.8B used here decline reuse and session saving in both paths; their checks establish matching fallback, not a successful restore.
+
+Final Galaxy CLI check, same 32-token copy workload, plain → lookup → plain: **4.24 → 6.77 → 3.58 tokens/s**, identical token IDs. Absolute rates differ from D039's cooler session; thermal status rose from 0 to 1 and memory-page faults varied. This remains short-copy evidence only, with no new sustained or free-form result. Record: `results/2026-10-23/galaxy/lookup-app.json`.
+
+The debug Vulkan APK built, Android lint passed (0 errors, 32 warnings), and the APK was installed as an update and launched on the Galaxy. Model files, chats and their data are retained. UI strings for the new advanced control are English.

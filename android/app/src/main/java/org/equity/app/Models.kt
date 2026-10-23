@@ -118,6 +118,8 @@ data class CatalogModel(
     /** Parameter count shown on the model's badge. */
     val badge: String = "",
     val stream: StreamProfile = StreamProfile(),
+    /** Four-row prompt lookup measured on this artifact; other models keep plain decoding. */
+    val promptLookup: Boolean = false,
     val parts: List<ArtifactPart> = emptyList(),
     val headerBytes: Long = 0,
     val headerSha256: String? = null,
@@ -177,7 +179,7 @@ object Catalog {
             file = "Qwen3.5-9B-Q4_K_M.gguf", sizeBytes = 5_680_522_464L,
             sha256 = "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
             license = "Apache-2.0", streamed = false, residentMiB = 5420, contextMiBPer1k = 48, trainedContext = 262_144,
-            projector = qwen35_9bProjector, badge = "9B",
+            projector = qwen35_9bProjector, badge = "9B", promptLookup = true,
         ),
         CatalogModel(
             id = "qwen3.5-9b-ud-iq3xxs", name = "Qwen3.5 9B · 3-bit",

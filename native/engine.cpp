@@ -17,6 +17,7 @@
 #include "mtmd.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -56,6 +57,27 @@ int integer(const Json &j, const char *key, int fallback, int low, int high) {
         throw std::invalid_argument(std::string(key) + " outside supported range");
     }
     return value.get<int>();
+}
+
+void lookup_drafts(const std::vector<llama_token> &history, int maximum, std::vector<llama_token> &drafts) {
+    drafts.clear();
+    if (maximum <= 0 || history.size() < 4) {
+        return;
+    }
+    // A match must precede the current suffix and have a known continuation. Longest, then most recent wins.
+    for (size_t length = std::min<size_t>(8, history.size() - 1); length >= 3; --length) {
+        for (size_t end = history.size() - 1; end >= length; --end) {
+            if (std::equal(history.end() - length, history.end(), history.begin() + end - length)) {
+                // Overlapping matches repeat with period history.size() - end. Once a source index reaches
+                // the current end, its continuation is an already proposed token from that same period.
+                for (int i = 0; i < maximum; ++i) {
+                    const size_t index = end + i;
+                    drafts.push_back(index < history.size() ? history[index] : drafts[index - history.size()]);
+                }
+                return;
+            }
+        }
+    }
 }
 std::string metadata(llama_model *model, const char *key) {
     const int count = llama_model_meta_val_str(model, key, nullptr, 0);
@@ -755,7 +777,7 @@ struct Engine::State {
     int context_size = 0;
     int batch_size = 0;
     // Tokens whose keys, values and recurrent state the context holds after the last request, in position order.
-    // Valid only after a text request that completed without cancellation, steering or drafting; the recurrent
+    // Valid only after a text request that completed without cancellation, steering or MTP drafting; the recurrent
     // state cannot be rewound, so a later prompt reuses it only when it starts with all of these tokens.
     std::vector<llama_token> resident;
     bool resident_valid = false;
@@ -1384,16 +1406,16 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     }
     const bool ignore_eos = request.value("ignore_eos", false);
     const auto *vocab = llama_model_get_vocab(s.model.get());
-    // A measurement of k = 1 speculative verification without a draft head: every step evaluates [last, draft] as
-    // MTP verification does and rolls a rejected draft back. The draft is the reference's next token on a fixed
-    // schedule at the given rate, otherwise the reference token after it (a wrong draft that still routes like
-    // text), and the answer follows the reference (teacher forcing), so the cost is measured on that text's routing.
+    // Teacher-forced verification without a draft head. Correct proposals follow the reference; the first wrong
+    // proposal uses a later reference token. This measures the verifier's cost, not a working speculative decoder.
     std::vector<llama_token> replay;
     double replay_acceptance = 0;
+    int replay_draft_max = 1;
     if (request.contains("verify_replay")) {
         const Json &value = request.at("verify_replay");
         replay = value.at("tokens").get<std::vector<llama_token>>();
         replay_acceptance = value.value("acceptance", 0.65);
+        replay_draft_max = integer(value, "draft_max", 1, 1, 7);
         if (replay.size() < 2 || !(replay_acceptance >= 0 && replay_acceptance <= 1)) {
             throw std::invalid_argument("verify_replay needs at least two reference tokens and acceptance in [0, 1]");
         }
@@ -1404,6 +1426,18 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         }
         if (temperature != 0 || s.draft || !input.images.empty()) {
             throw std::invalid_argument("verify_replay is greedy, text-only and needs a load without mtp");
+        }
+        if (s.batch_size < replay_draft_max + 1 || llama_n_rs_seq(s.context.get()) < static_cast<uint32_t>(replay_draft_max + 1)) {
+            throw std::invalid_argument("verify_replay needs batch and rollback_slots of at least draft_max + 1");
+        }
+    }
+    const int lookup_max = integer(request, "prompt_lookup", 0, 0, 7);
+    if (lookup_max > 0) {
+        if (temperature != 0 || s.draft || !input.images.empty() || !replay.empty() || request.contains("steering")) {
+            throw std::invalid_argument("prompt_lookup is greedy, text-only, without mtp, steering or verify_replay");
+        }
+        if (s.batch_size < lookup_max + 1 || llama_n_rs_seq(s.context.get()) < static_cast<uint32_t>(lookup_max + 1)) {
+            throw std::invalid_argument("prompt_lookup needs batch and rollback_slots of at least prompt_lookup + 1");
         }
     }
     const auto prompt = render_chat(s.chat_template, input.messages, thinking,
@@ -2011,46 +2045,59 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     };
     int steps = 0, drafted = 0, accepted_total = 0;
     int replay_agreements = 0, replay_compared = 0;
+    double lookup_ms = 0;
     if (replaying) {
         llama_token last = tokens[count - 1];
         int past = count - 1;
         size_t next = 0; // the reference token the next step's first row predicts
+        std::array<int, 7> trials{};
         // Row i's greedy token against the reference: how far the replay's text is from the target's own (a check of
-        // the setup, not of exactness: two-row batches round floats differently).
+        // the setup, not of exactness: batch shapes can round floats differently).
         const auto agrees = [&](int row, llama_token expected) {
             ++replay_compared;
             replay_agreements += llama_sampler_sample(sampler.get(), s.context.get(), row) == expected;
         };
-        while (ready && next + 1 < replay.size()) {
+        while (ready && next < replay.size()) {
             if (cancelled_) {
                 reason = "cancelled";
                 break;
             }
-            // Step k accepts when floor((k + 1) * rate) passes an integer: exactly the rate, evenly spread.
-            const bool hit = std::floor((steps + 1) * replay_acceptance) > std::floor(steps * replay_acceptance);
-            llama_token draft = replay[next];
-            if (!hit) {
-                draft = replay[next + 1] != replay[next] ? replay[next + 1] : (replay[next] + 1) % llama_vocab_n_tokens(vocab);
+            const int proposals = std::min({replay_draft_max, static_cast<int>(replay.size() - next - 1),
+                                            limit - static_cast<int>(generated.size()) - 1});
+            int accepted = 0;
+            // Each reached depth has its own evenly spread conditional acceptance schedule. A single global
+            // schedule would cap consecutive successes and could never exercise a long accepted prefix at 0.65.
+            for (; accepted < proposals; ++accepted) {
+                const int trial = ++trials[accepted];
+                if (std::floor(trial * replay_acceptance) == std::floor((trial - 1) * replay_acceptance)) {
+                    break;
+                }
             }
             llama_batch_ext_clear(s.batch.get());
             add(s.batch.get(), last, past, true);
-            add(s.batch.get(), draft, past + 1, true);
+            for (int i = 0; i < proposals; ++i) {
+                llama_token draft = replay[next + i];
+                if (i == accepted) {
+                    const llama_token later = replay[next + i + 1];
+                    draft = later != draft ? later : (draft + 1) % llama_vocab_n_tokens(vocab);
+                }
+                add(s.batch.get(), draft, past + i + 1, true);
+            }
             if (!run(s.context.get(), s.batch.get())) {
                 reason = "cancelled";
                 break;
             }
             ++steps;
-            ++drafted;
-            agrees(0, replay[next]);
-            bool more = push(replay[next]);
-            int advanced = 1;
-            if (hit && more) {
-                agrees(1, replay[next + 1]);
-                more = push(replay[next + 1]);
-                advanced = 2;
-                ++accepted_total;
+            drafted += proposals;
+            bool more = true;
+            int advanced = 0;
+            for (int i = 0; i <= accepted && more; ++i) {
+                agrees(i, replay[next + i]);
+                more = push(replay[next + i]);
+                ++advanced;
+                accepted_total += i < accepted;
             }
-            // Accepted: both rows stay and the bonus token is next. Rejected: the wrong draft's row is removed.
+            // Keep the accepted inputs; the emitted bonus token has not been evaluated. Discard all later rows.
             next += advanced;
             past += advanced;
             last = replay[next - 1];
@@ -2061,8 +2108,75 @@ Json Engine::generate(const Json &request, const Emit &emit) {
                 break;
             }
         }
-        if (ready && reason != "cancelled" && static_cast<int>(generated.size()) < limit && next + 1 >= replay.size()) {
+        if (ready && reason != "cancelled" && static_cast<int>(generated.size()) < limit && next >= replay.size()) {
             reason = "replay_end";
+        }
+    } else if (lookup_max > 0) {
+        std::vector<llama_token> history = tokens;
+        history.reserve(tokens.size() + limit);
+        std::vector<llama_token> drafts;
+        drafts.reserve(lookup_max);
+        llama_token last = 0;
+        int past = count;
+        bool more = false;
+        // Use the normal full-prompt prefill and first sample. Besides identical first logits, this preserves
+        // prompt/session reuse: after verification the state contains every emitted token except the last one.
+        if (ready && !cancelled_) {
+            if (capture) {
+                const float *logits = llama_get_logits_ith(s.context.get(), -1);
+                first_logits = std::vector<float>(logits, logits + llama_vocab_n_tokens(vocab));
+            }
+            last = llama_sampler_sample(sampler.get(), s.context.get(), -1);
+            more = push(last);
+            if (!generated.empty()) {
+                history.push_back(last);
+            }
+        } else if (cancelled_) {
+            reason = "cancelled";
+        }
+        while (ready && more) {
+            if (cancelled_) {
+                reason = "cancelled";
+                break;
+            }
+            const int room = limit - static_cast<int>(generated.size());
+            const auto lookup_start = Clock::now();
+            lookup_drafts(history, std::min(lookup_max, room - 1), drafts);
+            lookup_ms += milliseconds(lookup_start);
+            llama_batch_ext_clear(s.batch.get());
+            add(s.batch.get(), last, past, true);
+            for (size_t i = 0; i < drafts.size(); ++i) {
+                add(s.batch.get(), drafts[i], past + static_cast<int>(i) + 1, true);
+            }
+            if (!run(s.context.get(), s.batch.get())) {
+                reason = "cancelled";
+                break;
+            }
+            int accepted = 0;
+            more = true;
+            for (size_t i = 0; i <= drafts.size(); ++i) {
+                const auto token = llama_sampler_sample(sampler.get(), s.context.get(), static_cast<int>(i));
+                const size_t before = generated.size();
+                more = push(token);
+                if (generated.size() != before) {
+                    history.push_back(token);
+                }
+                last = token;
+                if (!more || i == drafts.size() || token != drafts[i]) {
+                    break;
+                }
+                ++accepted;
+            }
+            ++steps;
+            drafted += static_cast<int>(drafts.size());
+            accepted_total += accepted;
+            past += accepted + 1;
+            if (!llama_memory_seq_rm(llama_get_memory(s.context.get()), 0, past, -1)) {
+                throw std::runtime_error("Target memory cannot roll back rejected lookup tokens");
+            }
+            if (!more) {
+                break;
+            }
         }
     } else if (!speculative) {
         if (ready && capture) {
@@ -2228,15 +2342,25 @@ Json Engine::generate(const Json &request, const Emit &emit) {
                                     : Json(nullptr)},
         // No draft head ran: its cost is not in decode_ms.
         {"verify_replay", replaying ? Json{{"verification_steps", steps},
+                                          {"draft_max", replay_draft_max},
+                                          {"drafted_tokens", drafted},
                                           {"acceptance_requested", replay_acceptance},
                                           {"accepted_drafts", accepted_total},
-                                          {"acceptance_rate", steps ? Json(double(accepted_total) / steps) : Json(nullptr)},
+                                          {"acceptance_rate", drafted ? Json(double(accepted_total) / drafted) : Json(nullptr)},
                                           {"tokens_per_step", steps ? Json(double(generated.size()) / steps) : Json(nullptr)},
                                           {"step_ms", steps ? Json(decode_ms / steps) : Json(nullptr)},
                                           {"target_agreement", replay_compared ? Json(double(replay_agreements) / replay_compared)
                                                                                : Json(nullptr)},
                                           {"draft_head_ms", nullptr}}
                                    : Json(nullptr)},
+        {"prompt_lookup", lookup_max > 0 ? Json{{"draft_max", lookup_max},
+                                                {"verification_steps", steps},
+                                                {"drafted_tokens", drafted},
+                                                {"accepted_tokens", accepted_total},
+                                                {"acceptance_rate", drafted ? Json(double(accepted_total) / drafted) : Json(nullptr)},
+                                                {"tokens_per_step", steps ? Json(double(generated.size()) / steps) : Json(nullptr)},
+                                                {"lookup_ms", lookup_ms}}
+                                          : Json(nullptr)},
         {"energy_joules", nullptr},
         {"text", text},
         {"token_ids", generated},

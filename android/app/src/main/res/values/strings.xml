@@ -350,4 +350,8 @@
     <string name="steering_summary">"Import a vector to adjust this model’s answers."</string>
     <string name="verify_model_summary">"Check the model file before importing a matching vector."</string>
     <string name="image_input_summary">"Add support for photos, screenshots and scanned documents."</string>
+    <string name="advanced" translatable="false">Advanced</string>
+    <string name="prompt_lookup" translatable="false">Prompt lookup</string>
+    <string name="prompt_lookup_summary" translatable="false">Speeds up repeated text and copying on supported models.</string>
+    <string name="prompt_lookup_help" translatable="false">Enabled by default for Qwen3.5 9B Q4. Reuses text from the prompt as proposals and verifies every token with the model. Used at creativity 0, without images or steering, when enough memory is available. Other requests use normal generation. Reload the model after enabling it; disabling takes effect on the next answer. Batched calculations can change rounding.</string>
 </resources>

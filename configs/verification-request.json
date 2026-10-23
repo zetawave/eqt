@@ -1,0 +1,11 @@
+{
+  "load": {"context": 2048, "batch": 128, "threads": 6, "mmap": true},
+  "messages": [
+    {"role": "system", "content": "You are a helpful technical assistant."},
+    {"role": "user", "content": "Explain how virtual memory works on an Android phone. Cover page tables, page faults, file mappings and the difference between RAM and storage. Give a concrete example for each part, in about 400 words."}
+  ],
+  "max_tokens": 32,
+  "temperature": 0,
+  "thinking": false,
+  "seed": 42
+}

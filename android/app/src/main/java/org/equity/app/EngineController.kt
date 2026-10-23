@@ -44,6 +44,8 @@ data class Settings(
     val gpu: Boolean = false,
     /** The model reasons before answering, when its chat template supports it. */
     val thinking: Boolean = false,
+    /** Uses verified prompt continuations on models with a measured lookup profile. */
+    val promptLookup: Boolean = true,
 )
 
 object SettingsStore {
@@ -62,6 +64,7 @@ object SettingsStore {
             expertCacheMiB = p.getInt("expert_cache", d.expertCacheMiB),
             gpu = p.getBoolean("gpu", d.gpu),
             thinking = p.getBoolean("thinking", d.thinking),
+            promptLookup = p.getBoolean("prompt_lookup", d.promptLookup),
         )
     }
 
@@ -72,7 +75,8 @@ object SettingsStore {
             .putString("system", next.systemPrompt).putInt("max_tokens", next.maxTokens)
             .putFloat("temperature", next.temperature).putInt("threads", next.threads)
             .putInt("context", next.context).putInt("expert_cache", next.expertCacheMiB)
-            .putBoolean("gpu", next.gpu).putBoolean("thinking", next.thinking).apply()
+            .putBoolean("gpu", next.gpu).putBoolean("thinking", next.thinking)
+            .putBoolean("prompt_lookup", next.promptLookup).apply()
     }
 }
 
@@ -146,9 +150,11 @@ object EngineController {
         val trainedContext: Int = 0,
         val kvStorageMiBPer1k: Int = 0,
         val kvMemoryMiBPer1k: Int = 0,
+        val promptLookup: Boolean = false,
     )
     private var loadedSource: ModelSource? = null
     private var trainedContext: Int? = null
+    private var lookupReady = false
     @Volatile private var cancelled = false
 
     // Images shown to the model per request: older images in a chat are described in text instead, so a long
@@ -176,6 +182,9 @@ object EngineController {
     private const val KV_PAGE_ALLOWANCE_MIB = 128
     // Storage left free when a window on storage is sized.
     private const val KV_STORAGE_MARGIN_MIB = 2048
+    // Qwen3.5 9B has about 48 MiB of recurrent state; four rollback slots add 192 MiB.
+    private const val LOOKUP_STATE_MIB = 192
+    private const val LOOKUP_DRAFT_MAX = 3
     // Answer text reaches the screen at most this often: every update re-lays out the Markdown on the UI thread,
     // which then takes a big core from the compute threads (about two thirds of a core at 60 ms, measured).
     private const val UPDATE_INTERVAL_MS = 200L
@@ -322,7 +331,7 @@ object EngineController {
                 loadSource(app, ModelSource(path.absolutePath, model.sha256, model.streamed, model.residentMiB,
                     model.contextMiBPer1k, path.length(), settings,
                     projector?.let { ModelFiles.final(app, it).absolutePath }, visionMiB, model.stream, model.trainedContext,
-                    model.kvStorageMiBPer1k, model.kvMemoryMiBPer1k))
+                    model.kvStorageMiBPer1k, model.kvMemoryMiBPer1k, model.promptLookup))
             }
         }
     }
@@ -371,7 +380,8 @@ object EngineController {
                 loadSource(app, ModelSource("/proc/self/fd/${pfd.fd}", hash, streamed,
                     sized?.residentMiB ?: if (streamed) 2448 else sizeMiB, sized?.contextMiBPer1k ?: 112, stat.st_size,
                     settings, stream = sized?.stream ?: StreamProfile(), trainedContext = sized?.trainedContext ?: 0,
-                    kvStorageMiBPer1k = sized?.kvStorageMiBPer1k ?: 0, kvMemoryMiBPer1k = sized?.kvMemoryMiBPer1k ?: 0))
+                    kvStorageMiBPer1k = sized?.kvStorageMiBPer1k ?: 0, kvMemoryMiBPer1k = sized?.kvMemoryMiBPer1k ?: 0,
+                    promptLookup = Catalog.models.any { it.promptLookup && it.sha256 == hash }))
             }
         }
     }
@@ -432,7 +442,8 @@ object EngineController {
         val tokens = settings.context.takeIf { it > 0 } ?: MIN_AUTO_CONTEXT
         val kvMiB = if (model.kvStorageMiBPer1k > 0) model.kvMemoryMiBPer1k * tokens / 1024 + KV_PAGE_ALLOWANCE_MIB
             else model.contextMiBPer1k * tokens / 1024
-        if (!model.streamed) return (model.sizeBytes shr 20).toInt() + kvMiB + 512 + 512
+        if (!model.streamed) return (model.sizeBytes shr 20).toInt() + kvMiB + 512 + 512 +
+            if (model.promptLookup && settings.promptLookup) LOOKUP_STATE_MIB else 0
         return streamPlan(null, model.residentMiB, kvMiB, settings, 0, model.stream,
             if (settings.gpu) 2048 else 512, 512).requiredMiB
     }
@@ -477,7 +488,7 @@ object EngineController {
     /** [visionMiB] is memory kept free for image encoding; 0 for a text-only load. */
     private fun loadOptions(context: Context, streamed: Boolean, residentMiB: Int, contextMiBPer1k: Int, fileBytes: Long,
                             settings: Settings, visionMiB: Int, stream: StreamProfile, trained: Int,
-                            kvStorageMiBPer1k: Int = 0, kvMemoryMiBPer1k: Int = 0): JSONObject {
+                            kvStorageMiBPer1k: Int = 0, kvMemoryMiBPer1k: Int = 0, promptLookup: Boolean = false): JSONObject {
         val available = availableMiB(context)
         // Keys and values on storage: memory holds the indexer rows and the pages attention reads; the window is also
         // bounded by free storage (the engine reserves its whole file at load).
@@ -511,7 +522,11 @@ object EngineController {
             require(requiredMiB <= available) {
                 strings.getString(R.string.this_model_needs_about_1_d_mib_of_free_memory_and_2_d_mib_are_available_clo, requiredMiB, available)
             }
-            return options.put("mmap", true).put("memory_budget_mib", maxOf(2048, requiredMiB))
+            // Lookup is optional: preserve the selected context and plain-model admission when snapshots do not fit.
+            val lookupMiB = if (promptLookup && settings.promptLookup && requiredMiB + LOOKUP_STATE_MIB <= available)
+                LOOKUP_STATE_MIB else 0
+            return options.put("mmap", true).put("memory_budget_mib", maxOf(2048, requiredMiB + lookupMiB))
+                .put("rollback_slots", if (lookupMiB > 0) LOOKUP_DRAFT_MAX + 1 else 0)
         }
         // Expert cache from free RAM after shared weights, compute buffers, the transient next-layer allowance used
         // while reading prompts, and system headroom. A prompt batch keeps its share of one layer's experts resident
@@ -543,9 +558,10 @@ object EngineController {
         // Reclaim the previous context and expert cache before sizing their replacements from free memory.
         NativeBridge.unload()
         loadedSource = null
+        lookupReady = false
         fun options(visionMiB: Int) = loadOptions(context, source.streamed, source.residentMiB,
             source.contextMiBPer1k, source.fileBytes, source.settings, visionMiB, source.stream, source.trainedContext,
-            source.kvStorageMiBPer1k, source.kvMemoryMiBPer1k)
+            source.kvStorageMiBPer1k, source.kvMemoryMiBPer1k, source.promptLookup)
         // A streamed model empties its expert cache before encoding images, which the admission above counts on.
         fun withProjector(path: String) = options(source.visionMiB).put("mmproj", path)
             .apply { if (source.streamed) put("images_release_expert_cache", true) }
@@ -561,6 +577,7 @@ object EngineController {
         }
         val note = if (source.projectorPath != null && withVision == null) strings.getString(R.string.images_off_not_enough_free_memory) else null
         loadNative(source.path, options, source.hash, note, growing)
+        lookupReady = source.promptLookup && options.optInt("rollback_slots") >= LOOKUP_DRAFT_MAX + 1
         loadedSource = source.copy(settings = source.settings.copy(gpu = options.optBoolean("gpu")),
             projectorPath = source.projectorPath.takeIf { withVision != null })
         refreshSteering(context)
@@ -585,6 +602,8 @@ object EngineController {
                     options.put("batch", minOf(512, options.getInt("batch")))
                     gpuNote = strings.getString(R.string.gpu_unavailable)
                 }
+                options.optInt("rollback_slots") > 0 && error.message?.contains("Context allocation failed") == true ->
+                    options.put("rollback_slots", 0)
                 else -> throw error
             }
             JSONObject(NativeBridge.load(path.toByteArray(), options.toString().toByteArray(), progress).decodeToString())
@@ -639,7 +658,8 @@ object EngineController {
             }
             check(!cancelled) { strings.getString(R.string.generation_cancelled) }
             // Overflow is reported before evaluation, so retrying preserves the full prompt and sampling request.
-            return NativeBridge.generate(bytes, sink)
+            if (!lookupReady) request.remove("prompt_lookup")
+            return NativeBridge.generate(request.toString().toByteArray(), sink)
         }
     }
 
@@ -648,6 +668,7 @@ object EngineController {
         descriptor = null
         loadedSource = null
         trainedContext = null
+        lookupReady = false
         modelHash = null
     }
 
@@ -732,6 +753,13 @@ object EngineController {
                 if (steering.enabled) {
                     request.put("model_sha256", engine.modelSha256)
                         .put("steering", requireNotNull(engine.steeringProfile).request(app, steering.strength))
+                }
+                val hasImages = (0 until messages.length()).any { index ->
+                    val parts = messages.getJSONObject(index).optJSONArray("content")
+                    parts != null && (0 until parts.length()).any { parts.optJSONObject(it)?.optString("type") == "image" }
+                }
+                if (settings.promptLookup && lookupReady && settings.temperature == 0f && !hasImages && !steering.enabled) {
+                    request.put("prompt_lookup", LOOKUP_DRAFT_MAX)
                 }
                 generateWithContext(app, request, ByteSink { chunk ->
                     output.write(chunk)

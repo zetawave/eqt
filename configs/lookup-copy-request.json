@@ -1,0 +1,11 @@
+{
+  "load": {"context": 1024, "batch": 128, "threads": 6, "mmap": true, "memory_budget_mib": 8192},
+  "messages": [
+    {"role": "system", "content": "Follow the user's formatting instructions precisely."},
+    {"role": "user", "content": "Copy the text inside the source tags exactly. Output only that text, without the tags, quotation marks or commentary.\n<source>\nMemory pages connect virtual addresses to physical storage.\nA page table records the location and permissions of each page.\nWhen a required page is absent, the processor raises a page fault.\nThe operating system locates the data and updates the mapping.\nFile mappings let a program access file contents through memory addresses.\nClean file pages can be discarded and loaded again when needed.\nDirty anonymous pages require a different reclamation strategy.\nRAM provides fast access while storage keeps data across restarts.\nAn inference engine must account for weights, state and temporary buffers.\nReducing unnecessary copies saves both bandwidth and energy.\n</source>"}
+  ],
+  "max_tokens": 32,
+  "temperature": 0,
+  "thinking": false,
+  "seed": 42
+}
