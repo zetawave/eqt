@@ -4,6 +4,7 @@
 #include "kv_file.h"
 #include "gpu_offload.h"
 #include "steering.h"
+#include "resident_weights.h"
 #include <string_view>
 #include "ggml-cpu.h"
 #include "gguf.h"
@@ -248,7 +249,7 @@ int allowed_cpus() {
 }
 
 // Supplies tensor bytes for llama_model_init_from_user: routed banks are registered with the store,
-// all other tensors are read once into the CPU buffers llama allocated.
+// all other tensors are read once into the resident host buffers llama allocated.
 struct TensorLoader {
     gguf_context *meta;
     ggml_context *shapes;
@@ -259,10 +260,15 @@ struct TensorLoader {
     uint64_t total = 0, done = 0;
     int last = -1;
     std::string error{};
+    ResidentWeights *resident_weights = nullptr;
 
     static void set(ggml_tensor *tensor, void *opaque) {
         auto &loader = *static_cast<TensorLoader *>(opaque);
         if (!loader.error.empty() || loader.cancelled.load()) {
+            return;
+        }
+        if (loader.resident_weights && !loader.resident_weights->error().empty()) {
+            loader.error = loader.resident_weights->error();
             return;
         }
         try {
@@ -304,6 +310,12 @@ struct TensorLoader {
         }
         file.seekg(static_cast<std::streamoff>(offset));
         if (ggml_backend_buffer_is_host(tensor->buffer)) {
+            const auto base = reinterpret_cast<uintptr_t>(ggml_backend_buffer_get_base(tensor->buffer));
+            const auto address = reinterpret_cast<uintptr_t>(tensor->data);
+            const size_t capacity = ggml_backend_buffer_get_size(tensor->buffer);
+            if (address < base || address - base > capacity || size > capacity - (address - base)) {
+                throw std::runtime_error(std::string("Resident tensor exceeds its allocated buffer: ") + name);
+            }
             file.read(static_cast<char *>(tensor->data), static_cast<std::streamsize>(size));
         } else {
             std::vector<char> staging(size);
@@ -753,6 +765,7 @@ struct Engine::State {
     // joins its I/O workers and frees the buffer type those buffers reference.
     // Outlives the context, whose attention keys and values it maps from storage (kv_file_dir).
     std::unique_ptr<KvFile> kv_file;
+    std::unique_ptr<ResidentWeights> resident_weights;
     std::unique_ptr<ExpertStore> store;
     // Points at the store (and a running op profile); removed before it.
     NodeHooks hooks;
@@ -888,6 +901,19 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     }
     const Json row_kernels = set_row_kernels(options.value("row_kernels", Json::array()));
     const bool streaming = options.value("expert_streaming", false);
+    const std::string resident_storage = options.value("resident_weights", std::string("default"));
+    if (resident_storage != "default" && resident_storage != "anonymous" && resident_storage != "ahwb") {
+        throw std::invalid_argument("resident_weights must be default, anonymous or ahwb");
+    }
+    if (resident_storage != "default" && (!streaming || options.value("gpu", false) ||
+        options.value("repack", false) || options.value("mtp", false))) {
+        throw std::invalid_argument("Experimental resident weights require streamed CPU decoding without repack or MTP");
+    }
+#ifndef __ANDROID__
+    if (resident_storage == "ahwb") {
+        throw std::invalid_argument("Hardware weight buffers require Android");
+    }
+#endif
     const std::string projector = options.value("mmproj", std::string());
     const int image_max_tokens = integer(options, "image_max_tokens", 1024, 64, 4096);
     if (!projector.empty() && !mtmd_get_cap_from_file(projector.c_str()).inp_vision) {
@@ -1128,6 +1154,10 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
     };
     if (streaming) {
         state->store = std::make_unique<ExpertStore>(path, expert_options, cancelled_);
+        if (resident_storage != "default") {
+            state->resident_weights = std::make_unique<ResidentWeights>(resident_storage == "ahwb"
+                ? WeightStorage::hardware_buffer : WeightStorage::anonymous);
+        }
         state->store->set_source_offsets(std::move(routed_offsets));
         std::string mapped_pattern;
         for (const auto &name : mapped_names) {
@@ -1136,21 +1166,29 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         if (!mapped_pattern.empty()) {
             mapped_pattern += ")$";
         }
-        const llama_model_tensor_buft_override overrides[] = {
-            {routed_bank_pattern, state->store->buffer_type()},
-            {mapped_pattern.empty() ? nullptr : mapped_pattern.c_str(), state->store->mapped_buffer_type()},
-            {nullptr, nullptr}};
+        std::vector<llama_model_tensor_buft_override> overrides{{routed_bank_pattern, state->store->buffer_type()}};
+        if (!mapped_pattern.empty()) {
+            overrides.push_back({mapped_pattern.c_str(), state->store->mapped_buffer_type()});
+        }
+        if (state->resident_weights) {
+            overrides.push_back({".*", state->resident_weights->buffer_type()});
+        }
+        overrides.push_back({nullptr, nullptr});
         // Metadata mode: no file mapping and no MAP_POPULATE of the 20+ GB artifact.
         model_params.load_mode = LLAMA_LOAD_MODE_NONE;
-        model_params.tensor_buft_overrides = overrides;
+        model_params.tensor_buft_overrides = overrides.data();
         TensorLoader loader{state->meta.get(),  state->shapes.get(), std::ifstream(path, std::ios::binary),
                             state->store.get(), cancelled_,          progress};
         loader.total = resident_bytes - expert_options.budget_bytes;
+        loader.resident_weights = state->resident_weights.get();
         if (!loader.file) {
             throw std::runtime_error("Cannot read model; check the file provider's access permissions");
         }
         state->model.reset(
             llama_model_init_from_user(state->meta.get(), &TensorLoader::set, &loader, model_params));
+        if (state->resident_weights && !state->resident_weights->error().empty()) {
+            throw std::runtime_error(state->resident_weights->error());
+        }
         if (cancelled_) {
             throw std::runtime_error("Loading cancelled");
         }
@@ -1336,6 +1374,7 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                    {"expert_cache_bytes",
                     state->store ? state->store->configuration()["effective_budget_bytes"] : Json(nullptr)},
                    {"expert_streaming", state->store ? state->store->configuration() : Json(nullptr)},
+                   {"resident_weights", state->resident_weights ? state->resident_weights->statistics(false) : Json(nullptr)},
                    {"threadpool", pool_info},
                    {"cpu_variant", cpu_variant},
                    {"cpu_features", features_json(cpu_features())},
@@ -1958,6 +1997,10 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     }
     const double prefill_ms = milliseconds(prefill_start);
     const bool prefill_complete = ready;
+    const bool capture_residency = request.value("diagnostic_residency", false);
+    const Json weights_after_prefill = capture_residency && s.resident_weights
+        ? s.resident_weights->statistics(true) : Json(nullptr);
+    const Json experts_after_prefill = capture_residency && s.store ? s.store->residency() : Json(nullptr);
     if (s.gpu) {
         // Decoding stays on the CPU: the staging memory goes back to the expert cache's neighbours.
         s.gpu->release_staging();
@@ -2337,6 +2380,11 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"termination", reason},
         {"memory_before", memory_before},
         {"memory_after", process_memory()},
+        {"resident_weights_after_prefill", weights_after_prefill},
+        {"expert_residency_after_prefill", experts_after_prefill},
+        {"resident_weights_after_decode", capture_residency && s.resident_weights
+            ? s.resident_weights->statistics(true) : Json(nullptr)},
+        {"expert_residency_after_decode", capture_residency && s.store ? s.store->residency() : Json(nullptr)},
         {"decode_process_cpu", decode_cpu},
         {"reasoning_tokens", thinking ? Json(reasoning_tokens) : Json(nullptr)},
         {"answer_tokens", thinking ? Json(generated.size() - reasoning_tokens) : Json(nullptr)},

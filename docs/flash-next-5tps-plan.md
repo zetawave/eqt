@@ -2,6 +2,15 @@
 
 Date: 2026-10-23. Status: engineering proposal, not an achieved speed.
 
+2026-10-24 resident-weight follow-up: [AHWB screening](../results/2026-10-24/galaxy/flash-next-resident-weights.json)
+implemented strict opt-in hardware-buffer storage, bounded allocation sizes and diagnostic page-status
+snapshots. Four 128-token runs favored AHWB over identically chunked explicit anonymous buffers
+(2.519/2.379 versus 2.213/2.183 tokens/s). However, the final 64-token ordinary-storage/AHWB comparison
+gave 2.495/2.183, with different starting temperatures. All per-position logits and tokens matched.
+A gain over the actual reference path is unconfirmed, so app/native defaults remain ordinary storage.
+Neither short comparison is a sustained-speed result or a diagnosis of zram behavior. Cache residency
+control and an explicit embedding-row cache remain separate, unimplemented proposals.
+
 2026-10-24 bounded option follow-up: [nine short runs](../results/2026-10-24/galaxy/flash-next-small-options.json)
 compared the existing four-row kernels, in-graph top-k and their combination. Exactness passed at every
 sampled position. A selected top-k confirmation was confounded by a 35% decline between its plain arms

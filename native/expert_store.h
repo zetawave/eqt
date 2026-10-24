@@ -158,6 +158,7 @@ class ExpertStore {
     uint64_t release_cache();
     Json configuration() const;
     Json statistics() const;
+    Json residency(); // diagnostic snapshots only; waits for the cache's single writer
     std::string error() const;
     // True after a failed read was observed by a compute thread; the engine's abort callback stops the graph.
     bool aborted() const { return aborted_.load(); }

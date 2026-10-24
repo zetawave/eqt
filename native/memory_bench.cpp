@@ -1,4 +1,5 @@
 // Read-only bandwidth screening. Payload bandwidth is an achieved rate, not a DRAM-controller counter.
+#include "weight_memory.h"
 #include <algorithm>
 #include <atomic>
 #include <barrier>
@@ -7,6 +8,7 @@
 #include <cstdio>
 #include <fstream>
 #include <numeric>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -97,11 +99,15 @@ struct alignas(64) Worker {
 
 int main(int argc, char **argv) {
     try {
-        if (argc != 5 && argc != 6) {
+        if (argc < 5 || argc > 7) {
             throw std::invalid_argument("Usage: eqt-memory-bench CPUS|host:THREADS MIB SECONDS PASSES "
-                                        "[sum|load|sum-dynamic|load-dynamic]");
+                                        "[sum|load|sum-dynamic|load-dynamic] [anonymous|ahwb]");
         }
-        const std::string mode = argc == 6 ? argv[5] : "sum";
+        const std::string mode = argc >= 6 ? argv[5] : "sum";
+        const std::string storage = argc == 7 ? argv[6] : "anonymous";
+        if (storage != "anonymous" && storage != "ahwb") {
+            throw std::invalid_argument("Weight storage must be anonymous or ahwb");
+        }
         const bool dynamic = mode == "sum-dynamic" || mode == "load-dynamic";
         const bool loads = mode == "load" || mode == "load-dynamic";
         if (mode != "sum" && !loads && !dynamic) {
@@ -140,7 +146,9 @@ int main(int argc, char **argv) {
         }
         const int mib = number(argv[2], 64, 1024), seconds = number(argv[3], 1, 300),
                   passes = number(argv[4], 1, 64);
-        std::vector<uint64_t> buffer((static_cast<size_t>(mib) << 20) / sizeof(uint64_t));
+        eqt::WeightMemory memory(static_cast<size_t>(mib) << 20, storage == "ahwb"
+            ? eqt::WeightStorage::hardware_buffer : eqt::WeightStorage::anonymous);
+        std::span<uint64_t> buffer(static_cast<uint64_t *>(memory.data()), memory.bytes() / sizeof(uint64_t));
         for (size_t i = 0; i < buffer.size(); ++i) {
             buffer[i] = i % 251 + 1;
         }
@@ -249,9 +257,9 @@ int main(int argc, char **argv) {
             return elapsed;
         };
         measure(); // Untimed warm-up includes waking and pinning all persistent workers.
-        std::printf("{\"kind\":\"read_bandwidth_screening\",\"mode\":\"%s\",\"checksum_scope\":\"%s\","
+        std::printf("{\"kind\":\"read_bandwidth_screening\",\"storage\":\"%s\",\"mode\":\"%s\",\"checksum_scope\":\"%s\","
                     "\"pinned\":%s,\"buffer_bytes\":%zu,\"passes\":%d,\"cpus\":[",
-                    mode.c_str(), loads ? "before_timing" : "every_pass", pinned ? "true" : "false",
+                    storage.c_str(), mode.c_str(), loads ? "before_timing" : "every_pass", pinned ? "true" : "false",
                     buffer.size() * 8, passes);
         for (size_t t = 0; t < cpus.size(); ++t) {
             std::printf("%s%d", t ? "," : "", cpus[t]);
@@ -282,9 +290,13 @@ int main(int argc, char **argv) {
         for (auto &worker : workers) {
             worker.join();
         }
+        const auto residency = eqt::sample_residency(memory.data(), memory.bytes());
         std::printf(
-            "],\"checksum\":%llu,\"checksum_and_affinity_valid\":%s,\"dram_controller_bytes\":null}\n",
-            static_cast<unsigned long long>(states[0].checksum), valid ? "true" : "false");
+            "],\"checksum\":%llu,\"checksum_and_affinity_valid\":%s,\"dram_controller_bytes\":null,"
+            "\"sampled_pages\":%llu,\"resident_pages\":%s}\n",
+            static_cast<unsigned long long>(states[0].checksum), valid ? "true" : "false",
+            static_cast<unsigned long long>(residency.sampled_pages),
+            residency.available ? std::to_string(residency.resident_pages).c_str() : "null");
         return valid ? 0 : 2;
     } catch (const std::exception &error) {
         std::fprintf(stderr, "%s\n", error.what());

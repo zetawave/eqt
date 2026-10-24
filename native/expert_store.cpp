@@ -1,4 +1,5 @@
 #include "expert_store.h"
+#include "weight_memory.h"
 
 #include "expert_pack.h"
 
@@ -2631,6 +2632,41 @@ Json ExpertStore::configuration() const {
         {"prefetch_layers", predictable_layers_},
         {"simd", simd::implementation()},
         {"trace", !options_.trace_path.empty()}};
+}
+
+Json ExpertStore::residency() {
+    wait_predictor();
+    if (!options_.slots) { return nullptr; }
+    size_t entries = 0;
+    for (const auto &layer : layers_) {
+        if (!layer) { continue; }
+        for (int e = 0; e < layer->experts; ++e) {
+            const auto &entry = layer->entries[e];
+            entries += entry.state == State::resident && entry.slot;
+        }
+    }
+    const size_t target = std::min<size_t>(256, entries);
+    size_t index = 0, next = 0;
+    uint64_t sampled = 0, resident = 0;
+    bool known = target > 0;
+    for (const auto &layer : layers_) {
+        if (!layer) { continue; }
+        for (int e = 0; e < layer->experts; ++e) {
+            const auto &entry = layer->entries[e];
+            if (entry.state != State::resident || !entry.slot) { continue; }
+            if (next < target && index == next * entries / target) {
+                const auto status = sample_residency(entry.slot, layer->slot_bytes, 1);
+                known &= status.available;
+                sampled += status.sampled_pages;
+                resident += status.resident_pages;
+                ++next;
+            }
+            ++index;
+        }
+    }
+    return {{"complete_entries", entries}, {"sampled_pages", sampled},
+            {"resident_pages", known ? Json(resident) : Json(nullptr)},
+            {"resident_fraction", known && sampled ? Json(double(resident) / sampled) : Json(nullptr)}};
 }
 
 Json ExpertStore::statistics() const {

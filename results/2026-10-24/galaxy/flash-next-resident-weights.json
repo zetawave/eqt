@@ -1,0 +1,3159 @@
+{
+  "date": "2026-10-24",
+  "kind": "Bounded on-device resident-weight storage experiment",
+  "outcome": "Implemented as a strict opt-in; automatic app activation rejected because a gain over ordinary storage was not confirmed",
+  "base_commit": "bb603db330d4e78eee627ff8866b52aff7cd88f5",
+  "final_source_sha256": "42e3b1e3b7f55be8e52d70ff9eb3d9af81f43589e5468af4b47c1218487ff6d8",
+  "inspiration": {
+    "project": "BigMoeOnEdge",
+    "revision": "b6a587491f2f683193fa3ca8d023946f47933801",
+    "url": "https://github.com/Helldez/BigMoeOnEdge/tree/b6a587491f2f683193fa3ca8d023946f47933801",
+    "implementation": "Independent Android AHardwareBuffer/GGML integration; no dependency revision changed"
+  },
+  "environment": {
+    "device_family": "Galaxy / Exynos",
+    "stock_android": true,
+    "surface": "CLI as app user",
+    "usb_powered": true,
+    "cooldown_waits": false,
+    "sustained_test": false,
+    "page_cache": "uncontrolled",
+    "energy_j_per_token": null,
+    "memory_controller_bytes": null,
+    "useful_compute_wall_ms": null,
+    "exposed_io_wait_wall_ms": null
+  },
+  "model": {
+    "manifest": "configs/flash-next-model.json",
+    "repository": "unsloth/Qwen3.8-Flash-Next-GGUF",
+    "revision": "766911a6b7369840a91dbcd95f9f997acaab6cd6",
+    "original_merged_artifact_sha256": "f26a5e679710fb4cd048f481ff082d9af9c79fbd640d1867ef58c425518659d7",
+    "original_merged_bytes": 78869128640,
+    "device_routed_spans_moved_to_pack": true,
+    "device_full_artifact_rehashed_this_session": false
+  },
+  "implementation": {
+    "native_default": "ordinary GGML storage",
+    "app_default_unchanged": true,
+    "load_option": "resident_weights",
+    "choices": [
+      "default",
+      "anonymous",
+      "ahwb"
+    ],
+    "supported": "Explicit allocators require streamed CPU loading without repack or MTP; AHWB requires Android",
+    "explicit_allocator_fallback": false,
+    "buffer_allocation_cap_bytes": 402653184,
+    "advertised_tensor_buffer_limit_bytes": 402649088,
+    "allocation_validation": "Complete aligned writable CPU mapping required before tensor loading",
+    "shared_weight_requested_allocation_bytes": 3536027648,
+    "shared_weight_buffers": 9,
+    "second_full_weight_userspace_copy": false,
+    "routed_cache_storage_changed": false,
+    "mapped_embedding_storage_changed": false,
+    "routing_or_quantization_changed": false,
+    "residency": "Request-only mincore snapshots: up to 256 pages per weight buffer and one page per sampled complete expert entry, up to 256 entries",
+    "memory_accounting": "Requested AHWB bytes may be absent from RSS/PSS. Do not blindly add overlapping counters. Driver overhead is unknown; sparse mincore results do not prove continuous residency or compression avoidance.",
+    "automatic_cache_brake_implemented": false,
+    "embedding_row_cache_implemented": false,
+    "partial_bank_prefetch_implemented": false
+  },
+  "cpu_buffer_probe": {
+    "source_sha256": "c9b29aef1307ec346a91f9c9443c793d9eed93a396d1dc0a691f53d29925d089",
+    "artifact_sha256": {
+      "eqt-memory-bench": "e868806ab39293e77281439519c72432877565a68da16d3a0fc9f855a06ee674",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "runs": [
+      {
+        "name": "anon_a",
+        "command": "./eqt-memory-bench 4,5,6,7,8,9 128 8 8 sum-dynamic anonymous",
+        "before": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 30.6,
+            "BAT": 28.0,
+            "CP": 30.4,
+            "PA": 30.3,
+            "SKIN": 29.6,
+            "SUBBAT": 0.0,
+            "USB": 27.8
+          }
+        },
+        "after": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 40.0,
+            "BAT": 28.0,
+            "CP": 32.2,
+            "PA": 30.9,
+            "SKIN": 30.0,
+            "SUBBAT": 0.0,
+            "USB": 27.9
+          }
+        },
+        "gb_s": 28.677619496049445,
+        "result": {
+          "kind": "read_bandwidth_screening",
+          "storage": "anonymous",
+          "mode": "sum-dynamic",
+          "checksum_scope": "every_pass",
+          "pinned": true,
+          "buffer_bytes": 134217728,
+          "passes": 8,
+          "cpus": [
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "clock_sampling": "after_window; workers may be asleep",
+          "samples": [
+            {
+              "t": 0.507,
+              "gb_s": 27.558,
+              "seconds": 0.506525,
+              "bytes": 13958643712,
+              "mhz": [
+                2304,
+                2304,
+                2304,
+                2016,
+                2016,
+                2112
+              ]
+            },
+            {
+              "t": 1.034,
+              "gb_s": 28.633,
+              "seconds": 0.524994,
+              "bytes": 15032385536,
+              "mhz": [
+                2400,
+                2400,
+                2400,
+                2400,
+                2400,
+                3072
+              ]
+            },
+            {
+              "t": 1.54,
+              "gb_s": 29.778,
+              "seconds": 0.504819,
+              "bytes": 15032385536,
+              "mhz": [
+                2304,
+                2304,
+                2304,
+                2592,
+                2592,
+                2976
+              ]
+            },
+            {
+              "t": 2.069,
+              "gb_s": 30.539,
+              "seconds": 0.527399,
+              "bytes": 16106127360,
+              "mhz": [
+                1632,
+                1632,
+                1632,
+                2900,
+                2900,
+                2592
+              ]
+            },
+            {
+              "t": 2.581,
+              "gb_s": 29.376,
+              "seconds": 0.511731,
+              "bytes": 15032385536,
+              "mhz": [
+                1920,
+                1920,
+                1920,
+                2208,
+                2208,
+                1632
+              ]
+            },
+            {
+              "t": 3.086,
+              "gb_s": 29.851,
+              "seconds": 0.503584,
+              "bytes": 15032385536,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2784,
+                2784,
+                2688
+              ]
+            },
+            {
+              "t": 3.612,
+              "gb_s": 28.669,
+              "seconds": 0.524339,
+              "bytes": 15032385536,
+              "mhz": [
+                2304,
+                2304,
+                2304,
+                2400,
+                2112,
+                2496
+              ]
+            },
+            {
+              "t": 4.117,
+              "gb_s": 29.904,
+              "seconds": 0.50269,
+              "bytes": 15032385536,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 4.627,
+              "gb_s": 29.545,
+              "seconds": 0.508793,
+              "bytes": 15032385536,
+              "mhz": [
+                1920,
+                1920,
+                1920,
+                2496,
+                2496,
+                2496
+              ]
+            },
+            {
+              "t": 5.145,
+              "gb_s": 29.126,
+              "seconds": 0.516119,
+              "bytes": 15032385536,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 5.671,
+              "gb_s": 30.634,
+              "seconds": 0.525768,
+              "bytes": 16106127360,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2900,
+                2900,
+                3072
+              ]
+            },
+            {
+              "t": 6.209,
+              "gb_s": 23.984,
+              "seconds": 0.537239,
+              "bytes": 12884901888,
+              "mhz": [
+                1536,
+                1536,
+                1536,
+                2016,
+                2016,
+                1632
+              ]
+            },
+            {
+              "t": 6.713,
+              "gb_s": 25.604,
+              "seconds": 0.503244,
+              "bytes": 12884901888,
+              "mhz": [
+                2400,
+                2400,
+                2400,
+                2304,
+                2304,
+                1440
+              ]
+            },
+            {
+              "t": 7.228,
+              "gb_s": 25.116,
+              "seconds": 0.513019,
+              "bytes": 12884901888,
+              "mhz": [
+                1728,
+                1728,
+                1728,
+                2496,
+                2496,
+                864
+              ]
+            },
+            {
+              "t": 7.735,
+              "gb_s": 31.917,
+              "seconds": 0.504624,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                2496
+              ]
+            },
+            {
+              "t": 8.259,
+              "gb_s": 28.781,
+              "seconds": 0.52231,
+              "bytes": 15032385536,
+              "mhz": [
+                2304,
+                2304,
+                2400,
+                2592,
+                2592,
+                2208
+              ]
+            }
+          ],
+          "checksum": 3071838752,
+          "checksum_and_affinity_valid": true,
+          "dram_controller_bytes": null,
+          "sampled_pages": 256,
+          "resident_pages": 256
+        }
+      },
+      {
+        "name": "ahwb_a",
+        "command": "./eqt-memory-bench 4,5,6,7,8,9 128 8 8 sum-dynamic ahwb",
+        "before": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 40.0,
+            "BAT": 28.0,
+            "CP": 32.2,
+            "PA": 30.9,
+            "SKIN": 30.0,
+            "SUBBAT": 0.0,
+            "USB": 27.9
+          }
+        },
+        "after": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 50.3,
+            "BAT": 28.2,
+            "CP": 36.7,
+            "PA": 34.7,
+            "SKIN": 31.4,
+            "SUBBAT": 0.0,
+            "USB": 27.9
+          }
+        },
+        "gb_s": 29.02746758218406,
+        "result": {
+          "kind": "read_bandwidth_screening",
+          "storage": "ahwb",
+          "mode": "sum-dynamic",
+          "checksum_scope": "every_pass",
+          "pinned": true,
+          "buffer_bytes": 134217728,
+          "passes": 8,
+          "cpus": [
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "clock_sampling": "after_window; workers may be asleep",
+          "samples": [
+            {
+              "t": 0.516,
+              "gb_s": 31.232,
+              "seconds": 0.515697,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3072
+              ]
+            },
+            {
+              "t": 1.048,
+              "gb_s": 26.421,
+              "seconds": 0.528315,
+              "bytes": 13958643712,
+              "mhz": [
+                1632,
+                1632,
+                1632,
+                1824,
+                1824,
+                2400
+              ]
+            },
+            {
+              "t": 1.553,
+              "gb_s": 29.881,
+              "seconds": 0.50308,
+              "bytes": 15032385536,
+              "mhz": [
+                2304,
+                2304,
+                2304,
+                2592,
+                2592,
+                3072
+              ]
+            },
+            {
+              "t": 2.071,
+              "gb_s": 35.294,
+              "seconds": 0.517194,
+              "bytes": 18253611008,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 2.59,
+              "gb_s": 31.163,
+              "seconds": 0.516838,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2784,
+                2784,
+                3207
+              ]
+            },
+            {
+              "t": 3.114,
+              "gb_s": 30.857,
+              "seconds": 0.521958,
+              "bytes": 16106127360,
+              "mhz": [
+                2304,
+                2304,
+                2304,
+                2880,
+                2880,
+                2976
+              ]
+            },
+            {
+              "t": 3.632,
+              "gb_s": 31.119,
+              "seconds": 0.517571,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 4.148,
+              "gb_s": 31.191,
+              "seconds": 0.516369,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 4.652,
+              "gb_s": 27.909,
+              "seconds": 0.50015,
+              "bytes": 13958643712,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2784,
+                2784,
+                3207
+              ]
+            },
+            {
+              "t": 5.185,
+              "gb_s": 30.329,
+              "seconds": 0.531051,
+              "bytes": 16106127360,
+              "mhz": [
+                2304,
+                2304,
+                2304,
+                2592,
+                2592,
+                2976
+              ]
+            },
+            {
+              "t": 5.714,
+              "gb_s": 30.547,
+              "seconds": 0.527261,
+              "bytes": 16106127360,
+              "mhz": [
+                2208,
+                2208,
+                2208,
+                2400,
+                2400,
+                2400
+              ]
+            },
+            {
+              "t": 6.249,
+              "gb_s": 32.23,
+              "seconds": 0.533042,
+              "bytes": 17179869184,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2784,
+                2784,
+                3207
+              ]
+            },
+            {
+              "t": 6.787,
+              "gb_s": 26.04,
+              "seconds": 0.536044,
+              "bytes": 13958643712,
+              "mhz": [
+                1344,
+                1344,
+                1344,
+                2016,
+                2016,
+                1920
+              ]
+            },
+            {
+              "t": 7.323,
+              "gb_s": 18.053,
+              "seconds": 0.535295,
+              "bytes": 9663676416,
+              "mhz": [
+                1536,
+                1536,
+                1536,
+                1728,
+                1728,
+                1728
+              ]
+            },
+            {
+              "t": 7.86,
+              "gb_s": 26.121,
+              "seconds": 0.534386,
+              "bytes": 13958643712,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 8.386,
+              "gb_s": 26.557,
+              "seconds": 0.525612,
+              "bytes": 13958643712,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                2784
+              ]
+            }
+          ],
+          "checksum": 1238641414,
+          "checksum_and_affinity_valid": true,
+          "dram_controller_bytes": null,
+          "sampled_pages": 256,
+          "resident_pages": 256
+        }
+      },
+      {
+        "name": "ahwb_b",
+        "command": "./eqt-memory-bench 4,5,6,7,8,9 128 8 8 sum-dynamic ahwb",
+        "before": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 50.3,
+            "BAT": 28.2,
+            "CP": 36.7,
+            "PA": 34.7,
+            "SKIN": 31.4,
+            "SUBBAT": 0.0,
+            "USB": 27.9
+          }
+        },
+        "after": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 53.3,
+            "BAT": 29.1,
+            "CP": 39.9,
+            "PA": 38.4,
+            "SKIN": 32.9,
+            "SUBBAT": 0.0,
+            "USB": 27.8
+          }
+        },
+        "gb_s": 28.307035491915777,
+        "result": {
+          "kind": "read_bandwidth_screening",
+          "storage": "ahwb",
+          "mode": "sum-dynamic",
+          "checksum_scope": "every_pass",
+          "pinned": true,
+          "buffer_bytes": 134217728,
+          "passes": 8,
+          "cpus": [
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "clock_sampling": "after_window; workers may be asleep",
+          "samples": [
+            {
+              "t": 0.524,
+              "gb_s": 28.68,
+              "seconds": 0.524137,
+              "bytes": 15032385536,
+              "mhz": [
+                1920,
+                1920,
+                1920,
+                1728,
+                1728,
+                2304
+              ]
+            },
+            {
+              "t": 1.039,
+              "gb_s": 31.315,
+              "seconds": 0.514319,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 1.574,
+              "gb_s": 30.238,
+              "seconds": 0.532638,
+              "bytes": 16106127360,
+              "mhz": [
+                2112,
+                2112,
+                2112,
+                2304,
+                2304,
+                2592
+              ]
+            },
+            {
+              "t": 2.081,
+              "gb_s": 31.811,
+              "seconds": 0.50631,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 2.603,
+              "gb_s": 31.014,
+              "seconds": 0.519324,
+              "bytes": 16106127360,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2880,
+                2880,
+                3072
+              ]
+            },
+            {
+              "t": 3.135,
+              "gb_s": 34.344,
+              "seconds": 0.531491,
+              "bytes": 18253611008,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2880,
+                2880,
+                3207
+              ]
+            },
+            {
+              "t": 3.653,
+              "gb_s": 29.074,
+              "seconds": 0.517038,
+              "bytes": 15032385536,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2688,
+                2688,
+                2688
+              ]
+            },
+            {
+              "t": 4.159,
+              "gb_s": 31.952,
+              "seconds": 0.504068,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3072
+              ]
+            },
+            {
+              "t": 4.663,
+              "gb_s": 25.586,
+              "seconds": 0.503585,
+              "bytes": 12884901888,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2784,
+                2784,
+                2496
+              ]
+            },
+            {
+              "t": 5.175,
+              "gb_s": 25.194,
+              "seconds": 0.511437,
+              "bytes": 12884901888,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2112,
+                2112,
+                2112
+              ]
+            },
+            {
+              "t": 5.696,
+              "gb_s": 30.991,
+              "seconds": 0.519701,
+              "bytes": 16106127360,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2688,
+                2688,
+                3072
+              ]
+            },
+            {
+              "t": 6.223,
+              "gb_s": 30.587,
+              "seconds": 0.526566,
+              "bytes": 16106127360,
+              "mhz": [
+                2016,
+                2016,
+                2016,
+                2112,
+                2112,
+                2208
+              ]
+            },
+            {
+              "t": 6.75,
+              "gb_s": 22.45,
+              "seconds": 0.526103,
+              "bytes": 11811160064,
+              "mhz": [
+                1440,
+                1440,
+                1440,
+                1824,
+                1824,
+                1152
+              ]
+            },
+            {
+              "t": 7.265,
+              "gb_s": 22.982,
+              "seconds": 0.513939,
+              "bytes": 11811160064,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2496,
+                2496,
+                2208
+              ]
+            },
+            {
+              "t": 7.815,
+              "gb_s": 23.512,
+              "seconds": 0.548017,
+              "bytes": 12884901888,
+              "mhz": [
+                1728,
+                1728,
+                1728,
+                1728,
+                1728,
+                1824
+              ]
+            },
+            {
+              "t": 8.325,
+              "gb_s": 23.231,
+              "seconds": 0.50843,
+              "bytes": 11811160064,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2400,
+                2400,
+                2016
+              ]
+            }
+          ],
+          "checksum": 3104815582,
+          "checksum_and_affinity_valid": true,
+          "dram_controller_bytes": null,
+          "sampled_pages": 256,
+          "resident_pages": 256
+        }
+      },
+      {
+        "name": "anon_b",
+        "command": "./eqt-memory-bench 4,5,6,7,8,9 128 8 8 sum-dynamic anonymous",
+        "before": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 53.3,
+            "BAT": 29.1,
+            "CP": 39.9,
+            "PA": 38.4,
+            "SKIN": 32.9,
+            "SUBBAT": 0.0,
+            "USB": 27.8
+          }
+        },
+        "after": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 50.4,
+            "BAT": 30.3,
+            "CP": 41.1,
+            "PA": 39.9,
+            "SKIN": 33.8,
+            "SUBBAT": 0.0,
+            "USB": 27.8
+          }
+        },
+        "gb_s": 24.786790982309974,
+        "result": {
+          "kind": "read_bandwidth_screening",
+          "storage": "anonymous",
+          "mode": "sum-dynamic",
+          "checksum_scope": "every_pass",
+          "pinned": true,
+          "buffer_bytes": 134217728,
+          "passes": 8,
+          "cpus": [
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "clock_sampling": "after_window; workers may be asleep",
+          "samples": [
+            {
+              "t": 0.509,
+              "gb_s": 31.619,
+              "seconds": 0.509379,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 1.061,
+              "gb_s": 25.368,
+              "seconds": 0.550235,
+              "bytes": 13958643712,
+              "mhz": [
+                1632,
+                1632,
+                1632,
+                1728,
+                1728,
+                2016
+              ]
+            },
+            {
+              "t": 1.579,
+              "gb_s": 24.944,
+              "seconds": 0.516553,
+              "bytes": 12884901888,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2208,
+                2208,
+                2592
+              ]
+            },
+            {
+              "t": 2.081,
+              "gb_s": 32.145,
+              "seconds": 0.50104,
+              "bytes": 16106127360,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2592,
+                2592,
+                3207
+              ]
+            },
+            {
+              "t": 2.611,
+              "gb_s": 24.347,
+              "seconds": 0.529214,
+              "bytes": 12884901888,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2688,
+                2688,
+                3072
+              ]
+            },
+            {
+              "t": 3.138,
+              "gb_s": 24.451,
+              "seconds": 0.526972,
+              "bytes": 12884901888,
+              "mhz": [
+                1728,
+                1728,
+                1728,
+                2208,
+                2208,
+                1440
+              ]
+            },
+            {
+              "t": 3.679,
+              "gb_s": 15.973,
+              "seconds": 0.53778,
+              "bytes": 8589934592,
+              "mhz": [
+                1152,
+                1152,
+                1152,
+                1152,
+                1152,
+                960
+              ]
+            },
+            {
+              "t": 4.203,
+              "gb_s": 18.466,
+              "seconds": 0.523336,
+              "bytes": 9663676416,
+              "mhz": [
+                1920,
+                1920,
+                1920,
+                2208,
+                2208,
+                1920
+              ]
+            },
+            {
+              "t": 4.72,
+              "gb_s": 31.292,
+              "seconds": 0.514708,
+              "bytes": 16106127360,
+              "mhz": [
+                2304,
+                2304,
+                2304,
+                2400,
+                2400,
+                2880
+              ]
+            },
+            {
+              "t": 5.263,
+              "gb_s": 25.729,
+              "seconds": 0.542531,
+              "bytes": 13958643712,
+              "mhz": [
+                1728,
+                1728,
+                1728,
+                1824,
+                1824,
+                2112
+              ]
+            },
+            {
+              "t": 5.799,
+              "gb_s": 22.142,
+              "seconds": 0.533437,
+              "bytes": 11811160064,
+              "mhz": [
+                1728,
+                1728,
+                1728,
+                1536,
+                1536,
+                2016
+              ]
+            },
+            {
+              "t": 6.301,
+              "gb_s": 25.684,
+              "seconds": 0.50167,
+              "bytes": 12884901888,
+              "mhz": [
+                1632,
+                1632,
+                1632,
+                1536,
+                1536,
+                2112
+              ]
+            },
+            {
+              "t": 6.821,
+              "gb_s": 20.692,
+              "seconds": 0.518914,
+              "bytes": 10737418240,
+              "mhz": [
+                1344,
+                1344,
+                1344,
+                960,
+                960,
+                1536
+              ]
+            },
+            {
+              "t": 7.354,
+              "gb_s": 14.157,
+              "seconds": 0.530932,
+              "bytes": 7516192768,
+              "mhz": [
+                1728,
+                1728,
+                1728,
+                1824,
+                1824,
+                1536
+              ]
+            },
+            {
+              "t": 7.873,
+              "gb_s": 26.911,
+              "seconds": 0.518694,
+              "bytes": 13958643712,
+              "mhz": [
+                2592,
+                2592,
+                2592,
+                2900,
+                2900,
+                3207
+              ]
+            },
+            {
+              "t": 8.38,
+              "gb_s": 34.006,
+              "seconds": 0.505194,
+              "bytes": 17179869184,
+              "mhz": [
+                2496,
+                2496,
+                2496,
+                2900,
+                2900,
+                3207
+              ]
+            }
+          ],
+          "checksum": 3319647012,
+          "checksum_and_affinity_valid": true,
+          "dram_controller_bytes": null,
+          "sampled_pages": 256,
+          "resident_pages": 256
+        }
+      }
+    ]
+  },
+  "rejected_prototype": {
+    "source_sha256": "5dec34bac276ded6384c1d0f5a5550bf673ba52028b0b5e5e17662dc781aa500",
+    "artifact_sha256": {
+      "eqt-bench": "1fd0d504f4c87885f7a5a5f7155d4024f479ffec7c88653348655730f76543fb",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "result": "AHWB model loading crashed with approximately 2 GiB chunks; not the retained implementation",
+    "precise_driver_cause": null,
+    "size_probes": "384 MiB completed a full-buffer checksum/affinity probe; 512 and 1024 MiB returned allocation error 1",
+    "retained_mitigation": "Strict smaller chunks plus complete CPU-mapping validation and tensor bounds checks",
+    "initial_anonymous_tokens_per_second": 2.5145590170129264
+  },
+  "identical_chunking_screening": {
+    "source_sha256": "17d2aa974e6ee2f5ae3240ae4665653eb414347926b31e1c25c1c795badecf63",
+    "artifact_sha256": {
+      "eqt-bench": "461e1fcf1396b025c45d9fa5142d68b63bf20129785a401d8d8efd382a31f82b",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a detailed tutorial of about 1500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."
+        }
+      ],
+      "max_tokens": 128,
+      "temperature": 0,
+      "seed": 42,
+      "thinking": false,
+      "ignore_eos": false,
+      "load": {
+        "context": 8192,
+        "batch": 128,
+        "threads": 6,
+        "memory_budget_mib": 8192,
+        "mmap": false,
+        "expert_streaming": true,
+        "expert_cache_mib": 1792,
+        "io_threads": 16,
+        "direct_io": true,
+        "prefetch": true,
+        "speculative_pool": true,
+        "lookahead_layers": 2,
+        "lookahead2_count": 5,
+        "read_priority": true,
+        "prefetch_inflight": 2,
+        "lookahead_router_q8": true,
+        "expert_pack_split": 2,
+        "coalesce_kib": 2048,
+        "coalesce_gap": 1,
+        "prefill_prefetch_mib": 0,
+        "prefill_prefetch_min_coverage": 0.9,
+        "expert_slots": true,
+        "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+      },
+      "diagnostic_logits_hash": true,
+      "diagnostic_residency": true
+    },
+    "runner_wall_seconds": 311.1869999999999,
+    "runs": [
+      {
+        "name": "ahwb_a",
+        "mode": "ahwb",
+        "before": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 34.1,
+            "BAT": 30.6,
+            "CP": 33.6,
+            "PA": 33.6,
+            "SKIN": 31.8,
+            "SUBBAT": 0.0,
+            "USB": 29.2
+          }
+        },
+        "after": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 59.5,
+            "BAT": 36.8,
+            "CP": 51.5,
+            "PA": 50.0,
+            "SKIN": 39.9,
+            "SUBBAT": 0.0,
+            "USB": 29.3
+          }
+        },
+        "bitwise_logits_and_tokens_equal": true,
+        "measurements": {
+          "generated_tokens": 128,
+          "prompt_tokens": 64,
+          "prefill_ms": 13116.914766,
+          "decode_ms": 50814.35961,
+          "total_ms": 63981.808165,
+          "decode_tokens_per_second": 2.518973002560683,
+          "termination": "length",
+          "memory_before": {
+            "rss_bytes": 571383808,
+            "peak_rss_bytes": 571383808,
+            "pss_bytes": 561290240,
+            "minor_faults": 153624,
+            "major_faults": 57,
+            "storage_read_bytes": 3544563712
+          },
+          "memory_after": {
+            "rss_bytes": 2429124608,
+            "peak_rss_bytes": 2671882240,
+            "pss_bytes": 2422652928,
+            "minor_faults": 783783,
+            "major_faults": 454,
+            "storage_read_bytes": 92777295872
+          },
+          "resident_weights_after_prefill": {
+            "storage": "ahwb",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2304,
+            "resident_fraction": 1.0
+          },
+          "resident_weights_after_decode": {
+            "storage": "ahwb",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2304,
+            "resident_fraction": 1.0
+          },
+          "expert_residency_after_prefill": {
+            "complete_entries": 815,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "expert_residency_after_decode": {
+            "complete_entries": 976,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "decode_process_cpu": {
+            "user_ms": 309944.604,
+            "system_ms": 31293.343000000004,
+            "minor_faults": 89274.0,
+            "major_faults": 287.0,
+            "voluntary_switches": 745662.0,
+            "involuntary_switches": 76377.0
+          }
+        },
+        "expert_io": {
+          "decode_read_bytes": 14503378944,
+          "decode_io_bytes": 75888885760,
+          "decode_io_bytes_by_bank": {
+            "demand": {
+              "gate": 5376745472,
+              "up": 5376745472,
+              "down": 10318233600,
+              "other": 0
+            },
+            "speculative": {
+              "gate": 13982711808,
+              "up": 13982711808,
+              "down": 26851737600,
+              "other": 0
+            }
+          },
+          "decode_io_accounting": "packed aligned ranges, including drain; demand/speculative at dispatch",
+          "decode_io_busy_ms": 38751.410004999896,
+          "slot_arena_committed_bytes": 2217738240
+        }
+      },
+      {
+        "name": "anonymous_a",
+        "mode": "anonymous",
+        "before": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 59.5,
+            "BAT": 36.8,
+            "CP": 51.5,
+            "PA": 50.0,
+            "SKIN": 39.9,
+            "SUBBAT": 0.0,
+            "USB": 29.3
+          }
+        },
+        "after": {
+          "thermal": "1",
+          "temperatures": {
+            "AP": 59.4,
+            "BAT": 38.7,
+            "CP": 53.0,
+            "PA": 51.3,
+            "SKIN": 41.9,
+            "SUBBAT": 0.0,
+            "USB": 29.8
+          }
+        },
+        "bitwise_logits_and_tokens_equal": true,
+        "measurements": {
+          "generated_tokens": 128,
+          "prompt_tokens": 64,
+          "prefill_ms": 14037.800234,
+          "decode_ms": 57841.376953,
+          "total_ms": 71999.638672,
+          "decode_tokens_per_second": 2.212948701134978,
+          "termination": "length",
+          "memory_before": {
+            "rss_bytes": 4130721792,
+            "peak_rss_bytes": 4130721792,
+            "pss_bytes": 4121703424,
+            "minor_faults": 1016452,
+            "major_faults": 604,
+            "storage_read_bytes": 3574525952
+          },
+          "memory_after": {
+            "rss_bytes": 5962997760,
+            "peak_rss_bytes": 6320635904,
+            "pss_bytes": 5957494784,
+            "minor_faults": 1648139,
+            "major_faults": 949,
+            "storage_read_bytes": 93763239936
+          },
+          "resident_weights_after_prefill": {
+            "storage": "anonymous",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2303,
+            "resident_fraction": 0.9995659722222222
+          },
+          "resident_weights_after_decode": {
+            "storage": "anonymous",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2303,
+            "resident_fraction": 0.9995659722222222
+          },
+          "expert_residency_after_prefill": {
+            "complete_entries": 815,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "expert_residency_after_decode": {
+            "complete_entries": 992,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "decode_process_cpu": {
+            "user_ms": 349584.133,
+            "system_ms": 33564.731,
+            "minor_faults": 91118.0,
+            "major_faults": 241.0,
+            "voluntary_switches": 741415.0,
+            "involuntary_switches": 79214.0
+          }
+        },
+        "expert_io": {
+          "decode_read_bytes": 14557655040,
+          "decode_io_bytes": 76832604160,
+          "decode_io_bytes_by_bank": {
+            "demand": {
+              "gate": 5110874112,
+              "up": 5110874112,
+              "down": 9807667200,
+              "other": 0
+            },
+            "speculative": {
+              "gate": 14490042368,
+              "up": 14490042368,
+              "down": 27823104000,
+              "other": 0
+            }
+          },
+          "decode_io_accounting": "packed aligned ranges, including drain; demand/speculative at dispatch",
+          "decode_io_busy_ms": 42082.22155799999,
+          "slot_arena_committed_bytes": 2225225728
+        }
+      },
+      {
+        "name": "anonymous_b",
+        "mode": "anonymous",
+        "before": {
+          "thermal": "1",
+          "temperatures": {
+            "AP": 59.4,
+            "BAT": 38.7,
+            "CP": 53.0,
+            "PA": 51.3,
+            "SKIN": 41.9,
+            "SUBBAT": 0.0,
+            "USB": 29.8
+          }
+        },
+        "after": {
+          "thermal": "2",
+          "temperatures": {
+            "AP": 59.4,
+            "BAT": 40.3,
+            "CP": 53.5,
+            "PA": 51.9,
+            "SKIN": 43.0,
+            "SUBBAT": 0.0,
+            "USB": 30.5
+          }
+        },
+        "bitwise_logits_and_tokens_equal": true,
+        "measurements": {
+          "generated_tokens": 128,
+          "prompt_tokens": 64,
+          "prefill_ms": 14537.572344,
+          "decode_ms": 58621.539883,
+          "total_ms": 73283.20293,
+          "decode_tokens_per_second": 2.183497742561339,
+          "termination": "length",
+          "memory_before": {
+            "rss_bytes": 4131319808,
+            "peak_rss_bytes": 4131319808,
+            "pss_bytes": 4121195520,
+            "minor_faults": 1016386,
+            "major_faults": 589,
+            "storage_read_bytes": 3555540992
+          },
+          "memory_after": {
+            "rss_bytes": 5992747008,
+            "peak_rss_bytes": 6316224512,
+            "pss_bytes": 5986357248,
+            "minor_faults": 1649573,
+            "major_faults": 892,
+            "storage_read_bytes": 94071046144
+          },
+          "resident_weights_after_prefill": {
+            "storage": "anonymous",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2303,
+            "resident_fraction": 0.9995659722222222
+          },
+          "resident_weights_after_decode": {
+            "storage": "anonymous",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2303,
+            "resident_fraction": 0.9995659722222222
+          },
+          "expert_residency_after_prefill": {
+            "complete_entries": 815,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "expert_residency_after_decode": {
+            "complete_entries": 984,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "decode_process_cpu": {
+            "user_ms": 352781.119,
+            "system_ms": 34414.89,
+            "minor_faults": 91577.0,
+            "major_faults": 222.0,
+            "voluntary_switches": 760221.0,
+            "involuntary_switches": 92187.0
+          }
+        },
+        "expert_io": {
+          "decode_read_bytes": 14491516928,
+          "decode_io_bytes": 77187620864,
+          "decode_io_bytes_by_bank": {
+            "demand": {
+              "gate": 4929036288,
+              "up": 4929036288,
+              "down": 9452851200,
+              "other": 0
+            },
+            "speculative": {
+              "gate": 14763679744,
+              "up": 14763679744,
+              "down": 28349337600,
+              "other": 0
+            }
+          },
+          "decode_io_accounting": "packed aligned ranges, including drain; demand/speculative at dispatch",
+          "decode_io_busy_ms": 41059.30516000004,
+          "slot_arena_committed_bytes": 2227097600
+        }
+      },
+      {
+        "name": "ahwb_b",
+        "mode": "ahwb",
+        "before": {
+          "thermal": "2",
+          "temperatures": {
+            "AP": 59.4,
+            "BAT": 40.3,
+            "CP": 53.5,
+            "PA": 51.9,
+            "SKIN": 43.0,
+            "SUBBAT": 0.0,
+            "USB": 30.5
+          }
+        },
+        "after": {
+          "thermal": "2",
+          "temperatures": {
+            "AP": 60.8,
+            "BAT": 41.6,
+            "CP": 55.2,
+            "PA": 53.4,
+            "SKIN": 44.1,
+            "SUBBAT": 0.0,
+            "USB": 31.2
+          }
+        },
+        "bitwise_logits_and_tokens_equal": true,
+        "measurements": {
+          "generated_tokens": 128,
+          "prompt_tokens": 64,
+          "prefill_ms": 13845.223438,
+          "decode_ms": 53805.926367,
+          "total_ms": 67722.008008,
+          "decode_tokens_per_second": 2.3789201049515682,
+          "termination": "length",
+          "memory_before": {
+            "rss_bytes": 597213184,
+            "peak_rss_bytes": 597213184,
+            "pss_bytes": 587472896,
+            "minor_faults": 153412,
+            "major_faults": 634,
+            "storage_read_bytes": 3556667392
+          },
+          "memory_after": {
+            "rss_bytes": 2559590400,
+            "peak_rss_bytes": 2782621696,
+            "pss_bytes": 2550686720,
+            "minor_faults": 783320,
+            "major_faults": 862,
+            "storage_read_bytes": 93687283712
+          },
+          "resident_weights_after_prefill": {
+            "storage": "ahwb",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2304,
+            "resident_fraction": 1.0
+          },
+          "resident_weights_after_decode": {
+            "storage": "ahwb",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2304,
+            "resident_fraction": 1.0
+          },
+          "expert_residency_after_prefill": {
+            "complete_entries": 815,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "expert_residency_after_decode": {
+            "complete_entries": 980,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "decode_process_cpu": {
+            "user_ms": 330570.765,
+            "system_ms": 34445.023,
+            "minor_faults": 89735.0,
+            "major_faults": 146.0,
+            "voluntary_switches": 758600.0,
+            "involuntary_switches": 78020.0
+          }
+        },
+        "expert_io": {
+          "decode_read_bytes": 14491516928,
+          "decode_io_bytes": 76815437824,
+          "decode_io_bytes_by_bank": {
+            "demand": {
+              "gate": 5013282816,
+              "up": 5013282816,
+              "down": 9615052800,
+              "other": 0
+            },
+            "speculative": {
+              "gate": 14584119296,
+              "up": 14584119296,
+              "down": 28005580800,
+              "other": 0
+            }
+          },
+          "decode_io_accounting": "packed aligned ranges, including drain; demand/speculative at dispatch",
+          "decode_io_busy_ms": 40429.331426999954,
+          "slot_arena_committed_bytes": 2219610112
+        }
+      }
+    ],
+    "reference_configuration": {
+      "backend": "cpu",
+      "gpu": null,
+      "architecture": "qwen4exp",
+      "model_file_bytes": 78869128640,
+      "model_tensor_bytes": 0,
+      "file_type": "10",
+      "context": 8192,
+      "tiled_mm": null,
+      "row_kernels": [],
+      "rollback_slots": 0,
+      "trained_context": 262144,
+      "kv_on_storage": null,
+      "kv_bytes_per_token_estimate": 30720,
+      "batch": 128,
+      "threads": 6,
+      "memory_budget_mib": 8192,
+      "memory_budget_kind": "admission_only",
+      "mmap": false,
+      "mapped_tensor_bytes": 29237181440,
+      "expert_cache_bytes": 1796673536,
+      "expert_streaming": {
+        "policy": "layer_partitioned_lru",
+        "routing": "exact_top_k",
+        "requested_budget_bytes": 1879048192,
+        "effective_budget_bytes": 1796673536,
+        "budget_kind": "routed_expert_pages; a prompt batch borrows other layers' entries and exceeds the budget only when one layer alone needs more, plus prefill_prefetch_mib",
+        "layer_quotas": [
+          20,
+          20,
+          17,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20
+        ],
+        "layer_weights": "uniform",
+        "routed_bytes": 46084915200,
+        "entry_bytes_min": 1871872,
+        "entry_bytes_max": 2183168,
+        "experts_used": 10,
+        "io_threads": 16,
+        "direct_io": true,
+        "prefetch": "router_lookahead_1",
+        "diagnostic_oracle_layers": null,
+        "diagnostic_route_buffer_bytes": 0,
+        "prefetch_extra": 0,
+        "lookahead_gate": true,
+        "lookahead_late": 0,
+        "lookahead_threads": 1,
+        "lookahead_spin": false,
+        "lookahead_late_gate": true,
+        "prefetch_count": 0,
+        "decode_uses_prompt_allowance": true,
+        "decode_budget_bytes": 1796673536,
+        "bank_spin_us": 20000,
+        "speculative_pool": true,
+        "lookahead_layers": 2,
+        "lookahead2_count": 5,
+        "read_priority": true,
+        "prefetch_inflight": 2,
+        "lookahead_router_q8": true,
+        "demand_io_threads": 4,
+        "awake_demand_io_threads": 0,
+        "coalesce_kib": 2048,
+        "coalesce_gap": 1,
+        "prefill_prefetch_mib": 0,
+        "prefill_prefetch_min_coverage": 0.9,
+        "slots": true,
+        "expert_pack": true,
+        "expert_pack_split": 2,
+        "overlap_reads": true,
+        "prefetch_layers": 48,
+        "simd": "neon+dotprod",
+        "trace": false
+      },
+      "resident_weights": {
+        "storage": "ahwb",
+        "allocated_bytes": 3536027648,
+        "buffers": 9,
+        "strict_no_fallback": true,
+        "sampled_pages": null,
+        "resident_pages": null,
+        "resident_fraction": null
+      },
+      "threadpool": {
+        "persistent": true,
+        "adaptive": true,
+        "poll": 50,
+        "cpu_mask": null
+      },
+      "cpu_variant": "android_armv9.0_1",
+      "cpu_features": {
+        "dotprod": true,
+        "fp16": true,
+        "sve": true,
+        "i8mm": true,
+        "sve2": true,
+        "sme": false
+      },
+      "mtp": false,
+      "repack": false,
+      "speculative": null,
+      "steering": false,
+      "steering_supported": true,
+      "thinking_supported": true,
+      "model_sha256": null,
+      "embedding_size": 2560,
+      "decoder_blocks": 48,
+      "vision": null,
+      "load_ms": 5881.139062,
+      "eqt_revision": "bb603db330d4e78eee627ff8866b52aff7cd88f5-dirty",
+      "compiler": "Clang-19.0.1",
+      "llama_revision": "6c59c40076c00eab49754dc955d7652d93f9e125",
+      "system_info": "CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | SVE = 1 | DOTPROD = 1 | SVE_CNT = 16 | REPACK = 1 | ",
+      "memory_after_load": {
+        "rss_bytes": 571383808,
+        "peak_rss_bytes": 571383808,
+        "pss_bytes": 520381440,
+        "minor_faults": 153621,
+        "major_faults": 57,
+        "storage_read_bytes": 3544563712
+      }
+    },
+    "reference_token_ids": [
+      2,
+      6765,
+      286,
+      264,
+      4734,
+      575,
+      64132,
+      2793,
+      12829,
+      261,
+      364,
+      8253,
+      271,
+      11180,
+      286,
+      3425,
+      494,
+      8976,
+      5638,
+      11,
+      279,
+      47511,
+      6025,
+      11,
+      466,
+      975,
+      8098,
+      369,
+      264,
+      401,
+      1430,
+      3032,
+      6150,
+      3274,
+      383,
+      8253,
+      13,
+      5788,
+      279,
+      1510,
+      11204,
+      63,
+      1785,
+      5529,
+      264,
+      16219,
+      4202,
+      1406,
+      11,
+      279,
+      4880,
+      8427,
+      314,
+      3349,
+      28465,
+      2218,
+      20171,
+      430,
+      26555,
+      82,
+      11,
+      4566,
+      17872,
+      11,
+      466,
+      7620,
+      36748,
+      2218,
+      40007,
+      45332,
+      14246,
+      13,
+      357,
+      47993,
+      7873,
+      3428,
+      11177,
+      310,
+      4230,
+      2056,
+      10327,
+      318,
+      55814,
+      8,
+      34942,
+      11,
+      3563,
+      90162,
+      11,
+      466,
+      795,
+      20600,
+      948,
+      279,
+      1817,
+      369,
+      7190,
+      539,
+      279,
+      1785,
+      13,
+      271,
+      1919,
+      20856,
+      47957,
+      264,
+      15352,
+      17120,
+      364,
+      264,
+      14294,
+      25331,
+      999,
+      60453,
+      13,
+      1165,
+      668,
+      3311,
+      16350,
+      1879,
+      11,
+      7077,
+      10206,
+      11,
+      59056,
+      4779,
+      10121,
+      11
+    ],
+    "reference_per_position_logits_sha256": [
+      "fdb9ccd91ecaa817986f9f9f5ca5567756d04057b45d25fc0c30452a6855ed45",
+      "df93a33fb208246ad3b405df171c069b02f7bcb5fb1ef9abbff0b91115f0904c",
+      "0e38e91cfa84dc2ac3c259c8a26fb6cc36875faa1145c2d8b0e6ebddc0133791",
+      "ae53158aafbf12c402336657447db214597002e5c1c7b0341a33b41fe622aeb0",
+      "f57d0d7ef1a112c12a3eceeff594e2e9293fb7942bbbd3b205d674efbf809f56",
+      "6bb74e107cc71abb15244ec8bcd6914dd9aa3d2eb4562060ebc09680f6692629",
+      "9b4524b308ff1d859fbcb6afe2da66a5358009607ad790f92fa31fd3f49bc36a",
+      "e63cc75969d8e821f0429c4f6c33273cc6111532f25b8320cbafc0aeffa1fce5",
+      "133d8c71039219da3e8725c3eabcd854bc73987bafdfe5225cc1bd05fc1f2e75",
+      "c2738c1c94d112b4e611e4e0b1852c3d0bcef284892bb34ba9f8e9e84b31722e",
+      "6b337feb9cad9c9345ceb232f2da20fe0de94ec35683069de3838314cadeb3d3",
+      "25f8a32eaae7d25ec43589c8f02412081ec4f8e704c42aa19c8462b62bb30707",
+      "064364426983f448c31b8e3f5101abd12f8419fd8347c5270bae8c86fbae7436",
+      "fcfe0c636c005b985369b9cfd50240fdcf76498db6e6b5f4fa5a40b7a148ced1",
+      "2dbe41a3072a89253c9353bfba4669d57c6c637de7c9646bfe5d107b144672ec",
+      "f84f33e92145a4f7ee09f73390a82db8c124f4b7bdc97418a5bc2b1728752cd4",
+      "4c8960e7446d5481b1ef1e44e46b4845bbac1e156e7c3f9da20628fca64e393f",
+      "64eb0613a174b94c8a33f7b55277250753bc1dbbff80eb4d93da3c4ee0e67edf",
+      "f665a4ba208f1fb6775afba6e5236aeb708c3ed53bcb333a4bea1bbc14dbec0e",
+      "5150492080a68948c48c4faf437f6139fb51734ba6e5f44261b78316bc7b4329",
+      "91b861729380bdc39e531f1f028a68e5e99daef6739343c3f72b85a0db987794",
+      "2f03d7c2e1e6c8305839b15442f4f72e935b1467180ecc28d7cc3e8e44757862",
+      "e6c93e0a460461d2994dcd46fa9b3f89ecbef541165eb8f00f759c8e522b99cb",
+      "9332e960ff99fca319e13f263121aa6cd1553ac9af17a33a8550cc38a420312f",
+      "77296dfd63a1e5980486d7fde189d5fdc7cf41893239520c5ff201610d17b905",
+      "e9fb2e85513a0ba11a8f2c591a500e0f8eb3053eccfdeb20fa7f9d5d4d83df78",
+      "59bc6c769841f11135c56749fae122d813edfe28b08454c3b6a852c18cbc3d52",
+      "451fff295d97e0def5a046d37acaff2492ef6180e8e49a89e62e52a41ab51fcd",
+      "20a6742574adcd0d4caf7564a852a0725f24ee006a54e76853c5089e1de2efb1",
+      "ff426e5b6479aa2df11fe7b95c14ba0d847c002b63aec79b97ec82b18a07d9ae",
+      "d149409fa06aa6ce698226575e186d5912c756c4857e5a5d82d20d611c632d8c",
+      "13bbb5c8d7a456c098bf85fc1ce0b1f87f194f595e7f7bc5cbed86b82a6ad893",
+      "096d3bcae295d145e2ceadcd2291d969fe3b9c5369f06c3299f63acdccc57146",
+      "4a7b76ca1b4a32903413cc7c8ba8f52de0db3003276515d8f3ecb69a7b976284",
+      "c0ee841ae8c28cc828ea7d21320b53e5cd73d8e97de1a954b95ec1c79e6e3a3a",
+      "16b794404fe2c54c866f0460ec932b95dcf7bc20d2b44879a93344bdcfda00ee",
+      "ec79309ba732fe701c601384b94414ea07056e3bfa1ddbd8dac33e62583045ba",
+      "0c98c466cba7ee5fe3638c8d709a2714b9d7a5e002237922e08c7f9cf277f459",
+      "b804871408ab41aa64d508d597d19d2f628958b89acb3b88a27cdb74afcb4871",
+      "35addf58effa4c6d4f0073e8510a79d57322d659cc7eaa54032eed3ffbe2796c",
+      "7438143dcbdb712236af1aaacfaf8932341193ed728af7005d3ce9b8fb6a0529",
+      "164d2fca1abd51d9f87548fc80f37de08449627973e917ce56cf5f866357abad",
+      "b13c15859b75aca5c15d30477637c9868345d3cb579d953d2616ae22751d4b23",
+      "88fd82dff947d68bc086424551cb5893481b346bcab5786c239417508b3e9b32",
+      "86a1806c46b5c926123d52f74c0580673726b8dc00ee5d9cde411ead2d04e93f",
+      "edb987b6011219793e7475240e4e76785477cc66398764a990c46cb067911ea5",
+      "4d479ded7891acdfdabbbf01f3a117f337ed6577774a61cc5af303179e0ea971",
+      "82e599da8fda7a7b1e52d02ae0bcf50863f780f836d88171b938a14b74e4f38f",
+      "1cdb9dec66654aa91718272e9c4d53cf6e1c472f2c6f74d4ce13ed104d040d5e",
+      "555135d4eed8ea3d65a3d1c2e3fe2b09be749c6560832d7c694a51399b8bc55f",
+      "64876168e8172737d8105bb2ad83d2fabdbc30147e11e71058138c4c1928f4b3",
+      "272592e9d314bd6845a3f470c4fcac3f6c3a15b390790aaccd6892f8e18d7a2d",
+      "61618679b4084b8505a3d65c7bce500a11be844176bc95c6e2c6ac724df1dedf",
+      "5c5d158ed717acdeb4ac0aa78c2f89131d58039349a88003ca7f602541362a89",
+      "368119e0d93db7693d38bca1d3bc71f075eed29bcc035cd3b061306c2f02dde3",
+      "041a4a1a3e08936b9e376de39de454d03c2a04d23be0bae2bd84dc7246cac8e0",
+      "17d1b1c88d10ca9132bd75dc358b8a7eb693e599a2d5dba759e7aba5e64704cf",
+      "1421c9e3a6d0368431f52e7093ce8bcae5cf478cc9c1aacd737f8d17248e75c3",
+      "775ef50241c16cfd5a8dbe169329c60d306115246ee7196aa84e988f5b4f601c",
+      "43f1dc03aa39014c2b7d352e571c6983cc2362e01d807be04d006c67123ad113",
+      "a641cf77d179cebc2e0d8c0e3277d8c813d341f12d95d7d77cbd8ffbcd66a57b",
+      "ff3831273d431944f9d6973694b770dc20482fe1ceaf185952bd813f160ac374",
+      "8dbb2c06e536306fdb022f485eab1f2c5b83f75ccab7034e539e8519e34d9d5b",
+      "9d66ce5569c2b0eaa341578e6043549a16f8933740a15cddf41676fc8f87fb9f",
+      "b4fdd2c0ad3dcfffbc3f6378f2050293d2caa1e1ee7df161fd625b75b8b58b30",
+      "c1e38c6446d4fe2781ffdf4d6472429f3bc79a829a0739a33f62bd18e35b3024",
+      "5181006a6ad34b9a760f422c8d6f704374924b89b1b8b19e65932b22bbdc90d5",
+      "a7f1a034a057bef33b338c5ad76c41387a9a8102dd12df45b4e4586740520589",
+      "7db66e059104d6a900b93707664d5db479aa69ea0cf2da236bcc35ebbaf8d5cd",
+      "297efbc0928d6285dd2e65435e22f239444574cd0f6fb2dbb4347d892f7d2642",
+      "127b13f073d03d32fa951096744e7373cb88c17e55e496bfb2166dd2c6b6930d",
+      "364251bfc4b96629148c4081e129bde0b6d825484ce9060fd0a77324af02ac4f",
+      "19e2205a3e3d45da2350df8754fabd2f37438e94ef7e05b6a188d3f49f3475ef",
+      "6edc1488ac2870d5f9fe84d6ad1f6ba2306d5e4603d8e0cf34c3000340b4f686",
+      "aba394dbe9c4d2ec498632041e9bc9b57c6f82abb419364bf676c7f4225f406d",
+      "f3f0660a7e1626714f31cea674db86ac5f9559579fc8a3d34571c4c3e504d566",
+      "a68ecf66b7e679bc7994cc160736393fd5decf202c8f27b341357bbf3a3eb2c6",
+      "959c7cee732b1a68858c6a4c981f1b3dc6b9d31f997ad4da29550166aef2c511",
+      "91b0657dbc92134590762ea733986e26c9bb433a3bf325fa945d8982ba362a52",
+      "a652d295b2394efc30cebf840fdd116b483c46da5385a81fdf4a76a88d619252",
+      "642c2bd8b563d25d5dfeb1bf155131ae31d311f72e0c01979782271aed67368b",
+      "c76a676301d372ab52639d40efd2095052e533444599c240b9545a811c6e0e45",
+      "7dcab1ca761a881c560d00eb302a41147efa5aa1a35ce42dde8c13183915348d",
+      "b70ff00db6aa6589730ab8a6cb6e02df68229843afe19c802df751deb33ffbc2",
+      "6d3ff19842956889c97fdc1d55c31bac0125929d453f9960c85fbe4c32f243d2",
+      "499e9aa02349adb7f59c81635859dce5de973c1193c6ba0c73d6642128737b07",
+      "d0f277c5136a2a128cd513e03e2e894f6b530f2017c7d7a1b858cd07f97b89e7",
+      "8c0e48a942ad33a56b1edf9b36f56faeefd6f5a123ad9c4069f2d253c1a7ca1f",
+      "1de3ff84a582ec904bf97ffde53f5b2fe4e6a61c7b1021136954d0ab7cdd0269",
+      "ff20d3873c6179ac60dad28b0a17870130c54f2dfa76d2a1608dc66d40de43ff",
+      "6bf3c76ce324eb13ec5e55a9450ed37e65d9f7489685aa92f11ef791fb943b06",
+      "c8bd6e326182e34bac1996504a412a125efe4491c7953a3de787dc5aa830384a",
+      "985350bfa961cf4bdf937f9d89535a2bc578a2561127054561fd81f6b9f8685f",
+      "b6e7cd622e3b4829b3dfd75af62cbb9e68f384f82a32fdeca81c96e563df36b5",
+      "35aa4c38b4d78d45d7af7b8c110ec3daec02b0e6e61ebaad085d5afd8ddf34f9",
+      "0266e0a1fdac39ed8b00d5a9771e8b7de5dac24da12abeb19faf18d64b2e5717",
+      "012dae3e93ad58cb9d16267eb483081ccd9884250ff247620d35f071c787077f",
+      "80a8c764fafac6127540b3424e3a4fad97a8ebbf9e6cac983ebbb18e4c40f14e",
+      "5e453a4610835b3637be1bd08fadc7f0012e5e18d2aa1b5dfc0e8502b9499369",
+      "2caca71519e38498dc41f77438cf9d4ab08a216f2573f3cc471d22db2c64c782",
+      "7b16926479f3f9ccecd54e0d91b044dcd92e24b8c0039cdf6c2a6d92ac97f2b1",
+      "247b753f497c4bede254bf2ef4988d8353c201621e04643fb00bd5ba3fe97ba5",
+      "8bf1c5d589feb34778bf539dd0b530c98a40ed7c0babec93f5ea4bd2f82880f3",
+      "cde54f42b844dcad7d47db3aaf50164efe2f2b4c0f2bee3449492a0ba78d4d42",
+      "0d3f2caa302447e2a0ba155fc4e07903447406cd7800a77f29d4e02070d33c7e",
+      "3bcb5a7d42b4d41a28cd0be2ca4c8cad6fb239ae10e43703679cca0bbca954fb",
+      "b123a63466b7b5bf714dfdfca0b9e409ab0228fbc56a60d3b43b5de7f279bc2b",
+      "5ac66f7cceddebf4897b36404b6a30687c7f97eba789e8d5be6547ad4e50e0b1",
+      "0d5516380657de0421bb5895ed4ab61e03421eeeb397f3763552aecb3502dbc8",
+      "efe4a4dfd10f65e8016a77641a9c594468e0a7b85944e28d6f61645d0577e8db",
+      "b5415288c6d9190f29600e4c25f98914e74bbb7edbc36517e7c9832d17c66361",
+      "bb070ccf2eaecc0884371a4b5bdc4ebfaea519445f41c65c0189d9a33f673392",
+      "911f02748b89a5845ee8f2c0a6e3b0a3473134992ef6a96fa0da3a67024e9016",
+      "e9822045197e4e053a9c6b41d2f710c18bd7a32426e99e06e034d8eabed60c85",
+      "1e5127d770e35dda4325b8742be60bc4cf267a88efbc6f3ab81f956f52046a47",
+      "c21c65cb72918714ce4ef125f69174a0b9db3706b4324f0a7e8ea57ff43fb0b8",
+      "441f599547882b9f651331d09e8a156f1ebe485328590a754e336106a6b11d54",
+      "49a78fa10c2d4b7bfe92ab445dab0212fef19756e3949e59e080863c431ecd6c",
+      "a88dad43fdea95d66bb78b80b2b7cb83d3b286a5c748f9b6f885a1671b1d9242",
+      "ab578ee39febfe02a225a51263d4edd3e1e0153980f4227bf1cba4312ac6ad7c",
+      "067748f0fa885c4087410c144e2d711a08559eb98d6fdc394b808adaddfd29a6",
+      "a632730e5658164cc07211da69d5116574b63dcefcf2a1c4be97da8639314f73",
+      "2882167b165d08168e9bcd97c01537ca207854c7f89335c28efceaa4af3b2d3f",
+      "146635727af8ccf3b021eec8f69c32e791bb09d52e8ccfa3c62ceecc5dcd1fa6",
+      "22969ed616b6b2bd43128ab59bf27c432b2da9787f6e321f07019dda98f7d87f",
+      "48df604ce32e49622bd6858b63a081cd58d01d489d6324a47d173fc05d245837",
+      "cfff8d722ade0702885fd53177607bd5cd63e0f6771c3c5a7f16a39c5fcc39c3",
+      "b8a2be32dc645130ea0f8bbb8630681c98cf70486765a7c65459426b0fbb47c3"
+    ]
+  },
+  "ordinary_storage_check": {
+    "source_sha256": "39bb9b7d371ec518d07e708e0232ff820da4c9f305e520fcf677d0ae4c939942",
+    "artifact_sha256": {
+      "eqt-bench": "461e1fcf1396b025c45d9fa5142d68b63bf20129785a401d8d8efd382a31f82b",
+      "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+      "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+      "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+      "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+      "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+      "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+      "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+      "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+      "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+      "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+      "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+      "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+      "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+    },
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a detailed tutorial of about 1500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."
+        }
+      ],
+      "max_tokens": 64,
+      "temperature": 0,
+      "seed": 42,
+      "thinking": false,
+      "ignore_eos": false,
+      "load": {
+        "context": 8192,
+        "batch": 128,
+        "threads": 6,
+        "memory_budget_mib": 8192,
+        "mmap": false,
+        "expert_streaming": true,
+        "expert_cache_mib": 1792,
+        "io_threads": 16,
+        "direct_io": true,
+        "prefetch": true,
+        "speculative_pool": true,
+        "lookahead_layers": 2,
+        "lookahead2_count": 5,
+        "read_priority": true,
+        "prefetch_inflight": 2,
+        "lookahead_router_q8": true,
+        "expert_pack_split": 2,
+        "coalesce_kib": 2048,
+        "coalesce_gap": 1,
+        "prefill_prefetch_mib": 0,
+        "prefill_prefetch_min_coverage": 0.9,
+        "expert_slots": true,
+        "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+      },
+      "diagnostic_logits_hash": true,
+      "diagnostic_residency": true
+    },
+    "runner_wall_seconds": 98.51499999999942,
+    "runs": [
+      {
+        "name": "default_a",
+        "mode": "default",
+        "before": {
+          "thermal": "0",
+          "temperatures": {
+            "AP": 37.0,
+            "BAT": 34.0,
+            "CP": 36.5,
+            "PA": 36.3,
+            "SKIN": 34.4,
+            "SUBBAT": 0.0,
+            "USB": 32.0
+          }
+        },
+        "after": {
+          "thermal": "1",
+          "temperatures": {
+            "AP": 60.3,
+            "BAT": 38.1,
+            "CP": 51.7,
+            "PA": 50.0,
+            "SKIN": 40.0,
+            "SUBBAT": 0.0,
+            "USB": 32.0
+          }
+        },
+        "bitwise_logits_and_tokens_equal": true,
+        "measurements": {
+          "generated_tokens": 64,
+          "prompt_tokens": 64,
+          "prefill_ms": 12764.372188,
+          "decode_ms": 25646.718906,
+          "total_ms": 38495.489922,
+          "decode_tokens_per_second": 2.4954459178412614,
+          "termination": "length",
+          "memory_before": {
+            "rss_bytes": 4103987200,
+            "peak_rss_bytes": 4104126464,
+            "pss_bytes": 4097176576,
+            "minor_faults": 1016586,
+            "major_faults": 28,
+            "storage_read_bytes": 3553886208
+          },
+          "memory_after": {
+            "rss_bytes": 5969235968,
+            "peak_rss_bytes": 6203162624,
+            "pss_bytes": 5965359104,
+            "minor_faults": 1644232,
+            "major_faults": 62621,
+            "storage_read_bytes": 54633181184
+          },
+          "resident_weights_after_prefill": null,
+          "resident_weights_after_decode": null,
+          "expert_residency_after_prefill": {
+            "complete_entries": 815,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "expert_residency_after_decode": {
+            "complete_entries": 978,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "decode_process_cpu": {
+            "user_ms": 156282.108,
+            "system_ms": 16233.009,
+            "minor_faults": 86887.0,
+            "major_faults": 149.0,
+            "voluntary_switches": 382201.0,
+            "involuntary_switches": 39896.0
+          }
+        },
+        "expert_io": {
+          "decode_read_bytes": 7250280448,
+          "decode_io_bytes": 37754601472,
+          "decode_io_bytes_by_bank": {
+            "demand": {
+              "gate": 2655518720,
+              "up": 2655518720,
+              "down": 5096448000,
+              "other": 0
+            },
+            "speculative": {
+              "gate": 6976290816,
+              "up": 6976290816,
+              "down": 13394534400,
+              "other": 0
+            }
+          },
+          "decode_io_accounting": "packed aligned ranges, including drain; demand/speculative at dispatch",
+          "decode_io_busy_ms": 19003.053867000013,
+          "slot_arena_committed_bytes": 2212122624
+        }
+      },
+      {
+        "name": "ahwb_a",
+        "mode": "ahwb",
+        "before": {
+          "thermal": "1",
+          "temperatures": {
+            "AP": 60.3,
+            "BAT": 38.1,
+            "CP": 51.7,
+            "PA": 50.0,
+            "SKIN": 40.0,
+            "SUBBAT": 0.0,
+            "USB": 32.0
+          }
+        },
+        "after": {
+          "thermal": "1",
+          "temperatures": {
+            "AP": 57.1,
+            "BAT": 39.3,
+            "CP": 51.2,
+            "PA": 49.9,
+            "SKIN": 41.1,
+            "SUBBAT": 0.0,
+            "USB": 32.0
+          }
+        },
+        "bitwise_logits_and_tokens_equal": true,
+        "measurements": {
+          "generated_tokens": 64,
+          "prompt_tokens": 64,
+          "prefill_ms": 13725.643398,
+          "decode_ms": 29320.95418,
+          "total_ms": 43134.689023,
+          "decode_tokens_per_second": 2.1827393340307726,
+          "termination": "length",
+          "memory_before": {
+            "rss_bytes": 597053440,
+            "peak_rss_bytes": 597053440,
+            "pss_bytes": 587133952,
+            "minor_faults": 153448,
+            "major_faults": 596,
+            "storage_read_bytes": 3534139392
+          },
+          "memory_after": {
+            "rss_bytes": 2555367424,
+            "peak_rss_bytes": 2781413376,
+            "pss_bytes": 2547396608,
+            "minor_faults": 782724,
+            "major_faults": 759,
+            "storage_read_bytes": 55135109120
+          },
+          "resident_weights_after_prefill": {
+            "storage": "ahwb",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2304,
+            "resident_fraction": 1.0
+          },
+          "resident_weights_after_decode": {
+            "storage": "ahwb",
+            "allocated_bytes": 3536027648,
+            "buffers": 9,
+            "strict_no_fallback": true,
+            "sampled_pages": 2304,
+            "resident_pages": 2304,
+            "resident_fraction": 1.0
+          },
+          "expert_residency_after_prefill": {
+            "complete_entries": 815,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "expert_residency_after_decode": {
+            "complete_entries": 976,
+            "sampled_pages": 256,
+            "resident_pages": 256,
+            "resident_fraction": 1.0
+          },
+          "decode_process_cpu": {
+            "user_ms": 178150.92799999999,
+            "system_ms": 17253.929000000004,
+            "minor_faults": 88718.0,
+            "major_faults": 74.0,
+            "voluntary_switches": 376328.0,
+            "involuntary_switches": 35938.0
+          }
+        },
+        "expert_io": {
+          "decode_read_bytes": 7217524736,
+          "decode_io_bytes": 38298693632,
+          "decode_io_bytes_by_bank": {
+            "demand": {
+              "gate": 2505236480,
+              "up": 2505236480,
+              "down": 4807065600,
+              "other": 0
+            },
+            "speculative": {
+              "gate": 7264526336,
+              "up": 7264526336,
+              "down": 13952102400,
+              "other": 0
+            }
+          },
+          "decode_io_accounting": "packed aligned ranges, including drain; demand/speculative at dispatch",
+          "decode_io_busy_ms": 20469.142003999998,
+          "slot_arena_committed_bytes": 2219610112
+        }
+      }
+    ],
+    "reference_configuration": {
+      "backend": "cpu",
+      "gpu": null,
+      "architecture": "qwen4exp",
+      "model_file_bytes": 78869128640,
+      "model_tensor_bytes": 0,
+      "file_type": "10",
+      "context": 8192,
+      "tiled_mm": null,
+      "row_kernels": [],
+      "rollback_slots": 0,
+      "trained_context": 262144,
+      "kv_on_storage": null,
+      "kv_bytes_per_token_estimate": 30720,
+      "batch": 128,
+      "threads": 6,
+      "memory_budget_mib": 8192,
+      "memory_budget_kind": "admission_only",
+      "mmap": false,
+      "mapped_tensor_bytes": 29237181440,
+      "expert_cache_bytes": 1796673536,
+      "expert_streaming": {
+        "policy": "layer_partitioned_lru",
+        "routing": "exact_top_k",
+        "requested_budget_bytes": 1879048192,
+        "effective_budget_bytes": 1796673536,
+        "budget_kind": "routed_expert_pages; a prompt batch borrows other layers' entries and exceeds the budget only when one layer alone needs more, plus prefill_prefetch_mib",
+        "layer_quotas": [
+          20,
+          20,
+          17,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20,
+          20
+        ],
+        "layer_weights": "uniform",
+        "routed_bytes": 46084915200,
+        "entry_bytes_min": 1871872,
+        "entry_bytes_max": 2183168,
+        "experts_used": 10,
+        "io_threads": 16,
+        "direct_io": true,
+        "prefetch": "router_lookahead_1",
+        "diagnostic_oracle_layers": null,
+        "diagnostic_route_buffer_bytes": 0,
+        "prefetch_extra": 0,
+        "lookahead_gate": true,
+        "lookahead_late": 0,
+        "lookahead_threads": 1,
+        "lookahead_spin": false,
+        "lookahead_late_gate": true,
+        "prefetch_count": 0,
+        "decode_uses_prompt_allowance": true,
+        "decode_budget_bytes": 1796673536,
+        "bank_spin_us": 20000,
+        "speculative_pool": true,
+        "lookahead_layers": 2,
+        "lookahead2_count": 5,
+        "read_priority": true,
+        "prefetch_inflight": 2,
+        "lookahead_router_q8": true,
+        "demand_io_threads": 4,
+        "awake_demand_io_threads": 0,
+        "coalesce_kib": 2048,
+        "coalesce_gap": 1,
+        "prefill_prefetch_mib": 0,
+        "prefill_prefetch_min_coverage": 0.9,
+        "slots": true,
+        "expert_pack": true,
+        "expert_pack_split": 2,
+        "overlap_reads": true,
+        "prefetch_layers": 48,
+        "simd": "neon+dotprod",
+        "trace": false
+      },
+      "resident_weights": null,
+      "threadpool": {
+        "persistent": true,
+        "adaptive": true,
+        "poll": 50,
+        "cpu_mask": null
+      },
+      "cpu_variant": "android_armv9.0_1",
+      "cpu_features": {
+        "dotprod": true,
+        "fp16": true,
+        "sve": true,
+        "i8mm": true,
+        "sve2": true,
+        "sme": false
+      },
+      "mtp": false,
+      "repack": false,
+      "speculative": null,
+      "steering": false,
+      "steering_supported": true,
+      "thinking_supported": true,
+      "model_sha256": null,
+      "embedding_size": 2560,
+      "decoder_blocks": 48,
+      "vision": null,
+      "load_ms": 5216.89457,
+      "eqt_revision": "bb603db330d4e78eee627ff8866b52aff7cd88f5-dirty",
+      "compiler": "Clang-19.0.1",
+      "llama_revision": "6c59c40076c00eab49754dc955d7652d93f9e125",
+      "system_info": "CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | SVE = 1 | DOTPROD = 1 | SVE_CNT = 16 | REPACK = 1 | ",
+      "memory_after_load": {
+        "rss_bytes": 4104126464,
+        "peak_rss_bytes": 4104126464,
+        "pss_bytes": 4097166336,
+        "minor_faults": 1016584,
+        "major_faults": 28,
+        "storage_read_bytes": 3553886208
+      }
+    },
+    "reference_token_ids": [
+      2,
+      6765,
+      286,
+      264,
+      4734,
+      575,
+      64132,
+      2793,
+      12829,
+      261,
+      364,
+      8253,
+      271,
+      11180,
+      286,
+      3425,
+      494,
+      8976,
+      5638,
+      11,
+      279,
+      47511,
+      6025,
+      11,
+      466,
+      975,
+      8098,
+      369,
+      264,
+      401,
+      1430,
+      3032,
+      6150,
+      3274,
+      383,
+      8253,
+      13,
+      5788,
+      279,
+      1510,
+      11204,
+      63,
+      1785,
+      5529,
+      264,
+      16219,
+      4202,
+      1406,
+      11,
+      279,
+      4880,
+      8427,
+      314,
+      3349,
+      28465,
+      2218,
+      20171,
+      430,
+      26555,
+      82,
+      11,
+      4566,
+      17872,
+      11
+    ],
+    "reference_per_position_logits_sha256": [
+      "fdb9ccd91ecaa817986f9f9f5ca5567756d04057b45d25fc0c30452a6855ed45",
+      "df93a33fb208246ad3b405df171c069b02f7bcb5fb1ef9abbff0b91115f0904c",
+      "0e38e91cfa84dc2ac3c259c8a26fb6cc36875faa1145c2d8b0e6ebddc0133791",
+      "ae53158aafbf12c402336657447db214597002e5c1c7b0341a33b41fe622aeb0",
+      "f57d0d7ef1a112c12a3eceeff594e2e9293fb7942bbbd3b205d674efbf809f56",
+      "6bb74e107cc71abb15244ec8bcd6914dd9aa3d2eb4562060ebc09680f6692629",
+      "9b4524b308ff1d859fbcb6afe2da66a5358009607ad790f92fa31fd3f49bc36a",
+      "e63cc75969d8e821f0429c4f6c33273cc6111532f25b8320cbafc0aeffa1fce5",
+      "133d8c71039219da3e8725c3eabcd854bc73987bafdfe5225cc1bd05fc1f2e75",
+      "c2738c1c94d112b4e611e4e0b1852c3d0bcef284892bb34ba9f8e9e84b31722e",
+      "6b337feb9cad9c9345ceb232f2da20fe0de94ec35683069de3838314cadeb3d3",
+      "25f8a32eaae7d25ec43589c8f02412081ec4f8e704c42aa19c8462b62bb30707",
+      "064364426983f448c31b8e3f5101abd12f8419fd8347c5270bae8c86fbae7436",
+      "fcfe0c636c005b985369b9cfd50240fdcf76498db6e6b5f4fa5a40b7a148ced1",
+      "2dbe41a3072a89253c9353bfba4669d57c6c637de7c9646bfe5d107b144672ec",
+      "f84f33e92145a4f7ee09f73390a82db8c124f4b7bdc97418a5bc2b1728752cd4",
+      "4c8960e7446d5481b1ef1e44e46b4845bbac1e156e7c3f9da20628fca64e393f",
+      "64eb0613a174b94c8a33f7b55277250753bc1dbbff80eb4d93da3c4ee0e67edf",
+      "f665a4ba208f1fb6775afba6e5236aeb708c3ed53bcb333a4bea1bbc14dbec0e",
+      "5150492080a68948c48c4faf437f6139fb51734ba6e5f44261b78316bc7b4329",
+      "91b861729380bdc39e531f1f028a68e5e99daef6739343c3f72b85a0db987794",
+      "2f03d7c2e1e6c8305839b15442f4f72e935b1467180ecc28d7cc3e8e44757862",
+      "e6c93e0a460461d2994dcd46fa9b3f89ecbef541165eb8f00f759c8e522b99cb",
+      "9332e960ff99fca319e13f263121aa6cd1553ac9af17a33a8550cc38a420312f",
+      "77296dfd63a1e5980486d7fde189d5fdc7cf41893239520c5ff201610d17b905",
+      "e9fb2e85513a0ba11a8f2c591a500e0f8eb3053eccfdeb20fa7f9d5d4d83df78",
+      "59bc6c769841f11135c56749fae122d813edfe28b08454c3b6a852c18cbc3d52",
+      "451fff295d97e0def5a046d37acaff2492ef6180e8e49a89e62e52a41ab51fcd",
+      "20a6742574adcd0d4caf7564a852a0725f24ee006a54e76853c5089e1de2efb1",
+      "ff426e5b6479aa2df11fe7b95c14ba0d847c002b63aec79b97ec82b18a07d9ae",
+      "d149409fa06aa6ce698226575e186d5912c756c4857e5a5d82d20d611c632d8c",
+      "13bbb5c8d7a456c098bf85fc1ce0b1f87f194f595e7f7bc5cbed86b82a6ad893",
+      "096d3bcae295d145e2ceadcd2291d969fe3b9c5369f06c3299f63acdccc57146",
+      "4a7b76ca1b4a32903413cc7c8ba8f52de0db3003276515d8f3ecb69a7b976284",
+      "c0ee841ae8c28cc828ea7d21320b53e5cd73d8e97de1a954b95ec1c79e6e3a3a",
+      "16b794404fe2c54c866f0460ec932b95dcf7bc20d2b44879a93344bdcfda00ee",
+      "ec79309ba732fe701c601384b94414ea07056e3bfa1ddbd8dac33e62583045ba",
+      "0c98c466cba7ee5fe3638c8d709a2714b9d7a5e002237922e08c7f9cf277f459",
+      "b804871408ab41aa64d508d597d19d2f628958b89acb3b88a27cdb74afcb4871",
+      "35addf58effa4c6d4f0073e8510a79d57322d659cc7eaa54032eed3ffbe2796c",
+      "7438143dcbdb712236af1aaacfaf8932341193ed728af7005d3ce9b8fb6a0529",
+      "164d2fca1abd51d9f87548fc80f37de08449627973e917ce56cf5f866357abad",
+      "b13c15859b75aca5c15d30477637c9868345d3cb579d953d2616ae22751d4b23",
+      "88fd82dff947d68bc086424551cb5893481b346bcab5786c239417508b3e9b32",
+      "86a1806c46b5c926123d52f74c0580673726b8dc00ee5d9cde411ead2d04e93f",
+      "edb987b6011219793e7475240e4e76785477cc66398764a990c46cb067911ea5",
+      "4d479ded7891acdfdabbbf01f3a117f337ed6577774a61cc5af303179e0ea971",
+      "82e599da8fda7a7b1e52d02ae0bcf50863f780f836d88171b938a14b74e4f38f",
+      "1cdb9dec66654aa91718272e9c4d53cf6e1c472f2c6f74d4ce13ed104d040d5e",
+      "555135d4eed8ea3d65a3d1c2e3fe2b09be749c6560832d7c694a51399b8bc55f",
+      "64876168e8172737d8105bb2ad83d2fabdbc30147e11e71058138c4c1928f4b3",
+      "272592e9d314bd6845a3f470c4fcac3f6c3a15b390790aaccd6892f8e18d7a2d",
+      "61618679b4084b8505a3d65c7bce500a11be844176bc95c6e2c6ac724df1dedf",
+      "5c5d158ed717acdeb4ac0aa78c2f89131d58039349a88003ca7f602541362a89",
+      "368119e0d93db7693d38bca1d3bc71f075eed29bcc035cd3b061306c2f02dde3",
+      "041a4a1a3e08936b9e376de39de454d03c2a04d23be0bae2bd84dc7246cac8e0",
+      "17d1b1c88d10ca9132bd75dc358b8a7eb693e599a2d5dba759e7aba5e64704cf",
+      "1421c9e3a6d0368431f52e7093ce8bcae5cf478cc9c1aacd737f8d17248e75c3",
+      "775ef50241c16cfd5a8dbe169329c60d306115246ee7196aa84e988f5b4f601c",
+      "43f1dc03aa39014c2b7d352e571c6983cc2362e01d807be04d006c67123ad113",
+      "a641cf77d179cebc2e0d8c0e3277d8c813d341f12d95d7d77cbd8ffbcd66a57b",
+      "ff3831273d431944f9d6973694b770dc20482fe1ceaf185952bd813f160ac374",
+      "8dbb2c06e536306fdb022f485eab1f2c5b83f75ccab7034e539e8519e34d9d5b",
+      "9d66ce5569c2b0eaa341578e6043549a16f8933740a15cddf41676fc8f87fb9f"
+    ]
+  },
+  "descriptive_comparisons": {
+    "pooled_ahwb_tokens_per_second": 2.446944181134046,
+    "pooled_explicit_anonymous_tokens_per_second": 2.1981245786630303,
+    "pooled_difference_percent": 11.319631511620498,
+    "last_ahwb_vs_pooled_anonymous_percent": 8.224989977524544,
+    "ordinary_to_ahwb_difference_percent": -12.531090398504896,
+    "interpretation": "Short sequential screens with different initial temperatures and uncontrolled memory state. Neither comparison establishes a sustained or causal gain/regression. The ordinary reference does not confirm a benefit; keep default unchanged."
+  },
+  "exactness": {
+    "all_recorded_logit_hashes_and_tokens_equal": true,
+    "positions_main": 128,
+    "positions_ordinary": 64,
+    "ordinary_matches_main_prefix": true,
+    "scope": "One real-model synthetic greedy prompt plus focused fixtures; no claim over all inputs"
+  },
+  "validation": [
+    {
+      "local_record": "host-check/summary.json",
+      "source_sha256": "5dec34bac276ded6384c1d0f5a5550bf673ba52028b0b5e5e17662dc781aa500",
+      "target": "host",
+      "fixtures": [
+        {
+          "model": "models/eqt-tiny-qwen4exp.gguf",
+          "artifacts": {
+            "eqt-bench.exe": "071976cb2e4e0e7a577791b4108dfc136bd2e0f65fb9d2a836a52329527b4e5c",
+            "eqt-check.exe": "514683545f21e53b71c6ab2f8b3968e19fbd497e4a5814f3a9e8938a53fc572b",
+            "eqt-pack.exe": "a06b3396916486d970b38d8204a246d6d4890cbe99aac215d08cbcc7f7d0a682",
+            "eqt-tiny-qwen4exp.gguf": "1fc9202f084ea152266578a287e819966f9554276d0c7ea811567dd933751f8e"
+          },
+          "modes": [
+            {
+              "mode": "default",
+              "passed": true,
+              "logit_positions": 12
+            },
+            {
+              "mode": "anonymous",
+              "passed": true,
+              "logit_positions": 12
+            }
+          ],
+          "lifecycle": [
+            {
+              "case": "repeat_request",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "new_chat_after_conversation",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "conversation_prefix_replay",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "max_abs_logit_delta": 0.0,
+              "kl_divergence": 0.0,
+              "top1_equal": true,
+              "top10_shared": 10,
+              "case": "prompt_cache_rebuild",
+              "reused_prompt_tokens": 0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "recovery_after_decode_cancel",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "recovery_after_pre_cancel",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "seeded_sampling_repeat",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "reload",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "session_save_restore",
+              "saved_bytes": 220600,
+              "extendable": false,
+              "restore_status": "mismatch",
+              "reused_prompt_tokens": 0,
+              "bitwise_equal": true,
+              "passed": true
+            }
+          ],
+          "rejected": [
+            "invalid_mode",
+            "unsupported_repack",
+            "unsupported_nonstreaming"
+          ]
+        },
+        {
+          "model": "models/eqt-tiny-qwen35moe.gguf",
+          "artifacts": {
+            "eqt-bench.exe": "071976cb2e4e0e7a577791b4108dfc136bd2e0f65fb9d2a836a52329527b4e5c",
+            "eqt-check.exe": "514683545f21e53b71c6ab2f8b3968e19fbd497e4a5814f3a9e8938a53fc572b",
+            "eqt-pack.exe": "a06b3396916486d970b38d8204a246d6d4890cbe99aac215d08cbcc7f7d0a682",
+            "eqt-tiny-qwen35moe.gguf": "95931cd046c2d65f1b0d99495759ae69361d9414702bb8b907cc6d975b3384e6"
+          },
+          "modes": [
+            {
+              "mode": "default",
+              "passed": true,
+              "logit_positions": 12
+            },
+            {
+              "mode": "anonymous",
+              "passed": true,
+              "logit_positions": 12
+            }
+          ],
+          "lifecycle": [
+            {
+              "case": "repeat_request",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "new_chat_after_conversation",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "conversation_prefix_replay",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "max_abs_logit_delta": 0.0,
+              "kl_divergence": 0.0,
+              "top1_equal": true,
+              "top10_shared": 10,
+              "case": "prompt_cache_rebuild",
+              "reused_prompt_tokens": 0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "recovery_after_decode_cancel",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "recovery_after_pre_cancel",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "seeded_sampling_repeat",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "reload",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "session_save_restore",
+              "saved_bytes": 204176,
+              "extendable": false,
+              "restore_status": "mismatch",
+              "reused_prompt_tokens": 0,
+              "bitwise_equal": true,
+              "passed": true
+            }
+          ],
+          "rejected": [
+            "invalid_mode",
+            "unsupported_repack",
+            "unsupported_nonstreaming"
+          ]
+        }
+      ]
+    },
+    {
+      "local_record": "final-host-check/summary.json",
+      "source_sha256": "17d2aa974e6ee2f5ae3240ae4665653eb414347926b31e1c25c1c795badecf63",
+      "target": "host",
+      "fixtures": [
+        {
+          "model": "models/eqt-tiny-qwen4exp.gguf",
+          "artifacts": {
+            "eqt-bench.exe": "68aba90cde0ac8cfebc1309794d7bd1ce935b1ef98e66a6848c5027f1f97d485",
+            "eqt-check.exe": "1c18f766be8c4353ff8a89438821ffff961a23d76d0212ed44ce49f24a9300a2",
+            "eqt-pack.exe": "a06b3396916486d970b38d8204a246d6d4890cbe99aac215d08cbcc7f7d0a682",
+            "eqt-tiny-qwen4exp.gguf": "1fc9202f084ea152266578a287e819966f9554276d0c7ea811567dd933751f8e"
+          },
+          "modes": [
+            {
+              "mode": "default",
+              "passed": true,
+              "logit_positions": 12
+            },
+            {
+              "mode": "anonymous",
+              "passed": true,
+              "logit_positions": 12
+            }
+          ],
+          "lifecycle": [
+            {
+              "case": "repeat_request",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "new_chat_after_conversation",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "conversation_prefix_replay",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "max_abs_logit_delta": 0.0,
+              "kl_divergence": 0.0,
+              "top1_equal": true,
+              "top10_shared": 10,
+              "case": "prompt_cache_rebuild",
+              "reused_prompt_tokens": 0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "recovery_after_decode_cancel",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "recovery_after_pre_cancel",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "seeded_sampling_repeat",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "reload",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "session_save_restore",
+              "saved_bytes": 220600,
+              "extendable": false,
+              "restore_status": "mismatch",
+              "reused_prompt_tokens": 0,
+              "bitwise_equal": true,
+              "passed": true
+            }
+          ],
+          "rejected": [
+            "invalid_mode",
+            "unsupported_repack",
+            "unsupported_nonstreaming"
+          ]
+        }
+      ]
+    },
+    {
+      "local_record": "final-android-check/summary.json",
+      "source_sha256": "219e8faf709ec60b678d70d63d243072d816cabbcade2f194c0fd8f2fa710836",
+      "target": "android",
+      "fixtures": [
+        {
+          "model": "models/eqt-tiny-qwen4exp.gguf",
+          "artifacts": {
+            "eqt-bench": "461e1fcf1396b025c45d9fa5142d68b63bf20129785a401d8d8efd382a31f82b",
+            "eqt-check": "a802adf3d58e39a9fbe8ee413f7172954207b9e1dd94004d3a2ad7bf6e7b10ee",
+            "eqt-pack": "89bbfb2b98fc27ac52d2e5ef3ad1f5a9d21d32d9f12034280402b6b7358eaa7a",
+            "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+            "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+            "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+            "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+            "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+            "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+            "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+            "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+            "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+            "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+            "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+            "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+            "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2",
+            "eqt-tiny-qwen4exp.gguf": "1fc9202f084ea152266578a287e819966f9554276d0c7ea811567dd933751f8e"
+          },
+          "modes": [
+            {
+              "mode": "default",
+              "passed": true,
+              "logit_positions": 12
+            },
+            {
+              "mode": "anonymous",
+              "passed": true,
+              "logit_positions": 12
+            },
+            {
+              "mode": "ahwb",
+              "passed": true,
+              "logit_positions": 12
+            }
+          ],
+          "lifecycle": [
+            {
+              "case": "repeat_request",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "new_chat_after_conversation",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "conversation_prefix_replay",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "max_abs_logit_delta": 0.0,
+              "kl_divergence": 0.0,
+              "top1_equal": true,
+              "top10_shared": 10,
+              "case": "prompt_cache_rebuild",
+              "reused_prompt_tokens": 0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "recovery_after_decode_cancel",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "recovery_after_pre_cancel",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "seeded_sampling_repeat",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "reload",
+              "max_abs_logit_delta": 0.0,
+              "token_ids_equal": true,
+              "passed": true
+            },
+            {
+              "case": "session_save_restore",
+              "saved_bytes": 220600,
+              "extendable": false,
+              "restore_status": "mismatch",
+              "reused_prompt_tokens": 0,
+              "bitwise_equal": true,
+              "passed": true
+            }
+          ],
+          "rejected": [
+            "invalid_mode",
+            "unsupported_repack",
+            "unsupported_nonstreaming"
+          ]
+        }
+      ]
+    }
+  ],
+  "android_delivery": {
+    "debug_build_passed": true,
+    "vulkan_packaged": true,
+    "installed_as_update": true,
+    "apk_sha256": "2ab6dc1d26a39a6640072dd7032b8beae5770885e9eff49dbfc834759edee6d3",
+    "packaged_library_sha256": {
+      "libandroidx.graphics.path.so": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+      "libc++_shared.so": "cd61762848882a16c8244c964a6f396c0caa0b440588a210ce9cc4ab0e6d9f0c",
+      "libggml.so": "2d2d020e63c60b833f2e366a564517101707d7fed32c9ee2b1a62e3ce6eca263",
+      "libmain.so": "e3384c0f45201cd5f08b07cd19cf23e92ff22b8c14108a6f465efbb065f52629",
+      "libggml-base.so": "9e62250588a18250392dbe88b8bfc2faf01e15861fdfb52d6e5ccd6bbac677f7",
+      "libggml-vulkan.so": "6cd46abdf86d73a93f18fb4360b3dc3be2ab2ff077a024f880790812c399c041",
+      "libmtmd.so": "692f7c218ca9b89562e7740e8df42245f4bb2809133893b6603a666c2760f611",
+      "libllama.so": "3112e2adda61dd49e8d87a0f1addc7534d3c63ca4d1c72ebff50641c75fe446a",
+      "libggml-cpu-android_armv8.0_1.so": "998f45780cc5429bc35b076c366012e5d6fb0c9ebdcf6849d4c61cc952a792b8",
+      "libggml-cpu-android_armv8.2_1.so": "9b33e9f41b73588ac83a46967bfc151c6070618a472bc98d39f70ec7f4f315b7",
+      "libggml-cpu-android_armv8.2_2.so": "c6dea75e39899452874121c85c2b259ba1cb5959652be69d6ce24d6fc63d0407",
+      "libggml-cpu-android_armv8.6_1.so": "cb21a8123165f47643aaea2e33a5366f9e3c3fa900562cac5c718ddc13359089",
+      "libggml-cpu-android_armv9.0_1.so": "3f14f9aba84988da7df4297bcf4fd290ecd035652dad5bbe7546051666fc98aa",
+      "libggml-cpu-android_armv9.2_1.so": "34383ee099210436f931718fe0e30b9d95414ebe80c9d6551d242462caa20824",
+      "libggml-cpu-android_armv9.2_2.so": "6d07dd7c78f8f21c5224ffd3e409c293202784d9b6c52b72f77c32f82ba35a6b",
+      "libeqt_jni.so": "0d7860c89e381992a055a842ba38dd05735fffd777caa054375249f5173fed4e"
+    },
+    "app_profile_changes": false,
+    "model_or_chat_deletion": false
+  },
+  "reproduction": "docs/benchmarking.md#resident-weight-storage-screening",
+  "raw_local_directory": "results/local/ahwb-2026-10-24/",
+  "conclusion": "Functional exact opt-in is available; no demonstrated production speedup was promoted. Five sustained tokens/s remains unachieved. Stop repetitions at the requested bounded test budget."
+}

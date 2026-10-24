@@ -212,7 +212,7 @@ settings are identical. Exact route-buffer allocation is reported separately fro
 allocator overhead. `--failure-checks` additionally corrupts routes, truncates the trace and attempts reuse.
 Use these checks on small fixtures first. A short cap respects EOS and is not a sustained test.
 
-`eqt-memory-bench CPUS MIB SECONDS PASSES [MODE]` uses persistent pinned workers and a pre-touched buffer.
+`eqt-memory-bench CPUS MIB SECONDS PASSES [MODE] [anonymous|ahwb]` uses persistent pinned workers and a pre-touched buffer.
 `MODE` is `sum`, `load`, `sum-dynamic` or `load-dynamic`; dynamic modes assign 1 MiB chunks to avoid waiting
 for the slowest heterogeneous core's equal-sized partition. Sums check every loaded word. AArch64 load modes
 use explicit volatile vector loads, checking the buffer before timing. Both validate affinity and exact word
@@ -230,3 +230,38 @@ counters. Neither a low read-probe result nor a 40 GB/s result proves that exact
 to improve: instruction overhead, scheduling, memory access pattern and stock frequency policy still matter.
 CPU frequencies are sampled after each window and can show sleeping workers. Energy while USB-powered,
 memory-controller frequency and unmeasured useful-compute/exposed-wait wall times remain null.
+
+## Resident weight storage screening
+
+Streamed CPU loading accepts `resident_weights: "default" | "anonymous" | "ahwb"`. The native default
+keeps ordinary GGML buffers. Explicit modes use the same buffer splitting, alignment and tensor layout;
+AHWB loads shared weights directly into CPU-locked Android hardware buffers. Routed experts and mapped
+embedding tables retain their existing storage. There is no additional full-weight userspace copy.
+Explicit modes reject GPU, repacking, MTP, non-streaming loads and unsupported allocations. They never
+silently substitute ordinary storage. The app keeps ordinary storage; AHWB is opt-in through native load options.
+
+The Galaxy rejected 512 MiB BLOB probes. Resident buffers therefore cap each allocation below 384 MiB,
+including tail slack; a larger single tensor is rejected. Every AHWB allocation must expose a complete,
+aligned writable CPU mapping before loading starts. An earlier prototype using approximately 2 GiB
+buffers crashed during model loading and is not the adopted implementation.
+
+`diagnostic_residency: true` samples shared weights and complete expert-cache entries after prefill and
+decode using `mincore`, without touching their contents. No per-token sampling is added. Denied or
+unsupported counters remain null. This is a sparse page-status snapshot, not proof of continuous physical
+residency or absence of compression. AHWB accounting can be absent from ordinary RSS/PSS; report its
+requested allocation separately, without adding it blindly to process memory. Driver overhead is unknown.
+
+```powershell
+python tools/verify_resident_weights.py --target host --output results/local/weights-host
+python tools/verify_resident_weights.py --target android --fixture models/eqt-tiny-qwen4exp.gguf --output results/local/weights-android
+python tools/bench_resident_weights.py --model files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf --output results/local/weights-screening
+python tools/bench_resident_weights.py --model files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf --baseline default --pairs 1 --tokens 64 --budget-seconds 180 --output results/local/weights-default
+```
+
+The first performance command runs AHWB/anonymous/anonymous/AHWB, capped at 128 tokens per arm with
+natural EOS. The second performs one ordinary-storage/AHWB pair, preserving the ordinary buffer layout
+in the control. A running arm finishes when its token/EOS limit is reached; the soft time budget prevents
+starting another arm. Both retain exact per-position logit hashes, token IDs, allocation identity and thermal
+readings. They do not establish a sustained gain. The implementation was motivated by the AHWB approach
+in [BigMoeOnEdge at the inspected revision](https://github.com/Helldez/BigMoeOnEdge/tree/b6a587491f2f683193fa3ca8d023946f47933801);
+its measurements on other devices are not used as Exynos results.
