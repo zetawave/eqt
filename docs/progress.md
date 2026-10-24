@@ -1,5 +1,13 @@
 # Progress — 2026-10-06
 
+## Flash-Next small-option screening with a bounded test budget — 2026-10-24
+
+- Nine sequential Galaxy CLI runs completed in 393 s of runner time, without cooldown waits or a sustained run. USB power, 1,792 MiB expert cache, 8k context, batch 128, six threads and the same pack/D032 options throughout. Native/app defaults and the installed APK are unchanged.
+- Exploratory 32-token order: plain **2.200**, four-row expert kernels **2.594**, in-graph top-k **2.856**, both **2.548**, plain **1.974 tokens/s**. All per-position logit hashes and token IDs agree. The largest candidate result was selected for one separate confirmation; the exploratory rates are not established speedups.
+- The 64-token A/B/B/A confirmation gave plain **2.601**, top-k **2.266 / 2.337**, plain **1.685 tokens/s**. All logit hashes and token IDs agree. Plain throughput declined 35.2% across the bracket; the final plain arm recorded **562,997 decode major faults**, against 73 in the initial plain arm. The second candidate recorded 6,765. Skin reached 44.7 C, thermal status 2. These runs do not isolate a small scheduling gain or identify the precise reclaim mechanism. The descriptive pooled +12.5% is confounded and is not adopted as an optimization result.
+- Decision: keep `row_kernels` and `topk_in_graph` opt-in. The short budget was sufficient for exactness and for rejecting an automatic promotion from the exploratory numbers, but insufficient to resolve a 1% effect under this drift and major-fault increase. No further repetitions or partial-bank implementation were added to this session. A future bounded implementation should keep residency/fault admission as an explicit gate beside throughput.
+- Record and artifact/source hashes: [small-option screening](../results/2026-10-24/galaxy/flash-next-small-options.json). Raw local requests/results remain in `results/local/flash-next-options-2026-10-24/`. The Android CLI target was up to date; no kernel or native logic was edited, so no broad regression suite was repeated.
+
 ## Flash-Next known-route and memory feasibility screening — 2026-10-23
 
 - Added opt-in diagnostic known-route prefetch for one/two future routed layers, using the existing cache, speculative pool, read priority and in-flight limit. The native router still selects every expert; prompt/decode routes must match the recording in order. Every pre-sampling logit vector can be SHA-256 checked. This is an oracle with free decode prediction, not a production optimization or a bound on every possible scheduler. No app default, weight or dependency patch changed.

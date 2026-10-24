@@ -1,0 +1,913 @@
+{
+  "date": "2026-10-24",
+  "device": "Galaxy S24+ / Exynos 2400",
+  "power": "USB powered",
+  "kind": "bounded option screening and selected-candidate confirmation",
+  "git_head": "4280da23d8aaec5c1de8d6e43d7d68aca831198f",
+  "source_sha256": "eb3e6c5be26453570972f77b1df44c19413e764ad10b0817e7f207ea546d0cda",
+  "artifact_sha256": {
+    "eqt-bench": "044c16b464d2ee6d187699519a52e6d05ac31f42132e7047dedff6c247202471",
+    "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+    "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+    "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+    "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+    "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+    "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+    "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+    "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+    "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+    "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+    "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+    "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+    "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+  },
+  "request_file": "configs/flash-next-oracle-request.json",
+  "load": {
+    "context": 8192,
+    "batch": 128,
+    "threads": 6,
+    "memory_budget_mib": 8192,
+    "mmap": false,
+    "expert_streaming": true,
+    "expert_cache_mib": 1792,
+    "io_threads": 16,
+    "direct_io": true,
+    "prefetch": true,
+    "speculative_pool": true,
+    "lookahead_layers": 2,
+    "lookahead2_count": 5,
+    "read_priority": true,
+    "prefetch_inflight": 2,
+    "lookahead_router_q8": true,
+    "expert_pack_split": 2,
+    "coalesce_kib": 2048,
+    "coalesce_gap": 1,
+    "prefill_prefetch_mib": 0,
+    "prefill_prefetch_min_coverage": 0.9,
+    "expert_slots": true,
+    "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+  },
+  "phases": [
+    {
+      "name": "exploratory",
+      "max_tokens": 32,
+      "wall_seconds": 181.125,
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a detailed tutorial of about 1500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."
+          }
+        ],
+        "max_tokens": 32,
+        "temperature": 0,
+        "seed": 42,
+        "thinking": false,
+        "ignore_eos": false,
+        "load": {
+          "context": 8192,
+          "batch": 128,
+          "threads": 6,
+          "memory_budget_mib": 8192,
+          "mmap": false,
+          "expert_streaming": true,
+          "expert_cache_mib": 1792,
+          "io_threads": 16,
+          "direct_io": true,
+          "prefetch": true,
+          "speculative_pool": true,
+          "lookahead_layers": 2,
+          "lookahead2_count": 5,
+          "read_priority": true,
+          "prefetch_inflight": 2,
+          "lookahead_router_q8": true,
+          "expert_pack_split": 2,
+          "coalesce_kib": 2048,
+          "coalesce_gap": 1,
+          "prefill_prefetch_mib": 0,
+          "prefill_prefetch_min_coverage": 0.9,
+          "expert_slots": true,
+          "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+        },
+        "diagnostic_logits_hash": true
+      },
+      "runs": [
+        {
+          "name": "plain_a",
+          "overrides": {},
+          "before": {
+            "thermal": "0",
+            "temperatures": {
+              "AP": 41.0,
+              "BAT": 36.0,
+              "CP": 39.8,
+              "PA": 39.5,
+              "SKIN": 37.0,
+              "SUBBAT": 0.0,
+              "USB": 33.2
+            }
+          },
+          "after": {
+            "thermal": "1",
+            "temperatures": {
+              "AP": 58.2,
+              "BAT": 37.9,
+              "CP": 50.6,
+              "PA": 48.4,
+              "SKIN": 40.3,
+              "SUBBAT": 0.0,
+              "USB": 33.1
+            }
+          },
+          "generated_tokens": 32,
+          "termination": "length",
+          "decode_ms": 14547.010859,
+          "decode_tokens_per_second": 2.199764632759734,
+          "prefill_ms": 12743.001172,
+          "load_ms": 6382.786836,
+          "row_kernels_active": [],
+          "bitwise_logits_and_tokens_equal": true,
+          "decode_io_bytes": 18354757632,
+          "MB_per_emitted_token": 573.586176,
+          "decode_process_cpu": {
+            "user_ms": 86290.00200000001,
+            "system_ms": 8122.207,
+            "minor_faults": 88669.0,
+            "major_faults": 50.0,
+            "voluntary_switches": 173812.0,
+            "involuntary_switches": 31136.0
+          },
+          "memory_after": {
+            "rss_bytes": 5968863232,
+            "peak_rss_bytes": 6262439936,
+            "pss_bytes": 5969259520,
+            "minor_faults": 1640216,
+            "major_faults": 34654,
+            "storage_read_bytes": 35223613440
+          },
+          "token_latency_p50_ms": 417.285664,
+          "token_latency_p95_ms": 759.830039,
+          "io_drain_ms": 0.081484
+        },
+        {
+          "name": "rows",
+          "overrides": {
+            "row_kernels": [
+              "iq2_xs",
+              "iq4_nl"
+            ]
+          },
+          "before": {
+            "thermal": "1",
+            "temperatures": {
+              "AP": 58.2,
+              "BAT": 37.9,
+              "CP": 50.6,
+              "PA": 48.4,
+              "SKIN": 40.3,
+              "SUBBAT": 0.0,
+              "USB": 33.1
+            }
+          },
+          "after": {
+            "thermal": "1",
+            "temperatures": {
+              "AP": 56.4,
+              "BAT": 39.0,
+              "CP": 50.7,
+              "PA": 48.9,
+              "SKIN": 41.1,
+              "SUBBAT": 0.0,
+              "USB": 33.0
+            }
+          },
+          "generated_tokens": 32,
+          "termination": "length",
+          "decode_ms": 12334.637735,
+          "decode_tokens_per_second": 2.594320213328908,
+          "prefill_ms": 13617.43207,
+          "load_ms": 6984.209141,
+          "row_kernels_active": [
+            "iq2_xs",
+            "iq4_nl"
+          ],
+          "bitwise_logits_and_tokens_equal": true,
+          "decode_io_bytes": 18275205120,
+          "MB_per_emitted_token": 571.10016,
+          "decode_process_cpu": {
+            "user_ms": 76952.33000000002,
+            "system_ms": 8999.384999999998,
+            "minor_faults": 88206.0,
+            "major_faults": 35.0,
+            "voluntary_switches": 183471.0,
+            "involuntary_switches": 12816.0
+          },
+          "memory_after": {
+            "rss_bytes": 6052593664,
+            "peak_rss_bytes": 6282424320,
+            "pss_bytes": 6053316608,
+            "minor_faults": 1641432,
+            "major_faults": 163,
+            "storage_read_bytes": 35109924864
+          },
+          "token_latency_p50_ms": 364.58,
+          "token_latency_p95_ms": 495.605508,
+          "io_drain_ms": 0.079961
+        },
+        {
+          "name": "topk",
+          "overrides": {
+            "topk_in_graph": true
+          },
+          "before": {
+            "thermal": "1",
+            "temperatures": {
+              "AP": 56.4,
+              "BAT": 39.0,
+              "CP": 50.7,
+              "PA": 48.9,
+              "SKIN": 41.1,
+              "SUBBAT": 0.0,
+              "USB": 33.0
+            }
+          },
+          "after": {
+            "thermal": "1",
+            "temperatures": {
+              "AP": 56.2,
+              "BAT": 39.3,
+              "CP": 50.2,
+              "PA": 48.3,
+              "SKIN": 41.2,
+              "SUBBAT": 0.0,
+              "USB": 32.9
+            }
+          },
+          "generated_tokens": 32,
+          "termination": "length",
+          "decode_ms": 11205.184258,
+          "decode_tokens_per_second": 2.8558209542295954,
+          "prefill_ms": 13780.131836,
+          "load_ms": 7087.468203,
+          "row_kernels_active": [],
+          "bitwise_logits_and_tokens_equal": true,
+          "decode_io_bytes": 18299535360,
+          "MB_per_emitted_token": 571.86048,
+          "decode_process_cpu": {
+            "user_ms": 70767.137,
+            "system_ms": 8770.02,
+            "minor_faults": 87750.0,
+            "major_faults": 35.0,
+            "voluntary_switches": 186309.0,
+            "involuntary_switches": 16246.0
+          },
+          "memory_after": {
+            "rss_bytes": 6049812480,
+            "peak_rss_bytes": 6281699328,
+            "pss_bytes": 6051196928,
+            "minor_faults": 1640744,
+            "major_faults": 136,
+            "storage_read_bytes": 34897154048
+          },
+          "token_latency_p50_ms": 347.40168,
+          "token_latency_p95_ms": 443.280508,
+          "io_drain_ms": 0.071406
+        },
+        {
+          "name": "both",
+          "overrides": {
+            "row_kernels": [
+              "iq2_xs",
+              "iq4_nl"
+            ],
+            "topk_in_graph": true
+          },
+          "before": {
+            "thermal": "1",
+            "temperatures": {
+              "AP": 56.2,
+              "BAT": 39.3,
+              "CP": 50.2,
+              "PA": 48.3,
+              "SKIN": 41.2,
+              "SUBBAT": 0.0,
+              "USB": 32.9
+            }
+          },
+          "after": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 58.8,
+              "BAT": 39.8,
+              "CP": 52.4,
+              "PA": 50.2,
+              "SKIN": 42.1,
+              "SUBBAT": 0.0,
+              "USB": 32.9
+            }
+          },
+          "generated_tokens": 32,
+          "termination": "length",
+          "decode_ms": 12559.84918,
+          "decode_tokens_per_second": 2.5478012945375195,
+          "prefill_ms": 13189.813867,
+          "load_ms": 7223.225312,
+          "row_kernels_active": [
+            "iq2_xs",
+            "iq4_nl"
+          ],
+          "bitwise_logits_and_tokens_equal": true,
+          "decode_io_bytes": 18261786624,
+          "MB_per_emitted_token": 570.680832,
+          "decode_process_cpu": {
+            "user_ms": 76778.708,
+            "system_ms": 8392.452000000001,
+            "minor_faults": 86835.0,
+            "major_faults": 32.0,
+            "voluntary_switches": 169441.0,
+            "involuntary_switches": 22955.0
+          },
+          "memory_after": {
+            "rss_bytes": 6047113216,
+            "peak_rss_bytes": 6281625600,
+            "pss_bytes": 6047340544,
+            "minor_faults": 1639160,
+            "major_faults": 127,
+            "storage_read_bytes": 34265276416
+          },
+          "token_latency_p50_ms": 371.248946,
+          "token_latency_p95_ms": 614.060313,
+          "io_drain_ms": 0.094882
+        },
+        {
+          "name": "plain_b",
+          "overrides": {},
+          "before": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 58.8,
+              "BAT": 39.8,
+              "CP": 52.4,
+              "PA": 50.2,
+              "SKIN": 42.1,
+              "SUBBAT": 0.0,
+              "USB": 32.9
+            }
+          },
+          "after": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 56.4,
+              "BAT": 40.3,
+              "CP": 51.5,
+              "PA": 50.0,
+              "SKIN": 42.3,
+              "SUBBAT": 0.0,
+              "USB": 32.9
+            }
+          },
+          "generated_tokens": 32,
+          "termination": "length",
+          "decode_ms": 16207.305117,
+          "decode_tokens_per_second": 1.974418311310428,
+          "prefill_ms": 16382.756055,
+          "load_ms": 8199.08375,
+          "row_kernels_active": [],
+          "bitwise_logits_and_tokens_equal": true,
+          "decode_io_bytes": 18457083904,
+          "MB_per_emitted_token": 576.783872,
+          "decode_process_cpu": {
+            "user_ms": 96423.61600000001,
+            "system_ms": 9485.775000000001,
+            "minor_faults": 85924.0,
+            "major_faults": 119.0,
+            "voluntary_switches": 187254.0,
+            "involuntary_switches": 40030.0
+          },
+          "memory_after": {
+            "rss_bytes": 5950959616,
+            "peak_rss_bytes": 6261260288,
+            "pss_bytes": 5951522816,
+            "minor_faults": 1642747,
+            "major_faults": 149249,
+            "storage_read_bytes": 34918301696
+          },
+          "token_latency_p50_ms": 479.941407,
+          "token_latency_p95_ms": 715.47836,
+          "io_drain_ms": 0.08457
+        }
+      ],
+      "reference_token_ids": [
+        2,
+        6765,
+        286,
+        264,
+        4734,
+        575,
+        64132,
+        2793,
+        12829,
+        261,
+        364,
+        8253,
+        271,
+        11180,
+        286,
+        3425,
+        494,
+        8976,
+        5638,
+        11,
+        279,
+        47511,
+        6025,
+        11,
+        466,
+        975,
+        8098,
+        369,
+        264,
+        401,
+        1430,
+        3032
+      ],
+      "reference_logits_sha256": [
+        "fdb9ccd91ecaa817986f9f9f5ca5567756d04057b45d25fc0c30452a6855ed45",
+        "df93a33fb208246ad3b405df171c069b02f7bcb5fb1ef9abbff0b91115f0904c",
+        "0e38e91cfa84dc2ac3c259c8a26fb6cc36875faa1145c2d8b0e6ebddc0133791",
+        "ae53158aafbf12c402336657447db214597002e5c1c7b0341a33b41fe622aeb0",
+        "f57d0d7ef1a112c12a3eceeff594e2e9293fb7942bbbd3b205d674efbf809f56",
+        "6bb74e107cc71abb15244ec8bcd6914dd9aa3d2eb4562060ebc09680f6692629",
+        "9b4524b308ff1d859fbcb6afe2da66a5358009607ad790f92fa31fd3f49bc36a",
+        "e63cc75969d8e821f0429c4f6c33273cc6111532f25b8320cbafc0aeffa1fce5",
+        "133d8c71039219da3e8725c3eabcd854bc73987bafdfe5225cc1bd05fc1f2e75",
+        "c2738c1c94d112b4e611e4e0b1852c3d0bcef284892bb34ba9f8e9e84b31722e",
+        "6b337feb9cad9c9345ceb232f2da20fe0de94ec35683069de3838314cadeb3d3",
+        "25f8a32eaae7d25ec43589c8f02412081ec4f8e704c42aa19c8462b62bb30707",
+        "064364426983f448c31b8e3f5101abd12f8419fd8347c5270bae8c86fbae7436",
+        "fcfe0c636c005b985369b9cfd50240fdcf76498db6e6b5f4fa5a40b7a148ced1",
+        "2dbe41a3072a89253c9353bfba4669d57c6c637de7c9646bfe5d107b144672ec",
+        "f84f33e92145a4f7ee09f73390a82db8c124f4b7bdc97418a5bc2b1728752cd4",
+        "4c8960e7446d5481b1ef1e44e46b4845bbac1e156e7c3f9da20628fca64e393f",
+        "64eb0613a174b94c8a33f7b55277250753bc1dbbff80eb4d93da3c4ee0e67edf",
+        "f665a4ba208f1fb6775afba6e5236aeb708c3ed53bcb333a4bea1bbc14dbec0e",
+        "5150492080a68948c48c4faf437f6139fb51734ba6e5f44261b78316bc7b4329",
+        "91b861729380bdc39e531f1f028a68e5e99daef6739343c3f72b85a0db987794",
+        "2f03d7c2e1e6c8305839b15442f4f72e935b1467180ecc28d7cc3e8e44757862",
+        "e6c93e0a460461d2994dcd46fa9b3f89ecbef541165eb8f00f759c8e522b99cb",
+        "9332e960ff99fca319e13f263121aa6cd1553ac9af17a33a8550cc38a420312f",
+        "77296dfd63a1e5980486d7fde189d5fdc7cf41893239520c5ff201610d17b905",
+        "e9fb2e85513a0ba11a8f2c591a500e0f8eb3053eccfdeb20fa7f9d5d4d83df78",
+        "59bc6c769841f11135c56749fae122d813edfe28b08454c3b6a852c18cbc3d52",
+        "451fff295d97e0def5a046d37acaff2492ef6180e8e49a89e62e52a41ab51fcd",
+        "20a6742574adcd0d4caf7564a852a0725f24ee006a54e76853c5089e1de2efb1",
+        "ff426e5b6479aa2df11fe7b95c14ba0d847c002b63aec79b97ec82b18a07d9ae",
+        "d149409fa06aa6ce698226575e186d5912c756c4857e5a5d82d20d611c632d8c",
+        "13bbb5c8d7a456c098bf85fc1ce0b1f87f194f595e7f7bc5cbed86b82a6ad893"
+      ],
+      "plain_start_to_end_relative_change": -0.10244110578621113
+    },
+    {
+      "name": "confirmation",
+      "max_tokens": 64,
+      "wall_seconds": 212.29700000000048,
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a detailed tutorial of about 1500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."
+          }
+        ],
+        "max_tokens": 64,
+        "temperature": 0,
+        "seed": 42,
+        "thinking": false,
+        "ignore_eos": false,
+        "load": {
+          "context": 8192,
+          "batch": 128,
+          "threads": 6,
+          "memory_budget_mib": 8192,
+          "mmap": false,
+          "expert_streaming": true,
+          "expert_cache_mib": 1792,
+          "io_threads": 16,
+          "direct_io": true,
+          "prefetch": true,
+          "speculative_pool": true,
+          "lookahead_layers": 2,
+          "lookahead2_count": 5,
+          "read_priority": true,
+          "prefetch_inflight": 2,
+          "lookahead_router_q8": true,
+          "expert_pack_split": 2,
+          "coalesce_kib": 2048,
+          "coalesce_gap": 1,
+          "prefill_prefetch_mib": 0,
+          "prefill_prefetch_min_coverage": 0.9,
+          "expert_slots": true,
+          "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+        },
+        "diagnostic_logits_hash": true
+      },
+      "runs": [
+        {
+          "name": "plain_a",
+          "overrides": {
+            "topk_in_graph": false
+          },
+          "before": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 43.7,
+              "BAT": 39.0,
+              "CP": 43.7,
+              "PA": 43.6,
+              "SKIN": 40.0,
+              "SUBBAT": 0.0,
+              "USB": 32.9
+            }
+          },
+          "after": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 60.6,
+              "BAT": 41.7,
+              "CP": 55.2,
+              "PA": 53.8,
+              "SKIN": 43.8,
+              "SUBBAT": 0.0,
+              "USB": 33.0
+            }
+          },
+          "generated_tokens": 64,
+          "termination": "length",
+          "decode_ms": 24604.047734,
+          "decode_tokens_per_second": 2.6011980098526335,
+          "prefill_ms": 11811.446406,
+          "load_ms": 4863.367656,
+          "row_kernels_active": [],
+          "bitwise_logits_and_tokens_equal": true,
+          "decode_io_bytes": 38092800000,
+          "MB_per_emitted_token": 595.2,
+          "decode_process_cpu": {
+            "user_ms": 152165.811,
+            "system_ms": 16804.523999999998,
+            "minor_faults": 87798.0,
+            "major_faults": 73.0,
+            "voluntary_switches": 384345.0,
+            "involuntary_switches": 40747.0
+          },
+          "memory_after": {
+            "rss_bytes": 6046302208,
+            "peak_rss_bytes": 6276354048,
+            "pss_bytes": 6047302656,
+            "minor_faults": 1640285,
+            "major_faults": 212,
+            "storage_read_bytes": 54957654016
+          },
+          "token_latency_p50_ms": 353.221446,
+          "token_latency_p95_ms": 545.097617,
+          "io_drain_ms": 0.072539
+        },
+        {
+          "name": "topk_a",
+          "overrides": {
+            "topk_in_graph": true
+          },
+          "before": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 60.6,
+              "BAT": 41.7,
+              "CP": 55.2,
+              "PA": 53.8,
+              "SKIN": 43.8,
+              "SUBBAT": 0.0,
+              "USB": 33.0
+            }
+          },
+          "after": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 59.2,
+              "BAT": 41.6,
+              "CP": 53.9,
+              "PA": 52.2,
+              "SKIN": 43.6,
+              "SUBBAT": 0.0,
+              "USB": 33.1
+            }
+          },
+          "generated_tokens": 64,
+          "termination": "length",
+          "decode_ms": 28240.209648,
+          "decode_tokens_per_second": 2.266272127499328,
+          "prefill_ms": 14952.477305,
+          "load_ms": 7231.920351,
+          "row_kernels_active": [],
+          "bitwise_logits_and_tokens_equal": true,
+          "decode_io_bytes": 38426914816,
+          "MB_per_emitted_token": 600.420544,
+          "decode_process_cpu": {
+            "user_ms": 173123.66199999998,
+            "system_ms": 18906.305,
+            "minor_faults": 89604.0,
+            "major_faults": 65.0,
+            "voluntary_switches": 381654.0,
+            "involuntary_switches": 41021.0
+          },
+          "memory_after": {
+            "rss_bytes": 6058180608,
+            "peak_rss_bytes": 6281568256,
+            "pss_bytes": 6058672128,
+            "minor_faults": 1641883,
+            "major_faults": 137,
+            "storage_read_bytes": 55257165824
+          },
+          "token_latency_p50_ms": 421.609492,
+          "token_latency_p95_ms": 659.785898,
+          "io_drain_ms": 0.102774
+        },
+        {
+          "name": "topk_b",
+          "overrides": {
+            "topk_in_graph": true
+          },
+          "before": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 59.2,
+              "BAT": 41.6,
+              "CP": 53.9,
+              "PA": 52.2,
+              "SKIN": 43.6,
+              "SUBBAT": 0.0,
+              "USB": 33.1
+            }
+          },
+          "after": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 59.6,
+              "BAT": 42.3,
+              "CP": 54.7,
+              "PA": 53.2,
+              "SKIN": 44.2,
+              "SUBBAT": 0.0,
+              "USB": 33.3
+            }
+          },
+          "generated_tokens": 64,
+          "termination": "length",
+          "decode_ms": 27383.935938,
+          "decode_tokens_per_second": 2.337136638973392,
+          "prefill_ms": 15254.48039,
+          "load_ms": 6869.662227,
+          "row_kernels_active": [],
+          "bitwise_logits_and_tokens_equal": true,
+          "decode_io_bytes": 38382608384,
+          "MB_per_emitted_token": 599.728256,
+          "decode_process_cpu": {
+            "user_ms": 167604.237,
+            "system_ms": 18289.207000000002,
+            "minor_faults": 90171.0,
+            "major_faults": 6765.0,
+            "voluntary_switches": 390023.0,
+            "involuntary_switches": 56913.0
+          },
+          "memory_after": {
+            "rss_bytes": 5963915264,
+            "peak_rss_bytes": 6265864192,
+            "pss_bytes": 5964606464,
+            "minor_faults": 1642552,
+            "major_faults": 96671,
+            "storage_read_bytes": 54596841472
+          },
+          "token_latency_p50_ms": 402.919727,
+          "token_latency_p95_ms": 641.307852,
+          "io_drain_ms": 0.138516
+        },
+        {
+          "name": "plain_b",
+          "overrides": {
+            "topk_in_graph": false
+          },
+          "before": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 59.6,
+              "BAT": 42.3,
+              "CP": 54.7,
+              "PA": 53.2,
+              "SKIN": 44.2,
+              "SUBBAT": 0.0,
+              "USB": 33.3
+            }
+          },
+          "after": {
+            "thermal": "2",
+            "temperatures": {
+              "AP": 59.6,
+              "BAT": 43.3,
+              "CP": 55.2,
+              "PA": 53.7,
+              "SKIN": 44.7,
+              "SUBBAT": 0.0,
+              "USB": 33.6
+            }
+          },
+          "generated_tokens": 64,
+          "termination": "length",
+          "decode_ms": 37976.288047,
+          "decode_tokens_per_second": 1.6852621277991329,
+          "prefill_ms": 18850.445468,
+          "load_ms": 7208.993672,
+          "row_kernels_active": [],
+          "bitwise_logits_and_tokens_equal": true,
+          "decode_io_bytes": 38255333376,
+          "MB_per_emitted_token": 597.739584,
+          "decode_process_cpu": {
+            "user_ms": 211940.25799999997,
+            "system_ms": 24687.027000000002,
+            "minor_faults": 94848.0,
+            "major_faults": 562997.0,
+            "voluntary_switches": 368823.0,
+            "involuntary_switches": 102782.0
+          },
+          "memory_after": {
+            "rss_bytes": 5676785664,
+            "peak_rss_bytes": 6010691584,
+            "pss_bytes": 5676608512,
+            "minor_faults": 1651507,
+            "major_faults": 697298,
+            "storage_read_bytes": 55091965952
+          },
+          "token_latency_p50_ms": 493.662578,
+          "token_latency_p95_ms": 986.880039,
+          "io_drain_ms": 0.130781
+        }
+      ],
+      "reference_token_ids": [
+        2,
+        6765,
+        286,
+        264,
+        4734,
+        575,
+        64132,
+        2793,
+        12829,
+        261,
+        364,
+        8253,
+        271,
+        11180,
+        286,
+        3425,
+        494,
+        8976,
+        5638,
+        11,
+        279,
+        47511,
+        6025,
+        11,
+        466,
+        975,
+        8098,
+        369,
+        264,
+        401,
+        1430,
+        3032,
+        6150,
+        3274,
+        383,
+        8253,
+        13,
+        5788,
+        279,
+        1510,
+        11204,
+        63,
+        1785,
+        5529,
+        264,
+        16219,
+        4202,
+        1406,
+        11,
+        279,
+        4880,
+        8427,
+        314,
+        3349,
+        28465,
+        2218,
+        20171,
+        430,
+        26555,
+        82,
+        11,
+        4566,
+        17872,
+        11
+      ],
+      "reference_logits_sha256": [
+        "fdb9ccd91ecaa817986f9f9f5ca5567756d04057b45d25fc0c30452a6855ed45",
+        "df93a33fb208246ad3b405df171c069b02f7bcb5fb1ef9abbff0b91115f0904c",
+        "0e38e91cfa84dc2ac3c259c8a26fb6cc36875faa1145c2d8b0e6ebddc0133791",
+        "ae53158aafbf12c402336657447db214597002e5c1c7b0341a33b41fe622aeb0",
+        "f57d0d7ef1a112c12a3eceeff594e2e9293fb7942bbbd3b205d674efbf809f56",
+        "6bb74e107cc71abb15244ec8bcd6914dd9aa3d2eb4562060ebc09680f6692629",
+        "9b4524b308ff1d859fbcb6afe2da66a5358009607ad790f92fa31fd3f49bc36a",
+        "e63cc75969d8e821f0429c4f6c33273cc6111532f25b8320cbafc0aeffa1fce5",
+        "133d8c71039219da3e8725c3eabcd854bc73987bafdfe5225cc1bd05fc1f2e75",
+        "c2738c1c94d112b4e611e4e0b1852c3d0bcef284892bb34ba9f8e9e84b31722e",
+        "6b337feb9cad9c9345ceb232f2da20fe0de94ec35683069de3838314cadeb3d3",
+        "25f8a32eaae7d25ec43589c8f02412081ec4f8e704c42aa19c8462b62bb30707",
+        "064364426983f448c31b8e3f5101abd12f8419fd8347c5270bae8c86fbae7436",
+        "fcfe0c636c005b985369b9cfd50240fdcf76498db6e6b5f4fa5a40b7a148ced1",
+        "2dbe41a3072a89253c9353bfba4669d57c6c637de7c9646bfe5d107b144672ec",
+        "f84f33e92145a4f7ee09f73390a82db8c124f4b7bdc97418a5bc2b1728752cd4",
+        "4c8960e7446d5481b1ef1e44e46b4845bbac1e156e7c3f9da20628fca64e393f",
+        "64eb0613a174b94c8a33f7b55277250753bc1dbbff80eb4d93da3c4ee0e67edf",
+        "f665a4ba208f1fb6775afba6e5236aeb708c3ed53bcb333a4bea1bbc14dbec0e",
+        "5150492080a68948c48c4faf437f6139fb51734ba6e5f44261b78316bc7b4329",
+        "91b861729380bdc39e531f1f028a68e5e99daef6739343c3f72b85a0db987794",
+        "2f03d7c2e1e6c8305839b15442f4f72e935b1467180ecc28d7cc3e8e44757862",
+        "e6c93e0a460461d2994dcd46fa9b3f89ecbef541165eb8f00f759c8e522b99cb",
+        "9332e960ff99fca319e13f263121aa6cd1553ac9af17a33a8550cc38a420312f",
+        "77296dfd63a1e5980486d7fde189d5fdc7cf41893239520c5ff201610d17b905",
+        "e9fb2e85513a0ba11a8f2c591a500e0f8eb3053eccfdeb20fa7f9d5d4d83df78",
+        "59bc6c769841f11135c56749fae122d813edfe28b08454c3b6a852c18cbc3d52",
+        "451fff295d97e0def5a046d37acaff2492ef6180e8e49a89e62e52a41ab51fcd",
+        "20a6742574adcd0d4caf7564a852a0725f24ee006a54e76853c5089e1de2efb1",
+        "ff426e5b6479aa2df11fe7b95c14ba0d847c002b63aec79b97ec82b18a07d9ae",
+        "d149409fa06aa6ce698226575e186d5912c756c4857e5a5d82d20d611c632d8c",
+        "13bbb5c8d7a456c098bf85fc1ce0b1f87f194f595e7f7bc5cbed86b82a6ad893",
+        "096d3bcae295d145e2ceadcd2291d969fe3b9c5369f06c3299f63acdccc57146",
+        "4a7b76ca1b4a32903413cc7c8ba8f52de0db3003276515d8f3ecb69a7b976284",
+        "c0ee841ae8c28cc828ea7d21320b53e5cd73d8e97de1a954b95ec1c79e6e3a3a",
+        "16b794404fe2c54c866f0460ec932b95dcf7bc20d2b44879a93344bdcfda00ee",
+        "ec79309ba732fe701c601384b94414ea07056e3bfa1ddbd8dac33e62583045ba",
+        "0c98c466cba7ee5fe3638c8d709a2714b9d7a5e002237922e08c7f9cf277f459",
+        "b804871408ab41aa64d508d597d19d2f628958b89acb3b88a27cdb74afcb4871",
+        "35addf58effa4c6d4f0073e8510a79d57322d659cc7eaa54032eed3ffbe2796c",
+        "7438143dcbdb712236af1aaacfaf8932341193ed728af7005d3ce9b8fb6a0529",
+        "164d2fca1abd51d9f87548fc80f37de08449627973e917ce56cf5f866357abad",
+        "b13c15859b75aca5c15d30477637c9868345d3cb579d953d2616ae22751d4b23",
+        "88fd82dff947d68bc086424551cb5893481b346bcab5786c239417508b3e9b32",
+        "86a1806c46b5c926123d52f74c0580673726b8dc00ee5d9cde411ead2d04e93f",
+        "edb987b6011219793e7475240e4e76785477cc66398764a990c46cb067911ea5",
+        "4d479ded7891acdfdabbbf01f3a117f337ed6577774a61cc5af303179e0ea971",
+        "82e599da8fda7a7b1e52d02ae0bcf50863f780f836d88171b938a14b74e4f38f",
+        "1cdb9dec66654aa91718272e9c4d53cf6e1c472f2c6f74d4ce13ed104d040d5e",
+        "555135d4eed8ea3d65a3d1c2e3fe2b09be749c6560832d7c694a51399b8bc55f",
+        "64876168e8172737d8105bb2ad83d2fabdbc30147e11e71058138c4c1928f4b3",
+        "272592e9d314bd6845a3f470c4fcac3f6c3a15b390790aaccd6892f8e18d7a2d",
+        "61618679b4084b8505a3d65c7bce500a11be844176bc95c6e2c6ac724df1dedf",
+        "5c5d158ed717acdeb4ac0aa78c2f89131d58039349a88003ca7f602541362a89",
+        "368119e0d93db7693d38bca1d3bc71f075eed29bcc035cd3b061306c2f02dde3",
+        "041a4a1a3e08936b9e376de39de454d03c2a04d23be0bae2bd84dc7246cac8e0",
+        "17d1b1c88d10ca9132bd75dc358b8a7eb693e599a2d5dba759e7aba5e64704cf",
+        "1421c9e3a6d0368431f52e7093ce8bcae5cf478cc9c1aacd737f8d17248e75c3",
+        "775ef50241c16cfd5a8dbe169329c60d306115246ee7196aa84e988f5b4f601c",
+        "43f1dc03aa39014c2b7d352e571c6983cc2362e01d807be04d006c67123ad113",
+        "a641cf77d179cebc2e0d8c0e3277d8c813d341f12d95d7d77cbd8ffbcd66a57b",
+        "ff3831273d431944f9d6973694b770dc20482fe1ceaf185952bd813f160ac374",
+        "8dbb2c06e536306fdb022f485eab1f2c5b83f75ccab7034e539e8519e34d9d5b",
+        "9d66ce5569c2b0eaa341578e6043549a16f8933740a15cddf41676fc8f87fb9f"
+      ],
+      "plain_start_to_end_relative_change": -0.35212078380199574,
+      "descriptive_pooled_rates": {
+        "plain": 2.045370936454164,
+        "topk": 2.3011589418861336,
+        "relative_gain": 0.1250570255366008,
+        "interpretation": "Not an established speedup: baseline drift exceeds this difference and thermal/fault state is not controlled."
+      }
+    }
+  ],
+  "energy_j_per_token": null,
+  "useful_compute_wall_ms": null,
+  "exposed_io_wait_wall_ms": null,
+  "decision": {
+    "row_kernels": "Keep opt-in; no stable integrated throughput benefit established in this short session.",
+    "topk_in_graph": "Keep opt-in; confirmation is confounded by a 35% baseline decline and a large decode major-fault increase.",
+    "combined": "Keep opt-in; one exploratory run does not establish a benefit.",
+    "app_profile_changed": false,
+    "apk_installed": false,
+    "partial_bank_prefetch": "Not implemented by this bounded screening; needs a separately bounded native increment."
+  },
+  "limits": [
+    "Nine runs, 32-token screening and 64-token ABBA confirmation; natural EOS respected, all reached the cap.",
+    "Approximately 393 seconds of sequential runner time plus setup/reporting; no cooldown waits or sustained test.",
+    "All per-position SHA-256 logit digests and output token IDs agree within each phase.",
+    "Top-k candidate selected from the exploratory phase; confirmation is reported separately.",
+    "Different output lengths have different expert routes and bytes per token; do not pool the two phases.",
+    "Temperature, stock power policy, faults and background activity are uncontrolled; no precise 1% effect can be isolated.",
+    "Hashing adds diagnostic overhead equally across arms. Missing wall-time attribution and USB energy remain null.",
+    "Final confirmation plain arm recorded 562,997 decode major faults versus 73 initially; candidate arm B recorded 6,765. Precise reclaim cause was not isolated. This residency failure invalidates a precise speedup attribution."
+  ]
+}

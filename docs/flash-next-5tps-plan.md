@@ -2,6 +2,12 @@
 
 Date: 2026-10-23. Status: engineering proposal, not an achieved speed.
 
+2026-10-24 bounded option follow-up: [nine short runs](../results/2026-10-24/galaxy/flash-next-small-options.json)
+compared the existing four-row kernels, in-graph top-k and their combination. Exactness passed at every
+sampled position. A selected top-k confirmation was confounded by a 35% decline between its plain arms
+and 562,997 decode major faults in the final arm. Neither option was promoted; the exploratory improvements
+do not establish a stable gain. The session ended after 393 s of runner time, respecting the short-test budget.
+
 Latest feasibility screening: [known-route oracle and CPU read probes](../results/2026-10-23/galaxy/flash-next-feasibility-gates.json).
 At the same 1,792 MiB cache, two plain 32-token arms gave 1.96/2.16 tokens/s; one-layer oracle 2.56;
 two-layer oracle 2.49/2.24. Every native route and all per-position logit hashes matched. Oracle reads fell
