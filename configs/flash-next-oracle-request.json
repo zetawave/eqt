@@ -1,0 +1,38 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Write a detailed tutorial of about 1500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."
+    }
+  ],
+  "max_tokens": 32,
+  "temperature": 0,
+  "seed": 42,
+  "thinking": false,
+  "ignore_eos": false,
+  "load": {
+    "context": 8192,
+    "batch": 128,
+    "threads": 6,
+    "memory_budget_mib": 8192,
+    "mmap": false,
+    "expert_streaming": true,
+    "expert_cache_mib": 1792,
+    "io_threads": 16,
+    "direct_io": true,
+    "prefetch": true,
+    "speculative_pool": true,
+    "lookahead_layers": 2,
+    "lookahead2_count": 5,
+    "read_priority": true,
+    "prefetch_inflight": 2,
+    "lookahead_router_q8": true,
+    "expert_pack_split": 2,
+    "coalesce_kib": 2048,
+    "coalesce_gap": 1,
+    "prefill_prefetch_mib": 0,
+    "prefill_prefetch_min_coverage": 0.9,
+    "expert_slots": true,
+    "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+  }
+}

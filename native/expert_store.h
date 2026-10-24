@@ -103,6 +103,9 @@ struct ExpertOptions {
     // speculative reads always read whole experts.
     int pack_split = 1;
     std::string trace_path;
+    // Diagnostic only: recorded native routes supply future reads; routing still comes from the model.
+    std::string oracle_path;
+    int oracle_layers = 2;
 };
 
 class SourceFile;
@@ -158,6 +161,7 @@ class ExpertStore {
     std::string error() const;
     // True after a failed read was observed by a compute thread; the engine's abort callback stops the graph.
     bool aborted() const { return aborted_.load(); }
+    bool diagnostic_oracle() const { return !oracle_routes_.empty(); }
     // Address of resident expert `expert` of a streamed bank, waiting for its read if needed; nullptr when the
     // tensor is not a streamed bank. For copying experts elsewhere (GPU staging) from inside a graph compute.
     const void *expert_data(const ggml_tensor *bank, int64_t expert) const {
@@ -287,6 +291,8 @@ class ExpertStore {
     // Validates the pack against the registered banks and places each bank at its packed offset in the slot.
     void attach_pack();
     bool ensure(int layer_index, const ggml_tensor *ids);
+    bool check_oracle(int layer_index, const ggml_tensor *ids);
+    void prefetch_oracle(int current_layer);
     // A layer's routing is known: requests its experts and starts the next lookahead.
     bool on_topk(int layer, const ggml_tensor *tensor);
     // Predicts layer_index + 1 (predict) and, with lookahead_layers 2, layer_index + 2 (predict_after) from the
@@ -395,6 +401,14 @@ private:
     bool decode_phase_ = false;
     std::string error_;
     std::ofstream trace_;
+    struct OracleRoute {
+        int layer = 0, rows = 0;
+        bool decode = false;
+        std::vector<int> experts;
+        std::vector<uint8_t> ranks;
+    };
+    std::vector<OracleRoute> oracle_routes_;
+    size_t oracle_cursor_ = 0;
     Stats stats_;
     uint64_t clock_ = 0, resident_bytes_ = 0, routed_bytes_ = 0, effective_budget_ = 0;
     uint64_t prompt_budget_ = 0, decode_budget_ = 0, decode_extra_ = 0;

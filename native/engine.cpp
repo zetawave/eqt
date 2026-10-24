@@ -12,6 +12,7 @@
 #include "llama-ext.h"
 #include "jinja/runtime.h"
 #include "json.h"
+#include "hash/hash.h"
 #include "llama.h"
 #include "mtmd-helper.h"
 #include "mtmd.h"
@@ -1013,6 +1014,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
         expert_options.pack_path = options.value("expert_pack", std::string());
         expert_options.pack_split = integer(options, "expert_pack_split", 1, 1, 4);
         expert_options.trace_path = options.value("expert_trace", std::string());
+        expert_options.oracle_path = options.value("diagnostic_oracle_routes", std::string());
+        expert_options.oracle_layers = integer(options, "diagnostic_oracle_layers", 2, 1, 2);
         if (options.contains("expert_layer_weights")) {
             expert_options.layer_weights = options.at("expert_layer_weights").get<std::vector<double>>();
         }
@@ -1020,7 +1023,8 @@ Json Engine::load(const std::string &path, const Json &options, const Emit &prog
                          (static_cast<uint64_t>(expert_options.prefill_prefetch_mib) << 20);
         // The lookahead's Q8_0 router copies stay resident beside the F32 routers the graph uses.
         resident_bytes += expert_options.prefetch && expert_options.lookahead_router_q8 ? router_q8_bytes : 0;
-    } else if (options.contains("expert_cache_mib") || options.contains("expert_pack") || options.value("prefetch", false)) {
+    } else if (options.contains("expert_cache_mib") || options.contains("expert_pack") || options.value("prefetch", false) ||
+               options.contains("diagnostic_oracle_routes")) {
         throw std::invalid_argument("Expert cache options require expert_streaming=true");
     }
     // The context is bounded by the model's trained context, not by an engine constant; its KV cache counts
@@ -1432,6 +1436,12 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         }
     }
     const int lookup_max = integer(request, "prompt_lookup", 0, 0, 7);
+    const bool hash_logits = request.value("diagnostic_logits_hash", false);
+    if ((hash_logits || (s.store && s.store->diagnostic_oracle())) &&
+        (temperature != 0 || s.draft || has_media || !replay.empty() || lookup_max > 0 || session ||
+         request.contains("steering"))) {
+        throw std::invalid_argument("Diagnostic routes/logit hashes require plain greedy text decoding without sessions or steering");
+    }
     if (lookup_max > 0) {
         if (temperature != 0 || s.draft || !input.images.empty() || !replay.empty() || request.contains("steering")) {
             throw std::invalid_argument("prompt_lookup is greedy, text-only, without mtp, steering or verify_replay");
@@ -1747,7 +1757,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         }
         s.fit_threads();
         const int code = llama_process(context, LLAMA_PROCESS_TYPE_DECODE, batch);
-        if (code != 0 && !cancelled_) {
+        if ((code != 0 || (s.store && s.store->aborted())) && !cancelled_) {
             const auto failure = s.store ? s.store->error() : std::string();
             throw std::runtime_error(failure.empty() ? "Decode failed with code " + std::to_string(code)
                                                      : "Expert streaming failed: " + failure);
@@ -2000,6 +2010,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     latencies.reserve(std::min(limit, 1 << 16));
     const bool capture = request.value("capture_logits", false);
     Json first_logits = nullptr;
+    Json logits_hashes = hash_logits ? Json::array() : Json(nullptr);
     Json ttft = nullptr;
     Json first_visible = nullptr;
     std::string text;
@@ -2188,6 +2199,10 @@ Json Engine::generate(const Json &request, const Emit &emit) {
                 reason = "cancelled";
                 break;
             }
+            if (hash_logits) {
+                const float *logits = llama_get_logits_ith(s.context.get(), -1);
+                logits_hashes.push_back(hash_sha256_hex(logits, static_cast<size_t>(llama_vocab_n_tokens(vocab)) * sizeof(float)));
+            }
             const auto token = llama_sampler_sample(sampler.get(), s.context.get(), -1);
             if (!push(token)) {
                 break;
@@ -2368,7 +2383,8 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"energy_joules", nullptr},
         {"text", text},
         {"token_ids", generated},
-        {"first_logits", first_logits}};
+        {"first_logits", first_logits},
+        {"diagnostic_logits_sha256", logits_hashes}};
     // The context keeps this turn's state when it holds exactly the prompt and the evaluated answer: an answer that
     // ended at the output limit has its last token sampled but not evaluated; EOS is never part of the answer.
     if (reusable && prefill_complete && reason != "cancelled" && !cancelled_) {

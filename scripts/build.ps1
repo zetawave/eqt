@@ -15,7 +15,7 @@ if ($Target -eq 'Android') {
 }
 & $cmake @arguments
 if ($LASTEXITCODE) { throw 'CMake configure failed' }
-$targets = @('eqt-bench', 'eqt-check', 'eqt-simd-test', 'eqt-kernel-bench')
+$targets = @('eqt-bench', 'eqt-check', 'eqt-simd-test', 'eqt-kernel-bench', 'eqt-memory-bench')
 if ($Target -eq 'Android') { $targets += 'eqt-io-bench' }
 & $cmake --build $build --config Release --parallel $Jobs --target @targets
 if ($LASTEXITCODE) { throw 'Native build failed' }

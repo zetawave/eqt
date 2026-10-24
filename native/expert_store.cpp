@@ -597,6 +597,42 @@ ExpertStore::ExpertStore(const std::string &path, ExpertOptions options, const s
     buffer_type_.reset(new ggml_backend_buffer_type{buffer_type_interface, cpu, this});
     mapped_type_.reset(new ggml_backend_buffer_type{mapped_buffer_type_interface, cpu, this});
     path_ = path;
+    if (!options_.oracle_path.empty()) {
+        if (!options_.slots || !options_.speculative_pool || !options_.prefetch || options_.lookahead_late ||
+            options_.lookahead_layers < options_.oracle_layers || options_.oracle_path == options_.trace_path) {
+            throw std::invalid_argument("Diagnostic oracle needs slots, prefetch, a speculative pool, sufficient lookahead layers and separate files; late lookahead is unsupported");
+        }
+        std::ifstream input(options_.oracle_path, std::ios::binary | std::ios::ate);
+        if (!input || input.tellg() <= 0 || input.tellg() > 16 * 1024 * 1024) {
+            throw std::invalid_argument("Diagnostic oracle route file must contain 1 byte..16 MiB");
+        }
+        input.seekg(0);
+        std::string line;
+        int requests = 0;
+        while (std::getline(input, line)) {
+            const Json record = Json::parse(line);
+            if (record.contains("request")) {
+                if (++requests != 1 || !oracle_routes_.empty()) {
+                    throw std::invalid_argument("Diagnostic oracle supports one recorded request only");
+                }
+                continue;
+            }
+            OracleRoute route;
+            route.layer = record.at("layer").get<int>();
+            route.rows = record.at("tokens").get<int>();
+            route.decode = record.at("decode").get<bool>();
+            route.experts = record.at("experts").get<std::vector<int>>();
+            if (requests != 1 || route.layer < 0 || route.rows < 1 || route.experts.empty() ||
+                route.experts.size() % route.rows || (route.decode && route.rows != 1)) {
+                throw std::invalid_argument("Invalid diagnostic oracle route shape or phase");
+            }
+            route.ranks.resize(route.experts.size(), 0);
+            oracle_routes_.push_back(std::move(route));
+        }
+        if (oracle_routes_.empty()) {
+            throw std::invalid_argument("Empty diagnostic oracle routes");
+        }
+    }
     if (!options_.trace_path.empty()) {
         trace_.open(options_.trace_path, std::ios::binary | std::ios::trunc);
         if (!trace_) {
@@ -1303,6 +1339,9 @@ uint64_t ExpertStore::job_bytes(const Job &job) const {
 }
 
 void ExpertStore::begin_request() {
+    if (!oracle_routes_.empty() && requests_ != 0) {
+        throw std::invalid_argument("Diagnostic oracle supports one request per load");
+    }
     end_request();
     stats_ = {};
     compute_wait_ns_.store(0);
@@ -1464,6 +1503,13 @@ bool ExpertStore::on_topk(int layer, const ggml_tensor *tensor) {
     const auto predictor_wait = Clock::now();
     wait_predictor();
     stats_.predict_wait_ms += since(predictor_wait);
+    if (decode_phase_ && !oracle_routes_.empty()) {
+        if (!ensure(layer, tensor)) {
+            return false;
+        }
+        prefetch_oracle(layer);
+        return !aborted_.load();
+    }
     const ggml_tensor *residual = layer < static_cast<int>(residuals_.size()) ? residuals_[layer] : nullptr;
     if (layer < static_cast<int>(residuals_.size())) {
         residuals_[layer] = nullptr;
@@ -1510,12 +1556,17 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
         fail("Expert selection tensor is not I32");
         return false;
     }
+    if (!oracle_routes_.empty() && !check_oracle(layer_index, ids)) {
+        aborted_.store(true);
+        return false;
+    }
     ++stats_.ensure_calls;
     ++epoch_;
     demand_.clear();
     const int64_t selected = ids->ne[0], rows = ids->ne[1];
     if (trace_) {
-        trace_ << "{\"layer\":" << layer_index << ",\"tokens\":" << rows << ",\"experts\":[";
+        trace_ << "{\"layer\":" << layer_index << ",\"tokens\":" << rows
+               << ",\"decode\":" << (decode_phase_ ? "true" : "false") << ",\"experts\":[";
     }
     for (int64_t row = 0; row < rows; ++row) {
         for (int64_t slot = 0; slot < selected; ++slot) {
@@ -1692,6 +1743,49 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
     stats_.decode_io_wait_ms += decode ? waited : 0;
     stats_.peak_resident_bytes = std::max(stats_.peak_resident_bytes, resident_bytes_);
     return true;
+}
+
+bool ExpertStore::check_oracle(int layer_index, const ggml_tensor *ids) {
+    if (oracle_cursor_ >= oracle_routes_.size()) {
+        fail("Diagnostic oracle exhausted before native routing");
+        return false;
+    }
+    const auto &route = oracle_routes_[oracle_cursor_];
+    if (route.layer != layer_index || route.rows != ids->ne[1] || route.decode != decode_phase_ ||
+        route.experts.size() != static_cast<size_t>(ids->ne[0] * ids->ne[1])) {
+        fail("Diagnostic oracle route shape, layer or phase mismatch");
+        return false;
+    }
+    for (int64_t row = 0; row < ids->ne[1]; ++row) {
+        for (int64_t slot = 0; slot < ids->ne[0]; ++slot) {
+            const auto actual = *reinterpret_cast<const int32_t *>(static_cast<const char *>(ids->data) +
+                                                                   row * ids->nb[1] + slot * ids->nb[0]);
+            if (actual != route.experts[row * ids->ne[0] + slot]) {
+                fail("Diagnostic oracle disagrees with native routing");
+                return false;
+            }
+        }
+    }
+    ++oracle_cursor_;
+    return true;
+}
+
+void ExpertStore::prefetch_oracle(int current_layer) {
+    // The existing pool and queues own all slots and reads. No route is used as an execution decision.
+    for (int ahead = 0; ahead < options_.oracle_layers && oracle_cursor_ + ahead < oracle_routes_.size(); ++ahead) {
+        const auto &route = oracle_routes_[oracle_cursor_ + ahead];
+        if (!route.decode || route.rows != 1 || route.layer == current_layer) {
+            break;
+        }
+        auto *layer = layer_at(route.layer);
+        if (!layer || layer->banks.empty() || route.experts.size() != static_cast<size_t>(experts_used_) ||
+            std::any_of(route.experts.begin(), route.experts.end(), [&](int e) { return e < 0 || e >= layer->experts; })) {
+            fail("Invalid future diagnostic oracle route");
+            aborted_.store(true);
+            return;
+        }
+        issue_reads_ahead(*layer, route.experts, route.ranks, 0, ahead > 0);
+    }
 }
 
 void ExpertStore::predictor() {
@@ -2468,6 +2562,7 @@ void ExpertStore::fail(const std::string &message) {
     if (error_.empty()) {
         error_ = message;
     }
+    aborted_.store(true);
 }
 
 std::string ExpertStore::error() const {
@@ -2478,6 +2573,10 @@ std::string ExpertStore::error() const {
 Json ExpertStore::configuration() const {
     Json quotas = Json::array();
     uint64_t min_entry = UINT64_MAX, max_entry = 0;
+    size_t oracle_bytes = oracle_routes_.capacity() * sizeof(OracleRoute);
+    for (const auto &route : oracle_routes_) {
+        oracle_bytes += route.experts.capacity() * sizeof(int) + route.ranks.capacity() * sizeof(uint8_t);
+    }
     for (const auto &layer : layers_) {
         if (layer && !layer->banks.empty()) {
             quotas.push_back(layer->quota);
@@ -2500,7 +2599,9 @@ Json ExpertStore::configuration() const {
         {"experts_used", experts_used_},
         {"io_threads", options_.io_threads},
         {"direct_io", options_.direct_io},
-        {"prefetch", options_.prefetch ? "router_lookahead_1" : "none"},
+        {"prefetch", !oracle_routes_.empty() ? "diagnostic_known_route_oracle" : options_.prefetch ? "router_lookahead_1" : "none"},
+        {"diagnostic_oracle_layers", oracle_routes_.empty() ? Json(nullptr) : Json(options_.oracle_layers)},
+        {"diagnostic_route_buffer_bytes", oracle_bytes},
         {"prefetch_extra", options_.prefetch_extra},
         {"lookahead_gate", options_.lookahead_gate},
         {"lookahead_late", options_.lookahead_late},
@@ -2533,7 +2634,9 @@ Json ExpertStore::configuration() const {
 }
 
 Json ExpertStore::statistics() const {
-    return {{"ensure_calls", stats_.ensure_calls},
+    return {{"diagnostic_oracle", oracle_routes_.empty() ? Json(nullptr) : Json{{"matched_calls", oracle_cursor_},
+                {"recorded_calls", oracle_routes_.size()}, {"all_routes_matched", oracle_cursor_ == oracle_routes_.size()}}},
+            {"ensure_calls", stats_.ensure_calls},
             {"demanded_experts", stats_.demanded},
             {"hits", stats_.hits},
             {"prefetch_hits", stats_.prefetch_hits},

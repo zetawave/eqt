@@ -184,3 +184,49 @@ Image input with a streamed model (D038):
 - `images_release_expert_cache` (load option, default false; needs `mmproj` and `expert_streaming`): before a request with images loads the projector, the expert cache is emptied and its pages returned, so the encoder fits where the cache was. Exact. The result reports `expert_cache_released_bytes` (null when not used), and `configuration.vision.releases_expert_cache` shows the option.
 - `eqt-bench` request `"sequence": [request, …]` runs the requests one after another on the same load (the top-level `load` applies) and writes `{"results": [...]}`.
 - `vision_flash_attn` (load option, default true): the CPU vision encoder uses flash attention. Without it a 1,024-token image holds about 1 GiB of attention matrices (D038). GPU mode keeps `gpu_vision_flash_attn`.
+
+### Known-route and CPU bandwidth feasibility probes
+
+`tools/bench_oracle.py` records native routes for one greedy text request, then runs plain, one-layer oracle,
+two-layer oracle twice, and plain again. For the moved Flash-Next on the Galaxy:
+
+```powershell
+python tools/bench_oracle.py --target android --run-as org.equity.app --model files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf --request configs/flash-next-oracle-request.json --max-tokens 32 --cool-to 37 --cool-timeout 60 --output results/local/flash-next-oracle
+```
+
+The optional load fields `diagnostic_oracle_routes` and `diagnostic_oracle_layers` (1 or 2) replace decode
+lookahead predictions with recorded future routes. Native routing, expert products, sampling and reductions
+remain in place. Every actual routed call, including prompt batches, must match the recording in order.
+The trace now carries an explicit `decode` flag; old traces without it are rejected. The input file is bounded
+to 16 MiB, and only one request per load is supported. Sessions, media, steering and speculative decoding
+are excluded. The original speculative pool, queue priorities and in-flight limit still apply. A future
+prediction never suppresses demand. Decode predictor work is omitted, so this is an optimistic diagnostic,
+not production inference or an upper bound on every possible scheduler.
+
+Request `diagnostic_logits_hash: true` records SHA-256 of every pre-sampling float logit vector in ordinary
+greedy decoding, including the final EOS position if reached. This adds diagnostic work to timing. The tool
+requires equal digests, token IDs, termination and all recorded routes. It reports whether completed pack
+reads stay within the larger of the two plain runs' byte counts; this is a measured acceptance gate, not a
+runtime cap on mandatory reads. No pack means logical-payload accounting only. Cache capacity and pool
+settings are identical. Exact route-buffer allocation is reported separately from the expert cache, excluding
+allocator overhead. `--failure-checks` additionally corrupts routes, truncates the trace and attempts reuse.
+Use these checks on small fixtures first. A short cap respects EOS and is not a sustained test.
+
+`eqt-memory-bench CPUS MIB SECONDS PASSES [MODE]` uses persistent pinned workers and a pre-touched buffer.
+`MODE` is `sum`, `load`, `sum-dynamic` or `load-dynamic`; dynamic modes assign 1 MiB chunks to avoid waiting
+for the slowest heterogeneous core's equal-sized partition. Sums check every loaded word. AArch64 load modes
+use explicit volatile vector loads, checking the buffer before timing. Both validate affinity and exact word
+coverage; failed affinity is an error. No thread creation or initialization enters the measured windows.
+Host functional checks can use `host:3` instead of a CPU list; they do not measure the phone.
+
+```powershell
+python tools/bench_memory.py --cpus 4,5,6,7,8,9 --seconds 20 --dense --output results/local/flash-next-memory
+```
+
+The wrapper alternates 256/512 MiB buffers and both read modes, preserving source/artifact hashes and thermal
+readings. `--dense` adds the existing synthetic dense/expert benchmark with an inherited CPU mask; its old
+`raw_read_gb_s` field is excluded as a ceiling. These are achieved payload rates, not memory-controller
+counters. Neither a low read-probe result nor a 40 GB/s result proves that exact dense kernels have no room
+to improve: instruction overhead, scheduling, memory access pattern and stock frequency policy still matter.
+CPU frequencies are sampled after each window and can show sleeping workers. Energy while USB-powered,
+memory-controller frequency and unmeasured useful-compute/exposed-wait wall times remain null.

@@ -2,6 +2,16 @@
 
 Date: 2026-10-23. Status: engineering proposal, not an achieved speed.
 
+Latest feasibility screening: [known-route oracle and CPU read probes](../results/2026-10-23/galaxy/flash-next-feasibility-gates.json).
+At the same 1,792 MiB cache, two plain 32-token arms gave 1.96/2.16 tokens/s; one-layer oracle 2.56;
+two-layer oracle 2.49/2.24. Every native route and all per-position logit hashes matched. Oracle reads fell
+about 20%, from 578 MB to 463–464 MB per emitted token (478–479 MB per evaluated decode token).
+The two-layer pooled gain was 15%, with substantial run variation, USB power, incomplete cooldown and no
+sustained test. This establishes an opportunity in perfect prediction, not a predictor, bank protocol or complete
+FFN scheduler. Verified CPU read probes achieved 16–28 GB/s and remained below some dense products;
+their result is inconclusive as a hardware ceiling. Do not use this screening to declare five either achieved
+or physically impossible under every exact design.
+
 Device follow-up: [the natural-answer session](../results/2026-10-23/galaxy/flash-next-natural-feasibility.json) measured 2.36 tokens/s over 3,140 tokens and about 23 minutes, with 628 MB/token and thermal status 4. Its final ten full decode windows averaged 2.04 tokens/s. Two answers ended at EOS; the code answer hit the 1,536-token cap. Short cache screening reduced traffic at 2,304/2,816 MiB, but 2,816 MiB produced 2.57 million major faults over 32 tokens and only 0.69 tokens/s. A subsequent 1,792 MiB run recovered to 3.08 tokens/s at a cooler thermal state. This is evidence against adopting a larger cache from a free-memory estimate alone; it does not isolate the exact kernel reclaim policy. Cgroup limits were not readable. No larger-cache default or 3 GiB test was adopted.
 
 The 3 GiB scenario below remains conditional arithmetic, not an established implementation route. Develop and measure scheduling/bank-prefetch candidates at 1,792 MiB first; increased capacity requires a separate fault/residency gate. Useful-compute and exposed-wait wall times still need attribution and remain null rather than being inferred from summed worker waits.
@@ -10,7 +20,12 @@ A first bounded scheduling experiment moved only the shared-expert computation b
 
 ## Decision
 
-Pursue an exact CPU decode path that schedules complete expert computations as their banks become ready, combined with selective bank prefetching and a larger expert cache when actual memory admission permits it. Improve dense kernels only against the remaining measured compute deficit. Keep the current model, native top-10 routing, sampling, context, and reference decoder.
+Keep complete-expert scheduling and selective bank prefetching as opt-in implementation candidates, gated by
+measured incremental benefit. Do not commission both as a demonstrated route to five: the known-route
+screening remains far below the target, and its gain cannot be assigned to either candidate independently.
+Investigate sustained useful compute and energy alongside I/O rather than assuming the dense deficit can
+wait until the end. Larger caches still require the separate residency gate. Keep the current model, native
+top-10 routing, sampling, context, and reference decoder.
 
 This is a concrete implementation candidate with a physically plausible budget, **not evidence that 5 sustained tokens/s is attainable on this phone**. Existing measurements do not establish that result. The candidate needs all three of these conditions together:
 
@@ -90,7 +105,7 @@ Files: `tools/sustained_run.py`, `tools/sweep_target.py`, `tools/benchmark.py`, 
 2. Use public/synthetic prompts across Italian exposition, English exposition, code, and reasoning. Keep calibration and held-out evaluation disjoint. Record template, rendered prompt hash, thinking/sampling settings, context, actual output length and termination. A finite token cap is a safety/context bound, not permission to continue past EOS.
 3. Reproduce the D032 configuration, then test 1,792 / 2,304 / 3,072 MiB caches only when admitted. Keep context and all other options equal. Use short alternating A/B/A runs before long runs. Do not clear user data, kill apps, or use privileged memory/cache/thermal controls.
 4. Count actual decode I/O by bank and by demand/speculation; distinguish queued-but-cancelled reads from bytes already transferred. Collect wall-time compute, exposed wait, late-bank events, completed-but-unused bytes, process faults/RSS/PSS, committed slots, and thermal status. A decode result must drain/account outstanding work so that late completions do not disappear from the byte count.
-5. Add an explicitly diagnostic known-route replay only if needed to measure the best possible overlap. Record a reference run's routes, preload only its next one/two layers within the same byte budget, and compare the target's own routes/logits during replay. This uses future information and must be labeled an oracle, never inference. It can reject an impossible schedule but cannot validate a predictor or establish a production speed.
+5. The diagnostic known-route replay is now implemented in `tools/bench_oracle.py`: record a reference run's routes, preload only its next one/two routed layers, and compare the target's own routes and every pre-sampling logit vector. Cache/pool settings stay fixed; actual completed bytes must pass a post-run gate against plain decoding. This uses future information and free decode prediction and is labeled an oracle, never production inference. It measures this specific schedule; a low result does not bound every possible expert scheduler. The short Galaxy screening above lowers bytes but does not establish a production or sustained speed.
 
 The first deliverable is a table of safe cache capacity, required bytes/token, sustained read rate, and useful compute time. If even an optimistic storage floor exceeds 200 ms at the largest safe cache, the exact single-token candidate has failed that workload's storage gate. If useful compute remains above 200 ms, eliminating I/O stalls alone cannot succeed.
 
