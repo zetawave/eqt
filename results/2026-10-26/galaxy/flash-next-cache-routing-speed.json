@@ -1,0 +1,510 @@
+{
+  "date": "2026-10-26",
+  "kind": "cache_routing_speed_screen",
+  "cache_routing": {
+    "keep": 3,
+    "max_rank": 24
+  },
+  "device": "Galaxy S24+ SM-S926B, Exynos 2400",
+  "conditions": "CLI as app user, USB power, 96 tokens per arm, one load, each request from an empty expert cache, cooled to about 35.5-36 C skin before each sequence",
+  "sequences": {
+    "v1": {
+      "kind": "cache_routing_speed_screen",
+      "source_sha256": "34be1fb04a8026307ee064c4089d70283d0edb944b488e67484546b7c3218459",
+      "artifact_sha256": {
+        "eqt-bench": "9a1820d0767f1b28095ed59bc93feb97a0d38568c262957cfe21d304cdd71db7",
+        "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+        "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+        "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+        "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+        "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+        "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+        "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+        "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+        "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+        "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+        "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+        "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+        "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+      },
+      "model": "files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+      "load": {
+        "context": 8192,
+        "batch": 128,
+        "threads": 6,
+        "memory_budget_mib": 8192,
+        "mmap": false,
+        "expert_streaming": true,
+        "expert_cache_mib": 1792,
+        "io_threads": 16,
+        "direct_io": true,
+        "prefetch": true,
+        "speculative_pool": true,
+        "lookahead_layers": 2,
+        "lookahead2_count": 5,
+        "read_priority": true,
+        "prefetch_inflight": 2,
+        "lookahead_router_q8": true,
+        "expert_pack_split": 2,
+        "coalesce_kib": 2048,
+        "coalesce_gap": 1,
+        "prefill_prefetch_mib": 0,
+        "prefill_prefetch_min_coverage": 0.9,
+        "expert_slots": true,
+        "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+      },
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a detailed tutorial of about 1500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."
+          }
+        ],
+        "max_tokens": 96,
+        "temperature": 0,
+        "seed": 42,
+        "thinking": false,
+        "ignore_eos": false,
+        "prompt_cache": false,
+        "diagnostic_release_expert_cache": true
+      },
+      "before": {
+        "thermal": "0",
+        "temperatures": {
+          "AP": 37.5,
+          "BAT": 34.9,
+          "CP": 37.7,
+          "PA": 37.6,
+          "SKIN": 35.5,
+          "SUBBAT": 0.0,
+          "USB": 31.6
+        }
+      },
+      "after": {
+        "thermal": "3",
+        "temperatures": {
+          "AP": 61.9,
+          "BAT": 43.0,
+          "CP": 56.7,
+          "PA": 55.1,
+          "SKIN": 45.0,
+          "SUBBAT": 0.0,
+          "USB": 32.2
+        }
+      },
+      "runs": [
+        {
+          "arm": "exact",
+          "cache_routing": null,
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 2.7137903402408274,
+          "io_MB_per_token": 589.5742302315789,
+          "demand_MB_per_token": 165.63866138947367,
+          "misses_per_token": 60.1578947368421,
+          "substituted_per_token": 0.0,
+          "compute_wait_thread_ms_per_token": 631.1275627789473,
+          "io_busy_share": 0.8218630510429682,
+          "major_faults": 212.0,
+          "prefill_ms": 12795.971836,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nImporting files from external storage, the Downloads directory, or other applications is a deceptively complex task on Android. While the `Intent` system provides a convenient entry point, the actual processing of large datasets—such as CSVs, JSON logs, or binary archives—requires rigorous engineering. A naive implementation often leads to OutOfMemory (OOM) crashes, UI freezes, or data corruption when the process is"
+        },
+        {
+          "arm": "routed",
+          "cache_routing": {
+            "keep": 3,
+            "max_rank": 24
+          },
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 3.0176273196723047,
+          "io_MB_per_token": 411.7368616421053,
+          "demand_MB_per_token": 102.5833283368421,
+          "misses_per_token": 40.98947368421052,
+          "substituted_per_token": 108.37894736842105,
+          "compute_wait_thread_ms_per_token": 390.38730255789477,
+          "io_busy_share": 0.6947248366208915,
+          "major_faults": 15829.0,
+          "prefill_ms": 15596.652148,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nBuilding a file importer on Android is deceptively complex. While the basic act of copying bytes from one location to another seems trivial, doing so reliably in the wild—where storage is fragmented, memory is scarce, and processes are frequently killed by the OS—requires a rigorous architectural approach. A naive implementation often fails when handling large files, corrupt data, or unexpected interruptions. This tutorial outlines a comprehensive strategy for designing"
+        },
+        {
+          "arm": "routed",
+          "cache_routing": {
+            "keep": 3,
+            "max_rank": 24
+          },
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 3.0554338350019052,
+          "io_MB_per_token": 425.45113195789475,
+          "demand_MB_per_token": 104.88540968421053,
+          "misses_per_token": 43.0,
+          "substituted_per_token": 107.32631578947368,
+          "compute_wait_thread_ms_per_token": 363.97730423157896,
+          "io_busy_share": 0.7051577998828293,
+          "major_faults": 145.0,
+          "prefill_ms": 13815.957813,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nBuilding a file importer on Android is deceptively complex. While the basic act of copying bytes from one location to another is trivial, creating a production-grade importer that handles gigabytes of data, survives process death, respects battery constraints, and provides a seamless user experience requires rigorous architectural discipline. This tutorial outlines the design of a reliable offline file importer, focusing on streaming input, bounded memory, atomicity, and resilience"
+        },
+        {
+          "arm": "exact",
+          "cache_routing": null,
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 2.503913822312218,
+          "io_MB_per_token": 596.8644203789473,
+          "demand_MB_per_token": 158.54870096842103,
+          "misses_per_token": 60.50526315789474,
+          "substituted_per_token": 0.0,
+          "compute_wait_thread_ms_per_token": 640.4481470210526,
+          "io_busy_share": 0.8175960663632373,
+          "major_faults": 182.0,
+          "prefill_ms": 14199.320273,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nImporting files from external storage, the Downloads directory, or other applications is a deceptively complex task on Android. While the `Intent` system provides a convenient entry point, the actual processing of large datasets—such as CSVs, JSON logs, or binary archives—requires rigorous engineering. A naive implementation often leads to OutOfMemory (OOM) crashes, UI freezes, or data corruption when the process is"
+        }
+      ],
+      "limitations": [
+        "One short ABBA sequence: drift and thermal state are not controlled.",
+        "Routed and exact runs decode different text; counters are per decoded token."
+      ],
+      "routed_runs_identical": false,
+      "exact_runs_identical": true,
+      "note": "Build before the decode-eviction fixes: the two routed runs decoded different text (read-timing dependence)."
+    },
+    "v2": {
+      "kind": "cache_routing_speed_screen",
+      "source_sha256": "30a8771bf90c9151509d78aa12714f9f8f994670537d47c0c39ab5d73504b8e8",
+      "artifact_sha256": {
+        "eqt-bench": "a6b62ffdc052e128072311a6cbb046a6cebd4ab316cd890793832a0cfeea339f",
+        "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+        "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+        "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+        "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+        "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+        "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+        "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+        "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+        "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+        "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+        "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+        "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+        "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+      },
+      "model": "files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+      "load": {
+        "context": 8192,
+        "batch": 128,
+        "threads": 6,
+        "memory_budget_mib": 8192,
+        "mmap": false,
+        "expert_streaming": true,
+        "expert_cache_mib": 1792,
+        "io_threads": 16,
+        "direct_io": true,
+        "prefetch": true,
+        "speculative_pool": true,
+        "lookahead_layers": 2,
+        "lookahead2_count": 5,
+        "read_priority": true,
+        "prefetch_inflight": 2,
+        "lookahead_router_q8": true,
+        "expert_pack_split": 2,
+        "coalesce_kib": 2048,
+        "coalesce_gap": 1,
+        "prefill_prefetch_mib": 0,
+        "prefill_prefetch_min_coverage": 0.9,
+        "expert_slots": true,
+        "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+      },
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a detailed tutorial of about 1500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."
+          }
+        ],
+        "max_tokens": 96,
+        "temperature": 0,
+        "seed": 42,
+        "thinking": false,
+        "ignore_eos": false,
+        "prompt_cache": false,
+        "diagnostic_release_expert_cache": true
+      },
+      "before": {
+        "thermal": "0",
+        "temperatures": {
+          "AP": 38.4,
+          "BAT": 35.5,
+          "CP": 37.7,
+          "PA": 37.7,
+          "SKIN": 35.5,
+          "SUBBAT": 0.0,
+          "USB": 32.5
+        }
+      },
+      "after": {
+        "thermal": "2",
+        "temperatures": {
+          "AP": 61.1,
+          "BAT": 43.3,
+          "CP": 56.4,
+          "PA": 54.5,
+          "SKIN": 44.9,
+          "SUBBAT": 0.0,
+          "USB": 32.8
+        }
+      },
+      "runs": [
+        {
+          "arm": "exact",
+          "cache_routing": null,
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 2.8488388046365283,
+          "io_MB_per_token": 566.1692550736842,
+          "demand_MB_per_token": 156.04945111578948,
+          "misses_per_token": 59.473684210526315,
+          "substituted_per_token": 0.0,
+          "compute_wait_thread_ms_per_token": 587.6017286526316,
+          "io_busy_share": 0.8155284355583631,
+          "major_faults": 212.0,
+          "prefill_ms": 12343.304297,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nImporting files from external storage, the Downloads directory, or other applications is a deceptively complex task on Android. While the `Intent` system provides a convenient entry point, the actual processing of large datasets—such as CSVs, JSON logs, or binary archives—requires rigorous engineering. A naive implementation often leads to OutOfMemory (OOM) crashes, UI freezes, or data corruption when the process is"
+        },
+        {
+          "arm": "routed",
+          "cache_routing": {
+            "keep": 3,
+            "max_rank": 24
+          },
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 3.0492243410072044,
+          "io_MB_per_token": 372.39482475789475,
+          "demand_MB_per_token": 92.7706058105263,
+          "misses_per_token": 37.54736842105263,
+          "substituted_per_token": 112.90526315789474,
+          "compute_wait_thread_ms_per_token": 349.40865448421056,
+          "io_busy_share": 0.6443930108468039,
+          "major_faults": 167.0,
+          "prefill_ms": 13527.595117,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nBuilding a file importer on Android is deceptively complex. While the basic act of copying bytes from one location to another seems trivial, real-world applications face fragmented storage, limited RAM, unpredictable user interruptions, and the strict constraints of Android’s Scoped Storage. A naive implementation that loads entire files into memory or ignores process death will inevitably fail when users attempt to import large video files or when the system kills the background process"
+        },
+        {
+          "arm": "routed",
+          "cache_routing": {
+            "keep": 3,
+            "max_rank": 24
+          },
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 2.4223300651849144,
+          "io_MB_per_token": 389.5668089263158,
+          "demand_MB_per_token": 95.90046720000001,
+          "misses_per_token": 39.03157894736842,
+          "substituted_per_token": 111.2421052631579,
+          "compute_wait_thread_ms_per_token": 404.6118491789474,
+          "io_busy_share": 0.5914524142518951,
+          "major_faults": 67623.0,
+          "prefill_ms": 14323.433398,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nBuilding a file importer on Android is deceptively complex. While the basic act of copying bytes from one location to another seems trivial, real-world applications face fragmented storage, limited RAM, unpredictable user interruptions, and the strict constraints of Android’s Scoped Storage. A naive implementation that loads entire files into memory or ignores process death will fail under pressure. This tutorial outlines a comprehensive architecture for a reliable, offline file importer that"
+        },
+        {
+          "arm": "exact",
+          "cache_routing": null,
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 2.5166404581426804,
+          "io_MB_per_token": 574.8748503578947,
+          "demand_MB_per_token": 147.74444463157894,
+          "misses_per_token": 59.421052631578945,
+          "substituted_per_token": 0.0,
+          "compute_wait_thread_ms_per_token": 541.3026378736841,
+          "io_busy_share": 0.7729304854898874,
+          "major_faults": 196.0,
+          "prefill_ms": 14939.993789,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nImporting files from external storage, the Downloads directory, or other applications is a deceptively complex task on Android. While the `Intent` system provides a convenient entry point, the actual processing of large datasets—such as CSVs, JSON logs, or binary archives—requires rigorous engineering. A naive implementation often leads to OutOfMemory (OOM) crashes, UI freezes, or data corruption when the process is"
+        }
+      ],
+      "limitations": [
+        "One short ABBA sequence: drift and thermal state are not controlled.",
+        "Routed and exact runs decode different text; counters are per decoded token."
+      ],
+      "routed_runs_identical": false,
+      "exact_runs_identical": true,
+      "note": "Build with reaping before eviction only: routed runs still differed; the second had 67,623 major faults."
+    },
+    "v3": {
+      "kind": "cache_routing_speed_screen",
+      "source_sha256": "d894880d2a3fd41f01bcb48889490d2c70fbebb72a275dafd5180e87ee205bce",
+      "artifact_sha256": {
+        "eqt-bench": "f1cd22ef9350b707c3f9f46247c937514199e9a3ee30c8b05869115bb786f3c0",
+        "libeqt_jni.so": "4a0630e7b019b0f5cee0196a91c5e7c09048d3db29527debef883816116b58fa",
+        "libggml-base.so": "a440db9bbbaccc93b7af75eded0c502f57e8cd174a47ed4a0fcf6f897673d66d",
+        "libggml-cpu-android_armv8.0_1.so": "4c52962d437e324aae409dcf6810dc24a482861ce14d343182209fc614cfb139",
+        "libggml-cpu-android_armv8.2_1.so": "abb2bd27feb9191189ea93e8d3b0674873db076ea595f98115a716758046e744",
+        "libggml-cpu-android_armv8.2_2.so": "ab24c54f2eafea937a5a53166ae8186b66a5289047080e99fceb3bead3dbdce1",
+        "libggml-cpu-android_armv8.6_1.so": "0f5a80c95957126f819fcda68cd690e618373c6772d8af13dca730c3911347b0",
+        "libggml-cpu-android_armv9.0_1.so": "dd2ddd7523e36f050b94a22da54122df63379248ec7671d6bfffa900fb138b84",
+        "libggml-cpu-android_armv9.2_1.so": "247ce4f1f4611f50a515327926bdb1ada6b30235b6cae0db000f795a3b93c6d1",
+        "libggml-cpu-android_armv9.2_2.so": "ae664e524b45725415496c71f0c7e4e735bd762b4559b34e45d92942efcd5ed2",
+        "libggml.so": "c2117b633ca3056ced51333eace76c074808b20221c70b9c51ce4376e37968b0",
+        "libllama.so": "88fa2ec7a814eb01367d0b5d777dc1389185b6cbb89f400df3934ed9a068804a",
+        "libmtmd.so": "8232b39a2c96acc398a8965991e7338b5ed7691a92224b5094870a2dcb5c6467",
+        "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2"
+      },
+      "model": "files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+      "load": {
+        "context": 8192,
+        "batch": 128,
+        "threads": 6,
+        "memory_budget_mib": 8192,
+        "mmap": false,
+        "expert_streaming": true,
+        "expert_cache_mib": 1792,
+        "io_threads": 16,
+        "direct_io": true,
+        "prefetch": true,
+        "speculative_pool": true,
+        "lookahead_layers": 2,
+        "lookahead2_count": 5,
+        "read_priority": true,
+        "prefetch_inflight": 2,
+        "lookahead_router_q8": true,
+        "expert_pack_split": 2,
+        "coalesce_kib": 2048,
+        "coalesce_gap": 1,
+        "prefill_prefetch_mib": 0,
+        "prefill_prefetch_min_coverage": 0.9,
+        "expert_slots": true,
+        "expert_pack": "/data/user/0/org.equity.app/files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.eqtpack"
+      },
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a detailed tutorial of about 1500 words explaining how to design a reliable offline file importer on Android. Cover streaming input, validation, bounded memory, cancellation, atomic publication, resumable work and failure recovery, with concrete examples and tradeoffs."
+          }
+        ],
+        "max_tokens": 96,
+        "temperature": 0,
+        "seed": 42,
+        "thinking": false,
+        "ignore_eos": false,
+        "prompt_cache": false,
+        "diagnostic_release_expert_cache": true
+      },
+      "before": {
+        "thermal": "0",
+        "temperatures": {
+          "AP": 41.0,
+          "BAT": 35.5,
+          "CP": 39.4,
+          "PA": 39.0,
+          "SKIN": 36.2,
+          "SUBBAT": 0.0,
+          "USB": 31.9
+        }
+      },
+      "after": {
+        "thermal": "3",
+        "temperatures": {
+          "AP": 62.7,
+          "BAT": 42.9,
+          "CP": 56.9,
+          "PA": 55.2,
+          "SKIN": 45.0,
+          "SUBBAT": 0.0,
+          "USB": 32.5
+        }
+      },
+      "runs": [
+        {
+          "arm": "exact",
+          "cache_routing": null,
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 2.438297798252812,
+          "io_MB_per_token": 574.667894568421,
+          "demand_MB_per_token": 149.9643904,
+          "misses_per_token": 59.26315789473684,
+          "substituted_per_token": 0.0,
+          "compute_wait_thread_ms_per_token": 574.1066497684211,
+          "io_busy_share": 0.7568573366596936,
+          "major_faults": 210.0,
+          "prefill_ms": 14062.330313,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nImporting files from external storage, the Downloads directory, or other applications is a deceptively complex task on Android. While the `Intent` system provides a convenient entry point, the actual processing of large datasets—such as CSVs, JSON logs, or binary archives—requires rigorous engineering. A naive implementation often leads to OutOfMemory (OOM) crashes, UI freezes, or data corruption when the process is"
+        },
+        {
+          "arm": "routed",
+          "cache_routing": {
+            "keep": 3,
+            "max_rank": 24
+          },
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 2.8843069586868615,
+          "io_MB_per_token": 375.02510349473687,
+          "demand_MB_per_token": 90.30119208421053,
+          "misses_per_token": 37.50526315789474,
+          "substituted_per_token": 112.90526315789474,
+          "compute_wait_thread_ms_per_token": 346.7309943789474,
+          "io_busy_share": 0.632129736657234,
+          "major_faults": 152.0,
+          "prefill_ms": 15127.33875,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nBuilding a file importer on Android is deceptively complex. While the basic act of copying bytes from one location to another seems trivial, real-world applications face fragmented storage, limited RAM, unpredictable user interruptions, and the strict constraints of Android’s Scoped Storage. A naive implementation that loads entire files into memory or ignores process death will inevitably fail when users attempt to import large video files or when the system kills the background process"
+        },
+        {
+          "arm": "routed",
+          "cache_routing": {
+            "keep": 3,
+            "max_rank": 24
+          },
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 3.161376573319287,
+          "io_MB_per_token": 374.6179610947368,
+          "demand_MB_per_token": 91.59182012631578,
+          "misses_per_token": 37.536842105263155,
+          "substituted_per_token": 112.90526315789474,
+          "compute_wait_thread_ms_per_token": 342.3719185473684,
+          "io_busy_share": 0.6687359127497734,
+          "major_faults": 114.0,
+          "prefill_ms": 13410.851289,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nBuilding a file importer on Android is deceptively complex. While the basic act of copying bytes from one location to another seems trivial, real-world applications face fragmented storage, limited RAM, unpredictable user interruptions, and the strict constraints of Android’s Scoped Storage. A naive implementation that loads entire files into memory or ignores process death will inevitably fail when users attempt to import large video files or when the system kills the background process"
+        },
+        {
+          "arm": "exact",
+          "cache_routing": null,
+          "tokens": 96,
+          "termination": "length",
+          "decode_tokens_per_second": 2.8713234079640872,
+          "io_MB_per_token": 571.259203368421,
+          "demand_MB_per_token": 149.18278736842106,
+          "misses_per_token": 59.463157894736845,
+          "substituted_per_token": 0.0,
+          "compute_wait_thread_ms_per_token": 500.08993893684215,
+          "io_busy_share": 0.8144668559269158,
+          "major_faults": 86.0,
+          "prefill_ms": 13289.363164,
+          "text": "# Designing a Robust Offline File Importer for Android\n\nImporting files from external storage, the Downloads directory, or other applications is a deceptively complex task on Android. While the `Intent` system provides a convenient entry point, the actual processing of large datasets—such as CSVs, JSON logs, or binary archives—requires rigorous engineering. A naive implementation often leads to OutOfMemory (OOM) crashes, UI freezes, or data corruption when the process is"
+        }
+      ],
+      "limitations": [
+        "One short ABBA sequence: drift and thermal state are not controlled.",
+        "Routed and exact runs decode different text; counters are per decoded token."
+      ],
+      "routed_runs_identical": true,
+      "exact_runs_identical": true,
+      "note": "Final build (pooled entries never LRU victims, stale predictions dropped at request end): routed runs identical."
+    }
+  },
+  "limitations": [
+    "Three short ABBA sequences; drift and memory pressure (one arm with 67,623 major faults) are uncontrolled.",
+    "Routed and exact runs decode different text; per-token counters compare different answers.",
+    "The routing is not exact: its quality cost is in results/2026-10-26/host/flash-next-cache-routing-quality.json."
+  ],
+  "energy_j": null
+}

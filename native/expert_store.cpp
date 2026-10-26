@@ -21,6 +21,7 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -1339,6 +1340,72 @@ uint64_t ExpertStore::job_bytes(const Job &job) const {
     return last.slot_offset + round_up(last.stride, page) - layer.banks[job.bank].slot_offset;
 }
 
+void ExpertStore::set_cache_routing(int keep, int max_rank) {
+    if (max_rank == 0) {
+        routing_keep_ = routing_max_rank_ = 0;
+        return;
+    }
+    if (!oracle_routes_.empty()) {
+        throw std::invalid_argument("Cache-aware routing cannot run with diagnostic oracle routes");
+    }
+    if (options_.prefetch && !options_.speculative_pool) {
+        // Prefetches outside the pool evict cache entries while earlier prefetches may still be in flight.
+        throw std::invalid_argument("cache_routing with prefetch needs speculative_pool");
+    }
+    int experts = max_cache_routing_rank;
+    for (const auto &layer : layers_) {
+        if (layer && !layer->banks.empty()) {
+            experts = std::min(experts, layer->experts);
+        }
+    }
+    if (experts_used_ <= 1 || keep < 1 || keep >= experts_used_ || max_rank <= experts_used_ || max_rank > experts) {
+        throw std::invalid_argument("cache_routing needs 1 <= keep < experts used < max_rank <= " + std::to_string(experts));
+    }
+    routing_keep_ = keep;
+    routing_max_rank_ = max_rank;
+}
+
+void ExpertStore::promote_cached(Layer &layer, const ggml_tensor *topk) {
+    // Only a single decoded row whose selection is the head of the router's full argsort. Its indices are rewritten
+    // before any node reads them; the mixing weights are gathered from the router's probabilities by these indices.
+    const ggml_tensor *order = topk->view_src;
+    const int selected = static_cast<int>(topk->ne[0]);
+    if (topk->ne[1] != 1 || !order || order->op != GGML_OP_ARGSORT || order->type != GGML_TYPE_I32 ||
+        topk->view_offs != 0 || ggml_nrows(order) != 1 || order->ne[0] < routing_max_rank_ || selected != experts_used_) {
+        return;
+    }
+    const int substituted = prefer_cached(layer, static_cast<int32_t *>(order->data));
+    if (substituted >= 0) {
+        stats_.routing_substituted += substituted;
+        ++stats_.routing_layers;
+    }
+}
+
+int ExpertStore::prefer_cached(const Layer &layer, int32_t *ranks) const {
+    // Cached means an ordinary cache entry. Speculative entries (pooled, or prefetched and not yet selected) are
+    // excluded: a queued read may be cancelled or not depending on read timing, and counting them would let the
+    // same request decode different tokens from run to run.
+    for (int rank = routing_keep_; rank < routing_max_rank_; ++rank) {
+        if (ranks[rank] < 0 || ranks[rank] >= layer.experts) {
+            return -1; // left unchanged; ensure() reports an out-of-range selection
+        }
+    }
+    int32_t uncached[max_cache_routing_rank];
+    int front = routing_keep_, deferred = 0, substituted = 0;
+    for (int rank = routing_keep_; rank < routing_max_rank_; ++rank) {
+        const int32_t expert = ranks[rank];
+        const Entry &entry = layer.entries[expert];
+        if (entry.state != State::absent && !entry.pooled && !entry.prefetched) {
+            substituted += rank >= experts_used_ && front < experts_used_;
+            ranks[front++] = expert; // front <= rank: writes never overtake reads
+        } else {
+            uncached[deferred++] = expert;
+        }
+    }
+    std::copy(uncached, uncached + deferred, ranks + front);
+    return substituted;
+}
+
 void ExpertStore::begin_request() {
     if (!oracle_routes_.empty() && requests_ != 0) {
         throw std::invalid_argument("Diagnostic oracle supports one request per load");
@@ -1365,6 +1432,11 @@ void ExpertStore::end_request() {
         }
         for (int e = 0; e < layer->experts; ++e) {
             reap(*layer, e);
+            // Predictions for this request's last token are of no use to the next prompt, which borrows other
+            // layers' entries but never takes pooled ones as victims.
+            if (layer->entries[e].pooled && layer->entries[e].state == State::resident) {
+                evict(*layer, e);
+            }
         }
         layer->prediction_valid = false;
     }
@@ -1504,6 +1576,11 @@ bool ExpertStore::on_topk(int layer, const ggml_tensor *tensor) {
     const auto predictor_wait = Clock::now();
     wait_predictor();
     stats_.predict_wait_ms += since(predictor_wait);
+    if (routing_max_rank_ > 0 && decode_phase_) {
+        if (auto *routed = layer_at(layer); routed && !routed->banks.empty()) {
+            promote_cached(*routed, tensor);
+        }
+    }
     if (decode_phase_ && !oracle_routes_.empty()) {
         if (!ensure(layer, tensor)) {
             return false;
@@ -1679,6 +1756,15 @@ bool ExpertStore::ensure(int layer_index, const ggml_tensor *ids) {
             } else if (options_.read_priority) {
                 cancel_unread(layer, e);
             }
+        }
+    }
+    if (rows <= max_lookahead_rows) {
+        // Reads of this layer's earlier evaluations have all completed by now; only reaped entries are eviction
+        // candidates. Without this, an expert whose read was still in flight when it was last selected stays
+        // unevictable while another run's identical expert is not, and the cache contents (which cache-aware routing
+        // selects from) would depend on read timing.
+        for (int e = 0; e < layer.experts; ++e) {
+            reap(layer, e);
         }
     }
     int excess = layer.resident - layer.pooled + static_cast<int>(missing_.size()) - layer.quota;
@@ -1954,6 +2040,11 @@ void ExpertStore::score(Layer &target, const float *rows, int64_t count_rows, si
                         std::vector<int> &prediction, std::vector<uint8_t> &ranks) {
     const size_t width = static_cast<size_t>(target.width);
     const int count = std::min(experts_used_ + options_.prefetch_extra, target.experts);
+    // Cache-aware routing: a decoded token's prediction is reordered against the target layer's cache as its
+    // routing will be, so reads go to the experts the policy is expected to select, not to native choices it replaces.
+    const bool routed = routing_max_rank_ > 0 && decode_phase_ && count_rows == 1;
+    const int sorted = routed ? std::max(count, routing_max_rank_) : count;
+    static_assert(std::is_same_v<int, int32_t>, "order_ is reordered as int32_t ranks");
     prediction.clear();
     ranks.clear();
     for (int64_t row = 0; row < count_rows; ++row) {
@@ -1981,8 +2072,11 @@ void ExpertStore::score(Layer &target, const float *rows, int64_t count_rows, si
             order_[e] = e;
         }
         std::partial_sort(
-            order_.begin(), order_.begin() + count, order_.begin() + target.experts,
+            order_.begin(), order_.begin() + sorted, order_.begin() + target.experts,
             [this](int a, int b) { return scores_[a] > scores_[b] || (scores_[a] == scores_[b] && a < b); });
+        if (routed) {
+            prefer_cached(target, order_.data());
+        }
         for (int i = 0; i < count; ++i) {
             const auto found = std::find(prediction.begin(), prediction.end(), order_[i]);
             if (found == prediction.end()) {
@@ -2385,10 +2479,12 @@ void ExpertStore::evict(Layer &layer, int expert) {
 }
 
 int ExpertStore::least_recent(const Layer &layer, uint32_t epoch) const {
+    // Pooled entries are speculative reads beside the quota, dropped by ensure() when their layer runs without them.
+    // As victims they would stand in for a cache entry, depending on whether their read had finished yet.
     int victim = -1;
     for (int e = 0; e < layer.experts; ++e) {
         const auto &entry = layer.entries[e];
-        if (entry.state == State::resident && (epoch == 0 || layer.seen[e] != epoch) &&
+        if (entry.state == State::resident && !entry.pooled && (epoch == 0 || layer.seen[e] != epoch) &&
             (victim < 0 || entry.stamp < layer.entries[victim].stamp)) {
             victim = e;
         }
@@ -2734,6 +2830,9 @@ Json ExpertStore::statistics() const {
             {"coalesced_reads", stats_.coalesced_reads},
             {"bridged_experts", stats_.bridged_experts},
             {"resident_bytes", resident_bytes_},
-            {"peak_resident_bytes", stats_.peak_resident_bytes}};
+            {"peak_resident_bytes", stats_.peak_resident_bytes},
+            {"cache_routing", routing_max_rank_ == 0 ? Json(nullptr)
+                : Json{{"keep", routing_keep_}, {"max_rank", routing_max_rank_}, {"decode_layers", stats_.routing_layers},
+                       {"substituted_experts", stats_.routing_substituted}}}};
 }
 } // namespace eqt

@@ -1,5 +1,27 @@
 # Progress — 2026-10-06
 
+## Flash-Next and five tokens/s: cache-aware routing and the GPU gate — 2026-10-26
+
+- **Floors of the exact path (arithmetic from existing records).** At the 1,792 MiB cache, exact routing needs about 420 MB/token of expert reads in short answers and about 490 MB in long natural ones, even with perfect prediction and zero wasted speculation. At the measured 2.4–2.9 GB/s UFS ceiling, that is 175–205 ms/token of storage alone. Compute is about 230 ms/token on a cool phone and more when throttled. The known-route oracle (perfect future routes, 2026-10-23) gave only +15%. Exact single-token decoding of this artifact cannot reach 5 tokens/s on this phone; every earlier lever was worth 1–5%, below run-to-run drift.
+- **Trace simulation** (held-out routing traces, LRU with 20 slots per layer, I/O only): keeping the router's top 2–3 experts and preferring cached experts within its top 16–32 cuts needed reads by 23–46%. This is the cache-conditional routing of Skliar et al. (TMLR 2025), applied to Flash-Next's 512-expert top-10.
+- **Implemented, opt-in and not exact:** request `cache_routing: {keep, max_rank}` (decode single tokens only; prompts, batches, MTP, verification and lookup stay native). Mixing weights come from the router's own probabilities. The lookahead applies the same reordering to its predictions. Teacher-forcing support for quality comparisons: `forced_text`, `diagnostic_logits_path` (F32 logits per answer position) and `diagnostic_release_expert_cache`. Tools: `tools/eval_cache_routing.py` (fixture check, host quality screen, phone ABBA speed screen) and `tools/bench_gpu_sustain.py` with `eqt-gpu-bench sustain`.
+- **Expert-store eviction fixes (exact path outputs unchanged).** Two read-timing dependences made cache contents differ between identical requests:
+  - an expert whose read was still in flight when selected stayed unreaped, and so unevictable, until revisited; decode `ensure()` now reaps the layer before choosing victims;
+  - a pooled speculative entry could be taken as an LRU victim in place of a cache entry; pooled entries are no longer victims, and unselected predictions are dropped at request end.
+  Host streaming regression: 134/134 bitwise. Exact phone runs read 566–575 MB/token after the fixes against 590–597 before (single sequences, not an established gain).
+- **Quality gate (host, real model, four synthetic teacher-forced answers, 640 positions; `results/2026-10-26/host/flash-next-cache-routing-quality.json`):**
+
+  | Setting | Decode misses vs native | Mean KL | Top-1 agreement | Perplexity |
+  |---|---|---|---|---|
+  | keep 3, top-16 | −31% | 0.0135 | 96.4% | +1.49% |
+  | keep 3, top-24 | −48% | 0.024 | 94.2% | +1.75% |
+  | keep 2, top-32 | −58% | 0.035 | 93.9% | +3.64% |
+
+  The proposed gate (perplexity at most +0.5%, top-1 at least 97%) fails at every setting. The mildest costs about 30× the KL of batch-shape rounding (4.3e-4, D027).
+- **Phone speed, keep 3/top-24** (three exact/routed/routed/exact sequences, 96 tokens, one load each; `results/2026-10-26/galaxy/flash-next-cache-routing-speed.json`): reads 571–597 → 372–425 MB/token (−35%), exposed-wait thread time −40%, about 2.65 → 3.0 tokens/s (+11–17%). Storage busy share falls from about 0.8 to 0.65: decoding becomes compute-bound. The final build decodes identical text in repeated routed runs.
+- **GPU gate failed** (`results/2026-10-26/galaxy/gpu-dense-path-gate.json`): the Xclipse 940 reads 9–12 GB/s (256 MiB row sum and Q5_K products) at its 1,095 MHz maximum, cool or warm, with today's build or the D025-era one; six CPU cores read Q5_K at 21–32 GB/s. D025's 39.3 GB/s GPU row sum is not reproduced, and the cause is not visible without privileged counters. A GPU dense-weight decode path is not built. D025's prompt-mode speedups should be re-measured before relying on them.
+- **Decision (D041):** no route to 5 tokens/s on Flash-Next on this phone within the no-quality-trade rule. `cache_routing` stays an opt-in native/diagnostic option with no app exposure. No default, catalog entry or installed APK changed.
+
 ## Resident-weight storage: implemented, automatic adoption rejected — 2026-10-24
 
 - Added opt-in `resident_weights: "anonymous" | "ahwb"` for streamed CPU loading. Shared weights load directly into the selected buffers, with explicit lifetime ownership and no second full-weight userspace copy. Routed experts and mapped embedding tables retain their existing storage. The native default and app profiles keep ordinary storage. No routing, quantization, kernel or context change was promoted.

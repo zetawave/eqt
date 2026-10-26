@@ -1,0 +1,1111 @@
+{
+  "date": "2026-10-26",
+  "kind": "gpu_dense_path_gate",
+  "device": "Galaxy S24+ SM-S926B, Exynos 2400, build S926BXXSHDZI1",
+  "runs": {
+    "gpu-sustain": {
+      "kind": "gpu_cpu_sustained_read_screen",
+      "artifact_sha256": {
+        "eqt-gpu-bench": "9448aec2e62de6f2948348722c2470b4dcc6ee17ef2beff8fc67167ac790f65e",
+        "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2",
+        "libggml-base.so": "b87f9ceab815f202df6c909aaa2f2461e7110d91fbc7ac7e96c00e3fe7b743ad",
+        "libggml-cpu-android_armv8.0_1.so": "81fba1024b9c751f95ef7996988350a837868cc92f48709a8bd961ee9718b48c",
+        "libggml-cpu-android_armv8.2_1.so": "ef23062f7099c59cf7cbf8fd1ba2900c4bbe2840183e60d791f8fab741ea4f8c",
+        "libggml-cpu-android_armv8.2_2.so": "0e3dd8b31c2aa2b4379a72735e3cd6e31c0dcdfae993af97519593c373383b1d",
+        "libggml-cpu-android_armv8.6_1.so": "e48931b66efe509107ac95c3c576069d4febba6f6ce2ffcc2d428986e3349870",
+        "libggml-cpu-android_armv9.0_1.so": "158b6e1f0e56f2e07ce125237a9741d663c5459321db2ce4c305573b79f750e2",
+        "libggml-cpu-android_armv9.2_1.so": "707e47b257d7045d4473fb7fde08116486caef120923109bf3ebe428c6fe2056",
+        "libggml-cpu-android_armv9.2_2.so": "00ca1cf784489f8127948d8f33d3f7ea95f221cd282dffed9621b205d6652e84",
+        "libggml-vulkan.so": "e53cc070fe1a2bb42405a408b9ebff230b29c93b18c045d7bcc53462937d6eab",
+        "libggml.so": "a5fe7dd05b205461c7341bebc613d445bece2f19e18d9a6fd0792f04a23a616a"
+      },
+      "device": "Vulkan0",
+      "before": {
+        "thermal": "0",
+        "temperatures": {
+          "AP": 49.3,
+          "BAT": 32.1,
+          "CP": 42.8,
+          "PA": 42.2,
+          "SKIN": 35.4,
+          "SUBBAT": 0.0,
+          "USB": 27.8
+        }
+      },
+      "after": {
+        "thermal": "2",
+        "temperatures": {
+          "AP": 48.0,
+          "BAT": 38.3,
+          "CP": 46.8,
+          "PA": 46.1,
+          "SKIN": 40.8,
+          "SUBBAT": 0.0,
+          "USB": 29.0
+        }
+      },
+      "seconds_per_phase": 60.0,
+      "bench": {
+        "device": "Vulkan0",
+        "description": "Samsung Xclipse 940",
+        "memory_free": 8224191180,
+        "memory_total": 8657043456,
+        "rss_kib_before_init": 32240,
+        "rss_kib_after_init": 39228,
+        "results": [
+          {
+            "test": "sustain_thermal_zones",
+            "zones": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 5.0,
+            "gb_s": 22.9,
+            "cpu_mhz": [
+              3072,
+              2496,
+              2208,
+              1959
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 10.0,
+            "gb_s": 26.7,
+            "cpu_mhz": [
+              2496,
+              1920,
+              1728,
+              1824
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 15.0,
+            "gb_s": 28.2,
+            "cpu_mhz": [
+              2496,
+              2016,
+              1728,
+              1824
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 20.0,
+            "gb_s": 25.1,
+            "cpu_mhz": [
+              2304,
+              1824,
+              1536,
+              1824
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 25.0,
+            "gb_s": 26.3,
+            "cpu_mhz": [
+              2400,
+              1824,
+              1824,
+              1824
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 30.0,
+            "gb_s": 24.0,
+            "cpu_mhz": [
+              2208,
+              2016,
+              1824,
+              1728
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 35.0,
+            "gb_s": 21.6,
+            "cpu_mhz": [
+              2208,
+              2208,
+              2016,
+              1728
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 40.0,
+            "gb_s": 23.0,
+            "cpu_mhz": [
+              1824,
+              1824,
+              1824,
+              1632
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 45.0,
+            "gb_s": 20.8,
+            "cpu_mhz": [
+              1824,
+              1824,
+              1824,
+              1632
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 50.0,
+            "gb_s": 21.9,
+            "cpu_mhz": [
+              1824,
+              1824,
+              1824,
+              1632
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 55.0,
+            "gb_s": 20.6,
+            "cpu_mhz": [
+              1824,
+              1824,
+              1824,
+              1632
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 60.0,
+            "gb_s": 23.1,
+            "cpu_mhz": [
+              1824,
+              1824,
+              1824,
+              1632
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 65.0,
+            "gb_s": 9.3,
+            "cpu_mhz": [
+              672,
+              1632,
+              2304,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 70.0,
+            "gb_s": 10.8,
+            "cpu_mhz": [
+              672,
+              768,
+              1728,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 75.0,
+            "gb_s": 10.1,
+            "cpu_mhz": [
+              672,
+              672,
+              2592,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 80.0,
+            "gb_s": 10.4,
+            "cpu_mhz": [
+              672,
+              672,
+              2592,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 85.0,
+            "gb_s": 10.4,
+            "cpu_mhz": [
+              672,
+              672,
+              2208,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 90.0,
+            "gb_s": 10.3,
+            "cpu_mhz": [
+              672,
+              672,
+              1152,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 95.0,
+            "gb_s": 10.2,
+            "cpu_mhz": [
+              672,
+              1248,
+              864,
+              1728
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 100.0,
+            "gb_s": 10.2,
+            "cpu_mhz": [
+              672,
+              672,
+              2592,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 105.0,
+            "gb_s": 10.1,
+            "cpu_mhz": [
+              672,
+              2208,
+              2592,
+              1959
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 110.0,
+            "gb_s": 10.5,
+            "cpu_mhz": [
+              672,
+              672,
+              2496,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 115.0,
+            "gb_s": 10.1,
+            "cpu_mhz": [
+              672,
+              672,
+              2592,
+              1959
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 120.0,
+            "gb_s": 10.5,
+            "cpu_mhz": [
+              672,
+              2900,
+              2592,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 125.0,
+            "gb_s": 12.6,
+            "cpu_mhz": [
+              672,
+              2900,
+              672,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 130.0,
+            "gb_s": 13.0,
+            "cpu_mhz": [
+              2592,
+              2592,
+              2304,
+              1728
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 135.0,
+            "gb_s": 12.1,
+            "cpu_mhz": [
+              2400,
+              2496,
+              2112,
+              1959
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 140.0,
+            "gb_s": 12.5,
+            "cpu_mhz": [
+              2304,
+              2784,
+              2592,
+              1632
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 145.0,
+            "gb_s": 12.9,
+            "cpu_mhz": [
+              2784,
+              672,
+              672,
+              1728
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 150.0,
+            "gb_s": 10.9,
+            "cpu_mhz": [
+              2784,
+              2784,
+              2304,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 155.0,
+            "gb_s": 26.6,
+            "cpu_mhz": [
+              2400,
+              1920,
+              1536,
+              1824
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 160.0,
+            "gb_s": 26.8,
+            "cpu_mhz": [
+              2304,
+              1632,
+              1536,
+              1824
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 165.0,
+            "gb_s": 26.1,
+            "cpu_mhz": [
+              2208,
+              1824,
+              1344,
+              1824
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 170.0,
+            "gb_s": 24.5,
+            "cpu_mhz": [
+              2304,
+              1728,
+              1728,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 175.0,
+            "gb_s": 26.7,
+            "cpu_mhz": [
+              2304,
+              1632,
+              1632,
+              1728
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 180.1,
+            "gb_s": 26.4,
+            "cpu_mhz": [
+              2112,
+              1824,
+              1536,
+              576
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 185.1,
+            "gb_s": 4.8,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              672
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 190.1,
+            "gb_s": 6.1,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 195.1,
+            "gb_s": 6.3,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 200.1,
+            "gb_s": 7.7,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 205.1,
+            "gb_s": 8.4,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              576
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 210.1,
+            "gb_s": 8.6,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              400
+            ],
+            "zones_mc": []
+          }
+        ],
+        "rss_kib_at_end": 56028
+      },
+      "energy_j": null,
+      "limitations": [
+        "Synthetic Q5_K 2048x4096 products and a 256 MiB row sum, not decoding.",
+        "One sequence per session; phases inherit the thermal state of the previous ones.",
+        "GGML's Vulkan shaders; a custom shader could read faster than gpu_q5_k but not than gpu_read."
+      ]
+    },
+    "gpu-sustain-gpufirst": {
+      "kind": "gpu_cpu_sustained_read_screen",
+      "artifact_sha256": {
+        "eqt-gpu-bench": "8579c53e31a38daef54a4e8166f03d51e2b401cef53e5b05f53a99f09b1f83f5",
+        "libc++_shared.so": "ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2",
+        "libggml-base.so": "b87f9ceab815f202df6c909aaa2f2461e7110d91fbc7ac7e96c00e3fe7b743ad",
+        "libggml-cpu-android_armv8.0_1.so": "81fba1024b9c751f95ef7996988350a837868cc92f48709a8bd961ee9718b48c",
+        "libggml-cpu-android_armv8.2_1.so": "ef23062f7099c59cf7cbf8fd1ba2900c4bbe2840183e60d791f8fab741ea4f8c",
+        "libggml-cpu-android_armv8.2_2.so": "0e3dd8b31c2aa2b4379a72735e3cd6e31c0dcdfae993af97519593c373383b1d",
+        "libggml-cpu-android_armv8.6_1.so": "e48931b66efe509107ac95c3c576069d4febba6f6ce2ffcc2d428986e3349870",
+        "libggml-cpu-android_armv9.0_1.so": "158b6e1f0e56f2e07ce125237a9741d663c5459321db2ce4c305573b79f750e2",
+        "libggml-cpu-android_armv9.2_1.so": "707e47b257d7045d4473fb7fde08116486caef120923109bf3ebe428c6fe2056",
+        "libggml-cpu-android_armv9.2_2.so": "00ca1cf784489f8127948d8f33d3f7ea95f221cd282dffed9621b205d6652e84",
+        "libggml-vulkan.so": "e53cc070fe1a2bb42405a408b9ebff230b29c93b18c045d7bcc53462937d6eab",
+        "libggml.so": "a5fe7dd05b205461c7341bebc613d445bece2f19e18d9a6fd0792f04a23a616a"
+      },
+      "device": "Vulkan0",
+      "before": {
+        "thermal": "0",
+        "temperatures": {
+          "AP": 38.2,
+          "BAT": 33.9,
+          "CP": 37.7,
+          "PA": 37.5,
+          "SKIN": 35.5,
+          "SUBBAT": 0.0,
+          "USB": 29.7
+        }
+      },
+      "after": {
+        "thermal": "2",
+        "temperatures": {
+          "AP": 58.1,
+          "BAT": 39.4,
+          "CP": 50.8,
+          "PA": 50.5,
+          "SKIN": 42.0,
+          "SUBBAT": 0.0,
+          "USB": 30.3
+        }
+      },
+      "seconds_per_phase": 60.0,
+      "gpu_first": true,
+      "bench": {
+        "device": "Vulkan0",
+        "description": "Samsung Xclipse 940",
+        "memory_free": 8224191180,
+        "memory_total": 8657043456,
+        "rss_kib_before_init": 28816,
+        "rss_kib_after_init": 32696,
+        "results": [
+          {
+            "test": "sustain_thermal_zones",
+            "zones": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 5.0,
+            "gb_s": 10.1,
+            "cpu_mhz": [
+              3072,
+              672,
+              2592,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 10.0,
+            "gb_s": 10.1,
+            "cpu_mhz": [
+              3072,
+              672,
+              2592,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 15.0,
+            "gb_s": 10.4,
+            "cpu_mhz": [
+              2976,
+              672,
+              2592,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 20.0,
+            "gb_s": 10.0,
+            "cpu_mhz": [
+              2976,
+              672,
+              2592,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 25.0,
+            "gb_s": 10.1,
+            "cpu_mhz": [
+              2976,
+              672,
+              2592,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 30.0,
+            "gb_s": 10.0,
+            "cpu_mhz": [
+              2976,
+              672,
+              2208,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 35.0,
+            "gb_s": 9.1,
+            "cpu_mhz": [
+              672,
+              1632,
+              1632,
+              1536
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 40.0,
+            "gb_s": 9.1,
+            "cpu_mhz": [
+              672,
+              672,
+              2592,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 45.0,
+            "gb_s": 10.4,
+            "cpu_mhz": [
+              2016,
+              2016,
+              2016,
+              1959
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 50.0,
+            "gb_s": 9.3,
+            "cpu_mhz": [
+              672,
+              672,
+              1248,
+              960
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 55.0,
+            "gb_s": 8.7,
+            "cpu_mhz": [
+              672,
+              672,
+              960,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 60.0,
+            "gb_s": 9.2,
+            "cpu_mhz": [
+              672,
+              672,
+              2112,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 65.0,
+            "gb_s": 8.7,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 70.0,
+            "gb_s": 9.0,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 75.0,
+            "gb_s": 9.2,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              576
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 80.0,
+            "gb_s": 8.7,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              672
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 85.0,
+            "gb_s": 9.2,
+            "cpu_mhz": [
+              672,
+              2304,
+              2592,
+              1959
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_q5_k",
+            "t_s": 90.0,
+            "gb_s": 8.9,
+            "cpu_mhz": [
+              672,
+              672,
+              672,
+              576
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 95.0,
+            "gb_s": 32.3,
+            "cpu_mhz": [
+              2400,
+              1824,
+              1824,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 100.0,
+            "gb_s": 28.9,
+            "cpu_mhz": [
+              2400,
+              1824,
+              1728,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 105.0,
+            "gb_s": 28.9,
+            "cpu_mhz": [
+              2208,
+              1920,
+              1728,
+              576
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 110.0,
+            "gb_s": 28.6,
+            "cpu_mhz": [
+              2400,
+              1728,
+              1536,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 115.0,
+            "gb_s": 27.4,
+            "cpu_mhz": [
+              2208,
+              1728,
+              1728,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "cpu_q5_k",
+            "t_s": 120.0,
+            "gb_s": 28.2,
+            "cpu_mhz": [
+              2208,
+              1824,
+              1440,
+              1959
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 125.1,
+            "gb_s": 11.4,
+            "cpu_mhz": [
+              2688,
+              2900,
+              2592,
+              1152
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 130.1,
+            "gb_s": 10.5,
+            "cpu_mhz": [
+              2880,
+              672,
+              672,
+              576
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 135.1,
+            "gb_s": 9.8,
+            "cpu_mhz": [
+              2880,
+              672,
+              672,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 140.1,
+            "gb_s": 10.8,
+            "cpu_mhz": [
+              2880,
+              672,
+              672,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 145.1,
+            "gb_s": 10.1,
+            "cpu_mhz": [
+              2880,
+              672,
+              672,
+              400
+            ],
+            "zones_mc": []
+          },
+          {
+            "test": "sustain",
+            "phase": "gpu_read",
+            "t_s": 150.1,
+            "gb_s": 10.5,
+            "cpu_mhz": [
+              2784,
+              672,
+              672,
+              1152
+            ],
+            "zones_mc": []
+          }
+        ],
+        "rss_kib_at_end": 59028
+      },
+      "energy_j": null,
+      "limitations": [
+        "Synthetic Q5_K 2048x4096 products and a 256 MiB row sum, not decoding.",
+        "One sequence per session; phases inherit the thermal state of the previous ones.",
+        "GGML's Vulkan shaders; a custom shader could read faster than gpu_q5_k but not than gpu_read."
+      ]
+    }
+  },
+  "short_checks": {
+    "read_bandwidth_gb_s": {
+      "current_vulkan_build": 12.3,
+      "d025_era_build_2026_10_17": [
+        11.2,
+        10.6
+      ]
+    },
+    "concurrent_q5_k": {
+      "cpu_alone": 32.6,
+      "gpu_alone": 8.9,
+      "cpu_with_gpu": 29.1,
+      "gpu_with_cpu": 7.9
+    },
+    "concurrent_iq2_xxs": {
+      "cpu_alone": 10.8,
+      "gpu_alone": 7.8,
+      "cpu_with_gpu": 8.2,
+      "gpu_with_cpu": 8.5
+    },
+    "gpu_clock_samples_khz": {
+      "1095000": 1404,
+      "1000000": 174,
+      "900000": 273,
+      "800000": 37,
+      "252000": 48,
+      "0 (idle)": 1062
+    },
+    "gpu_governor": "conservative",
+    "thermal_zones_readable": false
+  },
+  "d025_reference": {
+    "gpu_row_sum_gb_s": 39.3,
+    "gpu_q5_k_gb_s": 19.3,
+    "gpu_q5_k_best_tuning_gb_s": 23.4,
+    "date": "2026-10-17"
+  },
+  "conclusion": "Today the Xclipse 940 reads 9-12 GB/s (row sum and Q5_K) at its maximum 1,095 MHz clock, cool or warm, with this build or the D025-era one, while six CPU cores read Q5_K at 21-32 GB/s. D025's 39.3 GB/s GPU row sum is not reproduced; the cause is not visible without privileged counters. A GPU dense-weight decode path fails its gate on this phone as it behaves now.",
+  "energy_j": null
+}

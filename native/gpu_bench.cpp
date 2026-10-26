@@ -371,6 +371,128 @@ ggml_backend_t cpu_backend(int threads) {
     return nullptr;
 }
 
+// The 256 MiB row-sum graph of read_bandwidth, kept for repeated runs.
+struct ReadLoop {
+    ggml_context *ctx = nullptr;
+    ggml_cgraph *graph = nullptr;
+    ggml_backend_buffer_t buffer = nullptr;
+    size_t bytes = 0;
+
+    explicit ReadLoop(ggml_backend_t backend) {
+        ctx = ggml_init({ggml_tensor_overhead() * 4 + ggml_graph_overhead(), nullptr, true});
+        ggml_tensor *x = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 4096, 16384);
+        graph = ggml_new_graph(ctx);
+        ggml_build_forward_expand(graph, ggml_sum_rows(ctx, x));
+        buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
+        ggml_backend_buffer_clear(buffer, 0);
+        bytes = ggml_nbytes(x);
+    }
+    ~ReadLoop() {
+        ggml_backend_buffer_free(buffer);
+        ggml_free(ctx);
+    }
+};
+
+long read_long(const std::string &path) {
+    std::ifstream file(path);
+    long value = 0;
+    return file >> value ? value : -1;
+}
+
+// Readable thermal zones, by sysfs index; their names are printed once and their temperatures with every sample.
+std::vector<int> thermal_zones() {
+    std::vector<int> zones;
+    std::string names;
+    for (int i = 0; i < 128; ++i) {
+        const std::string base = "/sys/class/thermal/thermal_zone" + std::to_string(i);
+        std::ifstream type(base + "/type");
+        std::string name;
+        if (!(type >> name) || read_long(base + "/temp") < 0) {
+            continue;
+        }
+        zones.push_back(i);
+        names += (names.empty() ? "\"" : ", \"") + name + "\"";
+    }
+    row("{\"test\": \"sustain_thermal_zones\", \"zones\": [%s]}", names.c_str());
+    return zones;
+}
+
+// Clocks of the X4 (cpu9), a 2.9 GHz A720 (cpu7), a 2.6 GHz A720 (cpu4) and an A520 (cpu0), null when unreadable,
+// and the readable zones' milli-degrees.
+std::string device_state(const std::vector<int> &zones) {
+    std::string out = "\"cpu_mhz\": [";
+    for (const int cpu : {9, 7, 4, 0}) {
+        const long khz = read_long("/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cpufreq/scaling_cur_freq");
+        out += (cpu == 9 ? "" : ", ") + (khz < 0 ? std::string("null") : std::to_string(khz / 1000));
+    }
+    out += "], \"zones_mc\": [";
+    for (size_t i = 0; i < zones.size(); ++i) {
+        out += (i ? ", " : "") + std::to_string(read_long("/sys/class/thermal/thermal_zone" + std::to_string(zones[i]) + "/temp"));
+    }
+    return out + "]";
+}
+
+// Runs one graph back to back for `seconds` on a worker thread; every 5 s prints the weight rate of that window
+// with clocks and temperatures, so a rate that falls can be put beside the thermal state it fell at.
+void sustained_phase(const char *phase, ggml_backend_t backend, ggml_cgraph *graph, size_t bytes, double seconds,
+                     Clock::time_point origin, const std::vector<int> &zones) {
+    std::atomic<bool> stop{false};
+    std::atomic<uint64_t> steps{0};
+    std::thread worker([&] {
+        while (!stop.load(std::memory_order_relaxed)) {
+            ggml_backend_graph_compute(backend, graph);
+            ggml_backend_synchronize(backend);
+            steps.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+    const auto start = Clock::now();
+    auto window_start = start;
+    uint64_t window_steps = 0;
+    while (std::chrono::duration<double>(Clock::now() - start).count() < seconds) {
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        const auto now = Clock::now();
+        const uint64_t done = steps.load();
+        const double window = std::chrono::duration<double>(now - window_start).count();
+        row("{\"test\": \"sustain\", \"phase\": \"%s\", \"t_s\": %.1f, \"gb_s\": %.1f, %s}", phase,
+            std::chrono::duration<double>(now - origin).count(), (done - window_steps) * bytes / window / 1e9,
+            device_state(zones).c_str());
+        window_start = now;
+        window_steps = done;
+    }
+    stop = true;
+    worker.join();
+}
+
+// CPU first, to bring the phone to the throttled state decoding runs in; then the GPU in that state, its raw read
+// ceiling, and both again. Gate for a GPU dense path: whether the GPU keeps its rate where the CPU's falls.
+// gpu_first starts from a cool GPU instead: its raw ceiling, its products as it heats, then the CPU.
+void sustain(ggml_backend_t gpu, double seconds, bool gpu_first, std::mt19937 &random) {
+    ggml_backend_t cpu = cpu_backend(6);
+    if (!cpu) {
+        row("{\"test\": \"sustain\", \"error\": \"no CPU backend\"}");
+        return;
+    }
+    const auto zones = thermal_zones();
+    {
+        MatvecLoop cpu_loop(cpu, GGML_TYPE_Q5_K, random), gpu_loop(gpu, GGML_TYPE_Q5_K, random);
+        ReadLoop gpu_read(gpu);
+        const auto origin = Clock::now();
+        if (gpu_first) {
+            sustained_phase("gpu_read", gpu, gpu_read.graph, gpu_read.bytes, seconds / 2, origin, zones);
+            sustained_phase("gpu_q5_k", gpu, gpu_loop.graph, gpu_loop.bytes, seconds, origin, zones);
+            sustained_phase("cpu_q5_k", cpu, cpu_loop.graph, cpu_loop.bytes, seconds / 2, origin, zones);
+            sustained_phase("gpu_read", gpu, gpu_read.graph, gpu_read.bytes, seconds / 2, origin, zones);
+        } else {
+            sustained_phase("cpu_q5_k", cpu, cpu_loop.graph, cpu_loop.bytes, seconds, origin, zones);
+            sustained_phase("gpu_q5_k", gpu, gpu_loop.graph, gpu_loop.bytes, seconds, origin, zones);
+            sustained_phase("gpu_read", gpu, gpu_read.graph, gpu_read.bytes, seconds / 2, origin, zones);
+            sustained_phase("cpu_q5_k", cpu, cpu_loop.graph, cpu_loop.bytes, seconds / 2, origin, zones);
+            sustained_phase("gpu_q5_k", gpu, gpu_loop.graph, gpu_loop.bytes, seconds / 2, origin, zones);
+        }
+    }
+    ggml_backend_free(cpu);
+}
+
 // CPU and GPU reading weights at the same time: if the sum exceeds either alone, a split decode can use both.
 void concurrent(ggml_backend_t gpu, std::mt19937 &random) {
     ggml_backend_t cpu = cpu_backend(6);
@@ -487,6 +609,9 @@ int main(int argc, char **argv) {
     }
     if (only == "concurrent") {
         concurrent(backend, random);
+    }
+    if (only == "sustain") {
+        sustain(backend, argc > 2 ? std::atof(argv[2]) : 60, argc > 3 && std::string(argv[3]) == "gpu_first", random);
     }
     if (only == "all" || only == "matmul") {
         for (const ggml_type type : {GGML_TYPE_Q4_K, GGML_TYPE_Q5_K, GGML_TYPE_Q6_K, GGML_TYPE_IQ2_XXS, GGML_TYPE_IQ3_XXS}) {

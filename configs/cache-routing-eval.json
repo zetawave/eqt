@@ -1,0 +1,25 @@
+{
+  "description": "Synthetic teacher-forced answers for cache-aware routing screening. Written for this evaluation; disjoint from the routing calibration traces.",
+  "cases": [
+    {
+      "id": "it-exposition",
+      "messages": [{"role": "user", "content": "Spiega in modo semplice perché il cielo di giorno è azzurro."}],
+      "forced_text": "Il cielo appare azzurro per un fenomeno chiamato diffusione di Rayleigh. La luce del Sole contiene tutti i colori, ma quando attraversa l'atmosfera incontra molecole di azoto e ossigeno molto più piccole della sua lunghezza d'onda. Queste molecole diffondono la luce in tutte le direzioni, e la diffondono molto di più alle lunghezze d'onda corte, cioè il blu e il violetto. Il nostro occhio è più sensibile al blu che al violetto, e parte del violetto viene assorbita in alta quota, quindi percepiamo il cielo come azzurro. Al tramonto la luce attraversa uno strato d'aria più spesso: il blu viene diffuso via prima di arrivare a noi e restano soprattutto il rosso e l'arancione."
+    },
+    {
+      "id": "en-exposition",
+      "messages": [{"role": "user", "content": "Explain briefly how a hash table deals with collisions."}],
+      "forced_text": "A hash table stores each key in a bucket chosen by a hash function, so two different keys can land in the same bucket. This is a collision, and there are two common ways to handle it. With separate chaining, every bucket holds a small list, and colliding entries are appended to it; a lookup hashes the key and then scans that short list. With open addressing, all entries live in the array itself, and a colliding entry probes other slots, for example the next one (linear probing) or slots at growing distances, until it finds a free one. In both schemes performance depends on the load factor: when the table becomes too full, it is resized and every key is rehashed into a larger array, which keeps the average lookup close to constant time."
+    },
+    {
+      "id": "code",
+      "messages": [{"role": "user", "content": "Write a Python function that merges two sorted lists into one sorted list, with a short docstring."}],
+      "forced_text": "Here is a simple implementation that walks both lists once:\n\n```python\ndef merge_sorted(left, right):\n    \"\"\"Return a new sorted list containing the items of two sorted lists.\"\"\"\n    merged = []\n    i = j = 0\n    while i < len(left) and j < len(right):\n        if left[i] <= right[j]:\n            merged.append(left[i])\n            i += 1\n        else:\n            merged.append(right[j])\n            j += 1\n    merged.extend(left[i:])\n    merged.extend(right[j:])\n    return merged\n```\n\nThe loop always takes the smaller head, so the result stays sorted, and using `<=` keeps equal items in their original order. It runs in O(n + m) time."
+    },
+    {
+      "id": "reasoning",
+      "messages": [{"role": "user", "content": "A train travels 180 km in 2 hours, stops for 30 minutes, then travels 120 km in 1.5 hours. What is its average speed over the whole trip, including the stop? Show your steps."}],
+      "forced_text": "To find the average speed, divide the total distance by the total time, including the stop.\n\n1. Total distance: 180 km + 120 km = 300 km.\n2. Total time: 2 hours + 0.5 hours (the stop) + 1.5 hours = 4 hours.\n3. Average speed: 300 km / 4 h = 75 km/h.\n\nNote that ignoring the stop would give 300 km / 3.5 h, about 85.7 km/h, which is the average moving speed rather than the average speed over the whole trip. The answer to the question is therefore 75 km/h."
+    }
+  ]
+}

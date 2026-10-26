@@ -2,6 +2,15 @@
 
 Date: 2026-10-23. Status: engineering proposal, not an achieved speed.
 
+2026-10-26 status (D041): the exact path's storage floor (420–490 MB/token at 175–205 ms) and compute (about
+230 ms cool) leave no exact route to five on this phone. Two gated levers were measured:
+- Cache-aware routing, opt-in and not exact: −35% reads and +11–17% tokens/s on the phone (about 3.0), but
+  +1.49% perplexity and 96.4% top-1 agreement at its mildest setting, which fails the quality gate.
+- A GPU dense-weight path: rejected without implementation, since the Xclipse 940 reads only 9–12 GB/s today
+  against 21–32 GB/s for the CPU.
+
+The tickets below remain incremental exact work, not a route to five. See progress.md and the D041 records.
+
 2026-10-24 resident-weight follow-up: [AHWB screening](../results/2026-10-24/galaxy/flash-next-resident-weights.json)
 implemented strict opt-in hardware-buffer storage, bounded allocation sizes and diagnostic page-status
 snapshots. Four 128-token runs favored AHWB over identically chunked explicit anonymous buffers

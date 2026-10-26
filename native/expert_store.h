@@ -144,6 +144,12 @@ class ExpertStore {
     // layer's store work; true when it computed the node. Enabled once the engine has installed it.
     static bool compute_hook(ggml_tensor *node, int ith, void *store);
     void enable_topk_in_graph() { topk_in_graph_ = options_.topk_in_graph; }
+    // Cache-aware routing, opt-in and not exact: within ranks [keep, max_rank) of a decoded token's router ranking,
+    // cached experts move ahead of uncached ones (stable), so the top-k prefers experts already in memory. The first
+    // `keep` ranks are never displaced; mixing weights still come from the router's own probabilities of whichever
+    // experts end up selected. max_rank 0 restores native routing. Prompts and multi-row batches stay native.
+    void set_cache_routing(int keep, int max_rank);
+    static constexpr int max_cache_routing_rank = 64;
     void begin_request();
     // Decode-phase evaluations (single tokens, speculative verification, MTP drafting) feed decode_* counters.
     void set_decode_phase(bool decode);
@@ -263,6 +269,8 @@ class ExpertStore {
         uint64_t decode_demand_jobs = 0, promoted_reads = 0, confirmed_reads = 0, cancelled_prefetches = 0;
         double decode_demand_job_ms = 0; // decoding: from demand (or promotion) to the bank's bytes in place
         uint64_t peak_resident_bytes = 0;
+        // Cache-aware routing: decoded layers it ranked, and selected experts that came from beyond the native top-k.
+        uint64_t routing_layers = 0, routing_substituted = 0;
     };
     // Read queues in service order (read_priority); without it speculative reads all use queue_next.
     enum Queue { queue_demand, queue_next, queue_after, queue_count };
@@ -296,6 +304,11 @@ class ExpertStore {
     void prefetch_oracle(int current_layer);
     // A layer's routing is known: requests its experts and starts the next lookahead.
     bool on_topk(int layer, const ggml_tensor *tensor);
+    // Reorders a decoded row's router ranking in place for cache-aware routing (set_cache_routing).
+    void promote_cached(Layer &layer, const ggml_tensor *topk);
+    // The reordering itself, on ranks [0, max_rank) of `layer`: returns how many experts it moved into the top-k,
+    // or -1 (ranks unchanged) for an out-of-range expert. The lookahead applies it to predicted rankings too.
+    int prefer_cached(const Layer &layer, int32_t *ranks) const;
     // Predicts layer_index + 1 (predict) and, with lookahead_layers 2, layer_index + 2 (predict_after) from the
     // same rows; the predictor thread queues the first prediction's reads before computing the second.
     void predict(int layer_index, const float *rows, int64_t count, size_t row_bytes);
@@ -430,6 +443,7 @@ private:
     // Single-token top-k tensors of the current graph not handled yet (topk_in_graph), per layer.
     std::vector<const ggml_tensor *> graph_topk_;
     bool topk_in_graph_ = false;
+    int routing_keep_ = 0, routing_max_rank_ = 0;
     uint8_t *arena_ = nullptr;
     size_t arena_size_ = 0, arena_used_ = 0;
     std::vector<SlotClass> slot_classes_;

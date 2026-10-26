@@ -991,3 +991,25 @@ Focused host checks on the qwen35moe/qwen4exp fixtures and Qwen3.5-0.8B retain t
 Final Galaxy CLI check, same 32-token copy workload, plain → lookup → plain: **4.24 → 6.77 → 3.58 tokens/s**, identical token IDs. Absolute rates differ from D039's cooler session; thermal status rose from 0 to 1 and memory-page faults varied. This remains short-copy evidence only, with no new sustained or free-form result. Record: `results/2026-10-23/galaxy/lookup-app.json`.
 
 The debug Vulkan APK built, Android lint passed (0 errors, 32 warnings), and the APK was installed as an update and launched on the Galaxy. Model files, chats and their data are retained. UI strings for the new advanced control are English.
+
+## D041: No exact route to five tokens/s on Flash-Next; cache-aware routing stays opt-in; no GPU dense path — 2026-10-26
+
+**Why the exact path stops short.** At the 1,792 MiB cache, exact routing needs about 420–490 MB/token of expert reads even with perfect prediction. At the measured 2.4–2.9 GB/s, storage alone takes 175–205 ms of the 200 ms budget, and compute takes about 230 ms on a cool phone. The 2026-10-23 known-route oracle gained only 15%. RAM for a larger cache is not available (2,816 MiB caused millions of major faults). Lossless compression saves under 1%, and multi-token verification reads the union of experts. Reaching five tokens/s therefore needs fewer bytes per token *and* less compute per token, both by about a third.
+
+**Two levers, each with a gate measured before building on it:**
+- **Cache-aware routing** (bytes). Keep the router's top `keep` experts, and prefer cached experts within its top `max_rank`. Simulated on held-out traces: 23–46% fewer reads. On the phone at keep 3/top-24: −35% reads and +11–17% tokens/s, to about 3.0. Quality, teacher-forced on the host: +1.49% perplexity and 96.4% top-1 agreement at the mildest setting tested, against a proposed gate of +0.5% and 97%. It fails, and it would not reach five alone: decoding becomes compute-bound.
+- **Dense weights on the GPU** (compute and heat). The Xclipse 940 now reads 9–12 GB/s at its maximum clock, against 21–32 GB/s for six CPU cores. D025's 39.3 GB/s is not reproduced. Rejected without implementation.
+
+**Kept:**
+- `cache_routing`, as an opt-in request option. It is not exact, has no app exposure, and is deterministic per configuration.
+- The teacher-forcing diagnostics.
+- Two eviction fixes in the expert store, so cache contents no longer depend on read timing. Exact outputs are unchanged (host 134/134 bitwise).
+
+**What would change the conclusion:**
+- a quality-gated artifact with fewer bytes per expert and per dense weight (requantization from the original weights), or
+- a device with faster storage or a usable second compute engine.
+
+Neither is an exact optimization of the current model. Records:
+- `results/2026-10-26/host/flash-next-cache-routing-quality.json`;
+- `results/2026-10-26/galaxy/flash-next-cache-routing-speed.json`;
+- `results/2026-10-26/galaxy/gpu-dense-path-gate.json`.

@@ -1481,6 +1481,50 @@ Json Engine::generate(const Json &request, const Emit &emit) {
          request.contains("steering"))) {
         throw std::invalid_argument("Diagnostic routes/logit hashes require plain greedy text decoding without sessions or steering");
     }
+    // Teacher forcing for quality comparisons: the answer is this text's tokens instead of sampled ones, and every
+    // pre-sampling logit vector can be written (F32, one vocabulary-sized row per answer position).
+    std::vector<llama_token> forced;
+    if (request.contains("forced_text")) {
+        const auto forced_text = request.at("forced_text").get<std::string>();
+        const int size = -llama_tokenize(vocab, forced_text.data(), static_cast<int>(forced_text.size()), nullptr, 0, false, false);
+        if (size <= 0 || size > maximum) {
+            throw std::invalid_argument("forced_text must give 1..max_tokens tokens");
+        }
+        forced.resize(size);
+        if (llama_tokenize(vocab, forced_text.data(), static_cast<int>(forced_text.size()), forced.data(), size, false, false) != size) {
+            throw std::runtime_error("Tokenization failed");
+        }
+    }
+    const std::string logits_path = request.value("diagnostic_logits_path", std::string());
+    if ((!forced.empty() || !logits_path.empty()) &&
+        (temperature != 0 || s.draft || has_media || !replay.empty() || lookup_max > 0 || request.contains("steering"))) {
+        throw std::invalid_argument("forced_text and diagnostic_logits_path need plain greedy text decoding without steering");
+    }
+    int routing_keep = 0, routing_max_rank = 0;
+    if (request.contains("cache_routing") && !request.at("cache_routing").is_null()) {
+        const Json &value = request.at("cache_routing");
+        if (!s.store) {
+            throw std::invalid_argument("cache_routing needs expert streaming");
+        }
+        if (s.draft || !replay.empty() || lookup_max > 0) {
+            throw std::invalid_argument("cache_routing applies to plain single-token decoding only");
+        }
+        routing_keep = integer(value, "keep", 2, 0, ExpertStore::max_cache_routing_rank);
+        routing_max_rank = integer(value, "max_rank", 0, 0, ExpertStore::max_cache_routing_rank);
+        if (routing_max_rank == 0) {
+            throw std::invalid_argument("cache_routing needs max_rank");
+        }
+        s.store->set_cache_routing(routing_keep, routing_max_rank); // validates against the model's top-k
+    }
+    // Native routing again after this request, also when it throws.
+    struct RoutingReset {
+        ExpertStore *store;
+        ~RoutingReset() {
+            if (store) {
+                store->set_cache_routing(0, 0);
+            }
+        }
+    } routing_reset{routing_max_rank > 0 ? s.store.get() : nullptr};
     if (lookup_max > 0) {
         if (temperature != 0 || s.draft || !input.images.empty() || !replay.empty() || request.contains("steering")) {
             throw std::invalid_argument("prompt_lookup is greedy, text-only, without mtp, steering or verify_replay");
@@ -1501,6 +1545,13 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     llama_pos positions = 0;
     double media_load_ms = 0;
     Json cache_released = nullptr;
+    if (request.value("diagnostic_release_expert_cache", false)) {
+        // Every request then starts from an empty cache: comparisons of routing policies on one load.
+        if (!s.store) {
+            throw std::invalid_argument("diagnostic_release_expert_cache needs expert streaming");
+        }
+        cache_released = s.store->release_cache();
+    }
     if (!has_media) {
         count = -llama_tokenize(vocab, prompt.data(), static_cast<int>(prompt.size()), nullptr, 0, true, true);
         if (count > 0 && count + reserve <= s.context_size) {
@@ -2054,6 +2105,7 @@ Json Engine::generate(const Json &request, const Emit &emit) {
     const bool capture = request.value("capture_logits", false);
     Json first_logits = nullptr;
     Json logits_hashes = hash_logits ? Json::array() : Json(nullptr);
+    size_t logits_rows = 0;
     Json ttft = nullptr;
     Json first_visible = nullptr;
     std::string text;
@@ -2237,17 +2289,34 @@ Json Engine::generate(const Json &request, const Emit &emit) {
             const float *logits = llama_get_logits_ith(s.context.get(), -1);
             first_logits = std::vector<float>(logits, logits + llama_vocab_n_tokens(vocab));
         }
+        std::ofstream logits_file;
+        if (!logits_path.empty()) {
+            logits_file.open(std::filesystem::path(logits_path), std::ios::binary | std::ios::trunc);
+            if (!logits_file) {
+                throw std::runtime_error("Cannot open diagnostic_logits_path");
+            }
+        }
         for (int i = 0; ready; ++i) {
             if (cancelled_) {
                 reason = "cancelled";
                 break;
             }
+            const size_t vocab_bytes = static_cast<size_t>(llama_vocab_n_tokens(vocab)) * sizeof(float);
             if (hash_logits) {
                 const float *logits = llama_get_logits_ith(s.context.get(), -1);
-                logits_hashes.push_back(hash_sha256_hex(logits, static_cast<size_t>(llama_vocab_n_tokens(vocab)) * sizeof(float)));
+                logits_hashes.push_back(hash_sha256_hex(logits, vocab_bytes));
             }
-            const auto token = llama_sampler_sample(sampler.get(), s.context.get(), -1);
+            if (logits_file.is_open()) {
+                logits_file.write(reinterpret_cast<const char *>(llama_get_logits_ith(s.context.get(), -1)),
+                                  static_cast<std::streamsize>(vocab_bytes));
+                ++logits_rows;
+            }
+            const auto token = forced.empty() ? llama_sampler_sample(sampler.get(), s.context.get(), -1) : forced[i];
             if (!push(token)) {
+                break;
+            }
+            if (!forced.empty() && i + 1 == static_cast<int>(forced.size())) {
+                reason = "forced_end"; // the last forced token is not evaluated: nothing follows it
                 break;
             }
             if (!evaluate(&token, 1, positions + i)) {
@@ -2256,6 +2325,12 @@ Json Engine::generate(const Json &request, const Emit &emit) {
             }
             if (compute_pages) {
                 lend_compute();
+            }
+        }
+        if (logits_file.is_open()) {
+            logits_file.close();
+            if (!logits_file) {
+                throw std::runtime_error("Writing diagnostic_logits_path failed");
             }
         }
     } else {
@@ -2432,11 +2507,15 @@ Json Engine::generate(const Json &request, const Emit &emit) {
         {"text", text},
         {"token_ids", generated},
         {"first_logits", first_logits},
-        {"diagnostic_logits_sha256", logits_hashes}};
+        {"diagnostic_logits_sha256", logits_hashes},
+        {"forced_tokens", forced.empty() ? Json(nullptr) : Json(forced.size())},
+        {"diagnostic_logits_rows", logits_path.empty() ? Json(nullptr) : Json(logits_rows)},
+        {"vocabulary_size", llama_vocab_n_tokens(vocab)}};
     // The context keeps this turn's state when it holds exactly the prompt and the evaluated answer: an answer that
     // ended at the output limit has its last token sampled but not evaluated; EOS is never part of the answer.
     if (reusable && prefill_complete && reason != "cancelled" && !cancelled_) {
-        const size_t evaluated = generated.size() - ((reason == "length" || reason == "context") && !generated.empty() ? 1 : 0);
+        const size_t evaluated = generated.size() -
+            ((reason == "length" || reason == "context" || reason == "forced_end") && !generated.empty() ? 1 : 0);
         s.resident = std::move(tokens);
         s.resident.insert(s.resident.end(), generated.begin(), generated.begin() + static_cast<ptrdiff_t>(evaluated));
         s.resident_valid = true;

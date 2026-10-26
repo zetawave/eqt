@@ -1,0 +1,249 @@
+{
+  "kind": "cache_routing_quality_screen",
+  "source_sha256": "30a8771bf90c9151509d78aa12714f9f8f994670537d47c0c39ab5d73504b8e8",
+  "artifact_sha256": {
+    "eqt-bench.exe": "6dabdb04b83a952fa3a0c2495410624107a4ee52a716248c8c968a44b25db592"
+  },
+  "model": "X:\\Work\\Personal\\Project\\eqt\\models\\flash-next\\Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf",
+  "load": {
+    "context": 4096,
+    "batch": 128,
+    "threads": 4,
+    "memory_budget_mib": 8192,
+    "mmap": false,
+    "expert_streaming": true,
+    "expert_cache_mib": 1792,
+    "io_threads": 8,
+    "direct_io": false,
+    "prefetch": true,
+    "speculative_pool": true,
+    "lookahead_layers": 2,
+    "lookahead2_count": 5,
+    "read_priority": true,
+    "prefetch_inflight": 2,
+    "lookahead_router_q8": true,
+    "coalesce_kib": 2048,
+    "coalesce_gap": 1,
+    "prefill_prefetch_mib": 0,
+    "prefill_prefetch_min_coverage": 0.9,
+    "expert_slots": true
+  },
+  "cases": [
+    "it-exposition",
+    "en-exposition",
+    "code",
+    "reasoning"
+  ],
+  "arms": {
+    "exact": {
+      "cache_routing": null,
+      "positions": 640,
+      "mean_kl": 0.0,
+      "median_kl": 0.0,
+      "p95_kl": 0.0,
+      "max_kl": 0.0,
+      "top1_agreement": 1.0,
+      "perplexity": 2.1522003008150166,
+      "perplexity_change": 0.0,
+      "decode_misses_per_token": 78.84375,
+      "demanded_per_token": 480.0,
+      "substituted_per_token": 0.0,
+      "phone_expert_MB_per_token": 147.83203125,
+      "cases": {
+        "it-exposition": {
+          "positions": 170,
+          "mean_kl": 0.0,
+          "top1_agreement": 1.0,
+          "perplexity": 2.0634950173736666,
+          "decode_misses_per_token": 65.04117647058824
+        },
+        "en-exposition": {
+          "positions": 156,
+          "mean_kl": 0.0,
+          "top1_agreement": 1.0,
+          "perplexity": 3.2719975716224874,
+          "decode_misses_per_token": 67.63461538461539
+        },
+        "code": {
+          "positions": 162,
+          "mean_kl": 0.0,
+          "top1_agreement": 1.0,
+          "perplexity": 1.7761743284385059,
+          "decode_misses_per_token": 89.96913580246914
+        },
+        "reasoning": {
+          "positions": 152,
+          "mean_kl": 0.0,
+          "top1_agreement": 1.0,
+          "perplexity": 1.800911729976518,
+          "decode_misses_per_token": 93.92763157894737
+        }
+      },
+      "miss_bytes_change": 0.0
+    },
+    "keep3_rank16": {
+      "cache_routing": {
+        "keep": 3,
+        "max_rank": 16
+      },
+      "positions": 640,
+      "mean_kl": 0.013481916470125092,
+      "median_kl": 0.003281209427016457,
+      "p95_kl": 0.06436496937257377,
+      "max_kl": 0.17920003481781965,
+      "top1_agreement": 0.9640625,
+      "perplexity": 2.1842423520763554,
+      "perplexity_change": 0.01488804329652993,
+      "decode_misses_per_token": 54.2078125,
+      "demanded_per_token": 480.0,
+      "substituted_per_token": 59.5546875,
+      "phone_expert_MB_per_token": 101.6396484375,
+      "cases": {
+        "it-exposition": {
+          "positions": 170,
+          "mean_kl": 0.013946341476333255,
+          "top1_agreement": 0.9764705882352941,
+          "perplexity": 2.1510562452985793,
+          "decode_misses_per_token": 40.917647058823526
+        },
+        "en-exposition": {
+          "positions": 156,
+          "mean_kl": 0.02207373003819536,
+          "top1_agreement": 0.9166666666666666,
+          "perplexity": 3.30196931367927,
+          "decode_misses_per_token": 44.39102564102564
+        },
+        "code": {
+          "positions": 162,
+          "mean_kl": 0.00794633340006217,
+          "top1_agreement": 0.9814814814814815,
+          "perplexity": 1.7937168421262113,
+          "decode_misses_per_token": 64.42592592592592
+        },
+        "reasoning": {
+          "positions": 152,
+          "mean_kl": 0.010044346007466159,
+          "top1_agreement": 0.9802631578947368,
+          "perplexity": 1.7935650530033864,
+          "decode_misses_per_token": 68.25657894736842
+        }
+      },
+      "miss_bytes_change": -0.3124653190646056
+    },
+    "keep3_rank24": {
+      "cache_routing": {
+        "keep": 3,
+        "max_rank": 24
+      },
+      "positions": 640,
+      "mean_kl": 0.024317628714652772,
+      "median_kl": 0.005048245101943091,
+      "p95_kl": 0.10106210241051507,
+      "max_kl": 0.3135506812623802,
+      "top1_agreement": 0.9421875,
+      "perplexity": 2.1897953232634184,
+      "perplexity_change": 0.01746818009186457,
+      "decode_misses_per_token": 40.88125,
+      "demanded_per_token": 480.0,
+      "substituted_per_token": 99.5421875,
+      "phone_expert_MB_per_token": 76.65234375,
+      "cases": {
+        "it-exposition": {
+          "positions": 170,
+          "mean_kl": 0.0240534408199582,
+          "top1_agreement": 0.9352941176470588,
+          "perplexity": 2.117831824612638,
+          "decode_misses_per_token": 29.788235294117648
+        },
+        "en-exposition": {
+          "positions": 156,
+          "mean_kl": 0.037806021303334165,
+          "top1_agreement": 0.9230769230769231,
+          "perplexity": 3.3258227654347476,
+          "decode_misses_per_token": 32.58974358974359
+        },
+        "code": {
+          "positions": 162,
+          "mean_kl": 0.015707149851573576,
+          "top1_agreement": 0.9629629629629629,
+          "perplexity": 1.7981923877776385,
+          "decode_misses_per_token": 49.58024691358025
+        },
+        "reasoning": {
+          "positions": 152,
+          "mean_kl": 0.019946709465196256,
+          "top1_agreement": 0.9473684210526315,
+          "perplexity": 1.8262453970707022,
+          "decode_misses_per_token": 52.526315789473685
+        }
+      },
+      "miss_bytes_change": -0.48149028933808957
+    },
+    "keep2_rank32": {
+      "cache_routing": {
+        "keep": 2,
+        "max_rank": 32
+      },
+      "positions": 640,
+      "mean_kl": 0.03478404706715955,
+      "median_kl": 0.006755200999789663,
+      "p95_kl": 0.1521642845287377,
+      "max_kl": 0.5967191527200767,
+      "top1_agreement": 0.9390625,
+      "perplexity": 2.230518827349557,
+      "perplexity_change": 0.036389980293600965,
+      "decode_misses_per_token": 33.1,
+      "demanded_per_token": 480.0,
+      "substituted_per_token": 129.309375,
+      "phone_expert_MB_per_token": 62.0625,
+      "cases": {
+        "it-exposition": {
+          "positions": 170,
+          "mean_kl": 0.03319097186368299,
+          "top1_agreement": 0.9647058823529412,
+          "perplexity": 2.188427925822217,
+          "decode_misses_per_token": 23.688235294117646
+        },
+        "en-exposition": {
+          "positions": 156,
+          "mean_kl": 0.06032167919980751,
+          "top1_agreement": 0.8910256410256411,
+          "perplexity": 3.539748003272109,
+          "decode_misses_per_token": 26.224358974358974
+        },
+        "code": {
+          "positions": 162,
+          "mean_kl": 0.02327509649992636,
+          "top1_agreement": 0.9444444444444444,
+          "perplexity": 1.734576548127516,
+          "decode_misses_per_token": 40.666666666666664
+        },
+        "reasoning": {
+          "positions": 152,
+          "mean_kl": 0.022622219197354992,
+          "top1_agreement": 0.9539473684210527,
+          "perplexity": 1.8544376960167268,
+          "decode_misses_per_token": 42.61842105263158
+        }
+      },
+      "miss_bytes_change": -0.5801823226317875
+    }
+  },
+  "limitations": [
+    "Teacher-forced synthetic answers on a host PC; numerics match the phone's CPU path only in kind, not bitwise.",
+    "Routing changes accumulate in recurrent/KV state; long answers are not covered.",
+    "Perplexity of authored text is a sensitivity measure, not a task-quality evaluation.",
+    "Misses per token are host cache counters at the phone's budget, not phone I/O."
+  ],
+  "date": "2026-10-26",
+  "gate": {
+    "proposed": "perplexity change <= +0.5%, teacher-forced top-1 agreement >= 97%, quality-v1 not lower",
+    "passed_arms": [],
+    "numerical_noise_reference": {
+      "batch_shape_first_token_kl": 0.00043,
+      "turn_reuse_kl": 0.0025,
+      "source": "D027"
+    }
+  },
+  "binary_note": "Run with the build before the decode-eviction fixes of the same day; those fixes change which cached experts are evicted, not the measured quality class."
+}

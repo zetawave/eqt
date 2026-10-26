@@ -4,12 +4,6 @@
   "outcome": "Implemented as a strict opt-in; automatic app activation rejected because a gain over ordinary storage was not confirmed",
   "base_commit": "bb603db330d4e78eee627ff8866b52aff7cd88f5",
   "final_source_sha256": "42e3b1e3b7f55be8e52d70ff9eb3d9af81f43589e5468af4b47c1218487ff6d8",
-  "inspiration": {
-    "project": "BigMoeOnEdge",
-    "revision": "b6a587491f2f683193fa3ca8d023946f47933801",
-    "url": "https://github.com/Helldez/BigMoeOnEdge/tree/b6a587491f2f683193fa3ca8d023946f47933801",
-    "implementation": "Independent Android AHardwareBuffer/GGML integration; no dependency revision changed"
-  },
   "environment": {
     "device_family": "Galaxy / Exynos",
     "stock_android": true,

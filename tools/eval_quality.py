@@ -170,7 +170,7 @@ def run(args):
             request = {"load": dict(load, context=max(load.get("context", 2048), item.get("context", 0))),
                        "messages": [{"role": "system", "content": SYSTEM}] + messages,
                        "max_tokens": item.get("max_tokens", args.max_tokens), "temperature": 0, "seed": 42,
-                       "thinking": args.thinking, "ignore_eos": False}
+                       "thinking": args.thinking, "ignore_eos": False, **json.loads(args.request)}
             process, result = runner.run("eqt-bench", args.model, request, workdir, check=False)
             if result is None:
                 rows.append(dict(id=item["id"], category=item["category"], error=(process.stderr or "")[-800:]))
@@ -190,7 +190,8 @@ def run(args):
             print(f"{item['id']:22s} {mark}  {result['prompt_tokens']:5d} prompt tokens, prefill "
                   f"{result['prefill_ms'] / 1000:6.1f} s, decode {result['decode_tokens_per_second']:.2f} tok/s  "
                   f"{answer[:70]!r}", flush=True)
-    report = dict(workload=args.workload, model=args.model, target=args.target, load=load, thinking=args.thinking,
+    report = dict(workload=args.workload, model=args.model, target=args.target, load=load,
+                  request_options=json.loads(args.request), thinking=args.thinking,
                   code_executed=args.execute_code, rows=rows, summary=summarize(rows))
     output.write_text(json.dumps(report, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(json.dumps(report["summary"], indent=1))
@@ -255,6 +256,7 @@ def main():
     run_parser.add_argument("--run-as", metavar="PACKAGE", help="Run as this debug app (models in its files/models/; pass app-relative model paths)")
     run_parser.add_argument("--model", required=True, help="Local path (host) or staged device path (android)")
     run_parser.add_argument("--load", default="{}", help="JSON load options shared by every item")
+    run_parser.add_argument("--request", default="{}", help="JSON request options added to every item")
     run_parser.add_argument("--workload", default="workloads/quality-v1.jsonl")
     run_parser.add_argument("--only", nargs="*", help="Run only these item ids")
     run_parser.add_argument("--max-tokens", type=int, default=256)

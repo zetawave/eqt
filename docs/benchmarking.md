@@ -262,6 +262,43 @@ The first performance command runs AHWB/anonymous/anonymous/AHWB, capped at 128 
 natural EOS. The second performs one ordinary-storage/AHWB pair, preserving the ordinary buffer layout
 in the control. A running arm finishes when its token/EOS limit is reached; the soft time budget prevents
 starting another arm. Both retain exact per-position logit hashes, token IDs, allocation identity and thermal
-readings. They do not establish a sustained gain. The implementation was motivated by the AHWB approach
-in [BigMoeOnEdge at the inspected revision](https://github.com/Helldez/BigMoeOnEdge/tree/b6a587491f2f683193fa3ca8d023946f47933801);
-its measurements on other devices are not used as Exynos results.
+readings. They do not establish a sustained gain.
+
+## Cache-aware routing and GPU sustained-read screening
+
+A request's `cache_routing: {"keep": J, "max_rank": M}` changes routing and is **not exact**. For each decoded
+token and layer, experts already in the cache move ahead of uncached ones within router ranks [J, M); the
+first J ranks are never displaced, and mixing weights come from the router's own probabilities of the selected
+experts. Prompts, multi-row batches, MTP, verification and prompt lookup keep native routing; the reference
+path is unchanged when the field is absent. Pooled or prefetched-but-unselected entries do not count as cached,
+and decode eviction considers only cache entries, so a request decodes the same tokens on every run. With
+prefetching the speculative pool is required. Statistics report `expert_cache.cache_routing`.
+
+Quality screening on the host, teacher-forced, every arm on one load from an empty cache:
+
+```powershell
+python tools/eval_cache_routing.py --fixture-check --output results/local/cache-routing-fixture
+python tools/eval_cache_routing.py --arms exact,3:16,3:24,2:32 --output results/local/cache-routing-g1
+```
+
+The requests use `forced_text` (the answer is the text's tokens, not sampled ones), `diagnostic_logits_path`
+(every pre-sampling F32 logit row) and `diagnostic_release_expert_cache`. The tool reports per-position KL
+from native routing, top-1 agreement and the forced text's perplexity; position 0 comes from the native prompt
+and is excluded. The four synthetic answers are in `configs/cache-routing-eval.json`. Speed on the phone,
+exact/routed/routed/exact on one load:
+
+```powershell
+python tools/eval_cache_routing.py --target android --run-as org.equity.app --model files/models/qwen3.8-flash-next-ud-q2kxl/Qwen3.8-Flash-Next-UD-Q2_K_XL.gguf --speed 3:24 --tokens 96 --output results/local/cache-routing-speed
+```
+
+GPU gate for a dense-weight GPU path: `eqt-gpu-bench sustain SECONDS [gpu_first]` runs 5 s windows of 6-thread
+CPU Q5_K products, Vulkan Q5_K products and a 256 MiB row-sum read, with CPU clocks per window. Build it in the
+app's Vulkan CMake tree, then:
+
+```powershell
+python tools/bench_gpu_sustain.py --seconds 60 --output results/local/gpu-sustain
+python tools/bench_gpu_sustain.py --seconds 60 --gpu-first --output results/local/gpu-sustain-gpu-first
+```
+
+Thermal zones under `/sys/class/thermal` are unreadable to the shell user on the Galaxy; `/sys/kernel/gpu/gpu_clock`
+is readable and shows the GPU clock. Energy is null.
